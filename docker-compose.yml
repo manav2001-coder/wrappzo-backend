@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: wrapzzo
+      POSTGRES_USER: wrapzzo
+      POSTGRES_PASSWORD: wrapzzo
+    ports:
+      - "5432:5432"
+    volumes:
+      - wrapzzo-postgres-data:/var/lib/postgresql/data
+
+volumes:
+  wrapzzo-postgres-data:

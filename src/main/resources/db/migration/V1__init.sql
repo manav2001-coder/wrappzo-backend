@@ -1,0 +1,1 @@
+-- Baseline migration. Add schema changes as new versioned files (V2__*.sql, V3__*.sql, ...).
