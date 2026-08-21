@@ -7,6 +7,7 @@ import java.util.UUID;
 
 public record GiftResponse(
         UUID id,
+        String displayId,
         String name,
         String category,
         String description,
@@ -19,6 +20,7 @@ public record GiftResponse(
     public static GiftResponse from(Gift gift, List<GiftImageResponse> images) {
         return new GiftResponse(
                 gift.getId(),
+                "GID-" + gift.getGiftNo(),
                 gift.getName(),
                 gift.getCategory(),
                 gift.getDescription(),

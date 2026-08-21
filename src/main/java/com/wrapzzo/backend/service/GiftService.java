@@ -48,7 +48,9 @@ public class GiftService {
         }
 
         User creator = currentUser();
-        Gift gift = giftRepository.save(
+        // saveAndFlush -- giftNo is DB-generated and only readable after the physical
+        // INSERT runs, which plain save() would otherwise defer until transaction commit.
+        Gift gift = giftRepository.saveAndFlush(
                 new Gift(request.name(), request.category(), request.description(), request.moq(), request.leadTimeDays(), creator));
         return toResponse(gift);
     }

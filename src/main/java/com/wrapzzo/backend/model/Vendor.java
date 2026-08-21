@@ -18,6 +18,8 @@ import java.util.UUID;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.Generated;
+import org.hibernate.generator.EventType;
 
 /**
  * An external fulfillment partner. Deliberately NOT a User -- separate
@@ -36,6 +38,11 @@ public class Vendor {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
+
+    /** Human-friendly display number ("VID-{vendorNo}") -- DB-generated, never written by the app. */
+    @Generated(event = EventType.INSERT)
+    @Column(name = "vendor_no", insertable = false, updatable = false)
+    private Integer vendorNo;
 
     @Column(nullable = false)
     private String name;

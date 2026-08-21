@@ -16,6 +16,8 @@ import java.util.UUID;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.Generated;
+import org.hibernate.generator.EventType;
 
 /** A catalogue entry in the global, platform-owned gift store. No pricing/vendor columns yet -- see the migration's comment. */
 @Entity
@@ -28,6 +30,11 @@ public class Gift {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
+
+    /** Human-friendly display number ("GID-{giftNo}") -- DB-generated, never written by the app. */
+    @Generated(event = EventType.INSERT)
+    @Column(name = "gift_no", insertable = false, updatable = false)
+    private Integer giftNo;
 
     @Column(nullable = false, unique = true)
     private String name;

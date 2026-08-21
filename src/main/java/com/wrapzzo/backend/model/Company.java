@@ -15,6 +15,8 @@ import java.util.UUID;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.Generated;
+import org.hibernate.generator.EventType;
 
 @Entity
 @Table(name = "companies")
@@ -26,6 +28,11 @@ public class Company {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
+
+    /** Human-friendly display number ("CID-{companyNo}") -- DB-generated, never written by the app. */
+    @Generated(event = EventType.INSERT)
+    @Column(name = "company_no", insertable = false, updatable = false)
+    private Integer companyNo;
 
     @Column(nullable = false)
     private String name;

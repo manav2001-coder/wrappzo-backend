@@ -69,6 +69,9 @@ class VendorServiceIntegrationTest {
         VendorResponse vendor = vendorService.add(new AddVendorRequest("Acme Printing", "contact@acme-test.com", "1234567890"));
 
         assertThat(vendor.status()).isEqualTo(VendorStatus.ACTIVE);
+        // Regression check: vendorNo is DB-generated (@Generated INSERT) and only readable
+        // immediately if the service flushes rather than deferring the insert to commit.
+        assertThat(vendor.displayId()).matches("VID-\\d+");
         assertThat(emailSender.sent).hasSize(1);
         assertThat(emailSender.sent.get(0).to()).isEqualTo("contact@acme-test.com");
         assertThat(emailSender.sent.get(0).html()).contains("/vendor/setup-password?token=");

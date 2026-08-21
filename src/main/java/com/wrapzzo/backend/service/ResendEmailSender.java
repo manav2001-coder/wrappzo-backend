@@ -43,13 +43,18 @@ public class ResendEmailSender implements EmailSender {
                     .build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() >= 300) {
+                // The client only ever sees a generic 502 (GlobalExceptionHandler) -- log the
+                // real reason here, since that detail still matters for debugging.
+                log.warn("Resend rejected an email to {} (status {}): {}", to, response.statusCode(), response.body());
                 throw new EmailDeliveryException(
                         "Resend rejected the email (status %d): %s".formatted(response.statusCode(), response.body()));
             }
         } catch (IOException e) {
+            log.warn("Failed to reach Resend while emailing {}", to, e);
             throw new EmailDeliveryException("Failed to reach Resend", e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            log.warn("Interrupted while emailing {} via Resend", to, e);
             throw new EmailDeliveryException("Interrupted while sending email via Resend", e);
         }
     }

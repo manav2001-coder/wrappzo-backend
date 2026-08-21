@@ -66,6 +66,9 @@ class GiftServiceIntegrationTest {
 
         assertThat(created.active()).isTrue();
         assertThat(created.images()).isEmpty();
+        // Regression check: giftNo is DB-generated (@Generated INSERT) and only readable
+        // immediately if the service flushes rather than deferring the insert to commit.
+        assertThat(created.displayId()).matches("GID-\\d+");
 
         GiftResponse fetched = giftService.get(created.id());
         assertThat(fetched.name()).isEqualTo("Steel Water Bottle");

@@ -61,7 +61,9 @@ public class VendorService {
         // Unusable placeholder -- a real password is never set here. The vendor can only
         // ever authenticate after setting one themselves via the emailed invite link.
         String placeholderHash = passwordEncoder.encode(TokenHasher.generateOpaqueToken());
-        Vendor vendor = vendorRepository.save(
+        // saveAndFlush -- vendorNo is DB-generated and only readable after the physical
+        // INSERT runs, which plain save() would otherwise defer until transaction commit.
+        Vendor vendor = vendorRepository.saveAndFlush(
                 new Vendor(request.name(), request.contactEmail(), request.contactPhone(), placeholderHash, currentUser()));
 
         issueInviteAndSendEmail(vendor);

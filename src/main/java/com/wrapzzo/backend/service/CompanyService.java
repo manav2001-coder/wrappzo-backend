@@ -44,7 +44,10 @@ public class CompanyService {
 
     @Transactional
     public CompanyResponse create(String name) {
-        Company company = companyRepository.save(new Company(name));
+        // saveAndFlush, not save -- companyNo is DB-generated (@Generated INSERT) and only
+        // becomes readable on this entity once the physical INSERT actually runs, which a
+        // plain save() defers until transaction commit, after the response below is built.
+        Company company = companyRepository.saveAndFlush(new Company(name));
         seedDefaultCompanyAdminRole(company);
         return toResponse(company);
     }

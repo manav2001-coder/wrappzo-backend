@@ -36,6 +36,9 @@ class CompanyServiceIntegrationTest {
 
         assertThat(company.status()).isEqualTo(CompanyStatus.ACTIVE);
         assertThat(company.logoUrl()).isNull();
+        // Regression check: companyNo is DB-generated (@Generated INSERT) and only readable
+        // immediately if the service flushes rather than deferring the insert to commit.
+        assertThat(company.displayId()).matches("CID-\\d+");
 
         List<Role> roles = roleRepository.findByCompanyId(company.id());
         assertThat(roles).hasSize(1);
