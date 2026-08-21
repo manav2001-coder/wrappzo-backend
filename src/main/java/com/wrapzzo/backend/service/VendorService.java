@@ -5,6 +5,7 @@ import com.wrapzzo.backend.dto.AddVendorResponse;
 import com.wrapzzo.backend.dto.EditVendorRequest;
 import com.wrapzzo.backend.dto.VendorResponse;
 import com.wrapzzo.backend.exception.PasswordMismatchException;
+import com.wrapzzo.backend.exception.VendorEmailAlreadyExistsException;
 import com.wrapzzo.backend.exception.VendorNotFoundException;
 import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.model.Vendor;
@@ -32,6 +33,10 @@ public class VendorService {
 
     @Transactional
     public AddVendorResponse add(AddVendorRequest request) {
+        if (vendorRepository.findByContactEmail(request.contactEmail()).isPresent()) {
+            throw new VendorEmailAlreadyExistsException(request.contactEmail());
+        }
+
         String rawPassword = resolvePassword(request.password(), request.confirmPassword());
         String passwordHash = passwordEncoder.encode(rawPassword);
 

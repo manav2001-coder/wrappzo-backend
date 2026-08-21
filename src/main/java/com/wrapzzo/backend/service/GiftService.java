@@ -6,6 +6,7 @@ import com.wrapzzo.backend.dto.GiftResponse;
 import com.wrapzzo.backend.dto.PresignGiftImageUploadResponse;
 import com.wrapzzo.backend.dto.UpdateGiftRequest;
 import com.wrapzzo.backend.exception.GiftImageNotFoundException;
+import com.wrapzzo.backend.exception.GiftNameAlreadyExistsException;
 import com.wrapzzo.backend.exception.GiftNotFoundException;
 import com.wrapzzo.backend.model.Gift;
 import com.wrapzzo.backend.model.GiftImage;
@@ -42,6 +43,10 @@ public class GiftService {
 
     @Transactional
     public GiftResponse create(CreateGiftRequest request) {
+        if (giftRepository.findByName(request.name()).isPresent()) {
+            throw new GiftNameAlreadyExistsException(request.name());
+        }
+
         User creator = currentUser();
         Gift gift = giftRepository.save(
                 new Gift(request.name(), request.category(), request.description(), request.moq(), request.leadTimeDays(), creator));
@@ -71,6 +76,9 @@ public class GiftService {
     @Transactional
     public GiftResponse update(UUID id, UpdateGiftRequest request) {
         Gift gift = getEntity(id);
+        giftRepository.findByName(request.name()).filter(existing -> !existing.getId().equals(id)).ifPresent(existing -> {
+            throw new GiftNameAlreadyExistsException(request.name());
+        });
         gift.setName(request.name());
         gift.setCategory(request.category());
         gift.setDescription(request.description());
