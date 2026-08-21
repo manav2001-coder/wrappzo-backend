@@ -61,10 +61,12 @@ public class VendorService {
         // Unusable placeholder -- a real password is never set here. The vendor can only
         // ever authenticate after setting one themselves via the emailed invite link.
         String placeholderHash = passwordEncoder.encode(TokenHasher.generateOpaqueToken());
+        Vendor newVendor = new Vendor(request.name(), request.contactEmail(), request.contactPhone(), placeholderHash, currentUser());
+        newVendor.setMarkupFees(request.markupFees());
+        newVendor.setCommission(request.commission());
         // saveAndFlush -- vendorNo is DB-generated and only readable after the physical
         // INSERT runs, which plain save() would otherwise defer until transaction commit.
-        Vendor vendor = vendorRepository.saveAndFlush(
-                new Vendor(request.name(), request.contactEmail(), request.contactPhone(), placeholderHash, currentUser()));
+        Vendor vendor = vendorRepository.saveAndFlush(newVendor);
 
         issueInviteAndSendEmail(vendor);
         return VendorResponse.from(vendor);
@@ -83,6 +85,8 @@ public class VendorService {
         Vendor vendor = getEntity(id);
         vendor.setName(request.name());
         vendor.setContactPhone(request.contactPhone());
+        vendor.setMarkupFees(request.markupFees());
+        vendor.setCommission(request.commission());
         vendor.setUpdatedBy(currentUser());
         return VendorResponse.from(vendor);
     }

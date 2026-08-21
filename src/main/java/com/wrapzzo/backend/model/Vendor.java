@@ -13,6 +13,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 import lombok.Getter;
@@ -52,6 +53,14 @@ public class Vendor {
 
     @Column(name = "contact_phone")
     private String contactPhone;
+
+    /** Percentage, e.g. 12.50 means 12.50%. */
+    @Column(name = "markup_fees", precision = 5, scale = 2)
+    private BigDecimal markupFees;
+
+    /** Percentage, e.g. 12.50 means 12.50%. */
+    @Column(precision = 5, scale = 2)
+    private BigDecimal commission;
 
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
