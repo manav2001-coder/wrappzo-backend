@@ -56,6 +56,17 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
     }
 
+    @ExceptionHandler(InvalidInviteTokenException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidInviteToken(InvalidInviteTokenException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+    }
+
+    @ExceptionHandler(EmailDeliveryException.class)
+    public ResponseEntity<Map<String, String>> handleEmailDeliveryFailure(EmailDeliveryException e) {
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .body(Map.of("error", "Could not send the invite email right now -- please try again."));
+    }
+
     @ExceptionHandler(GiftNameAlreadyExistsException.class)
     public ResponseEntity<Map<String, String>> handleGiftNameAlreadyExists(GiftNameAlreadyExistsException e) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));

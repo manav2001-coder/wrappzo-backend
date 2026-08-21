@@ -2,16 +2,21 @@ package com.wrapzzo.backend.service;
 
 import com.wrapzzo.backend.exception.AccountLockedException;
 import com.wrapzzo.backend.exception.InvalidCredentialsException;
+import com.wrapzzo.backend.exception.InvalidInviteTokenException;
 import com.wrapzzo.backend.exception.InvalidRefreshTokenException;
+import com.wrapzzo.backend.exception.PasswordMismatchException;
 import com.wrapzzo.backend.model.Vendor;
+import com.wrapzzo.backend.model.VendorInviteToken;
 import com.wrapzzo.backend.model.VendorRefreshToken;
 import com.wrapzzo.backend.model.VendorStatus;
+import com.wrapzzo.backend.repository.VendorInviteTokenRepository;
 import com.wrapzzo.backend.repository.VendorRefreshTokenRepository;
 import com.wrapzzo.backend.repository.VendorRepository;
 import com.wrapzzo.backend.security.JwtService;
 import com.wrapzzo.backend.security.TokenHasher;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Objects;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -27,6 +32,7 @@ public class VendorAuthService {
 
     private final VendorRepository vendorRepository;
     private final VendorRefreshTokenRepository vendorRefreshTokenRepository;
+    private final VendorInviteTokenRepository vendorInviteTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final long refreshTokenExpiryDays;
@@ -36,6 +42,7 @@ public class VendorAuthService {
     public VendorAuthService(
             VendorRepository vendorRepository,
             VendorRefreshTokenRepository vendorRefreshTokenRepository,
+            VendorInviteTokenRepository vendorInviteTokenRepository,
             PasswordEncoder passwordEncoder,
             JwtService jwtService,
             @Value("${auth.refresh-token-expiry-days}") long refreshTokenExpiryDays,
@@ -43,6 +50,7 @@ public class VendorAuthService {
             @Value("${auth.lockout-duration-minutes}") long lockoutDurationMinutes) {
         this.vendorRepository = vendorRepository;
         this.vendorRefreshTokenRepository = vendorRefreshTokenRepository;
+        this.vendorInviteTokenRepository = vendorInviteTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.refreshTokenExpiryDays = refreshTokenExpiryDays;
@@ -85,6 +93,26 @@ public class VendorAuthService {
             throw new InvalidRefreshTokenException();
         }
 
+        return issueTokenPair(vendor);
+    }
+
+    /** Consumes a single-use invite token, sets the vendor's real password, and logs them straight in. */
+    @Transactional
+    public TokenPair setupPassword(String rawToken, String password, String confirmPassword) {
+        if (!Objects.equals(password, confirmPassword)) {
+            throw new PasswordMismatchException();
+        }
+
+        VendorInviteToken invite = vendorInviteTokenRepository
+                .findByTokenHash(TokenHasher.sha256Hex(rawToken))
+                .filter(VendorInviteToken::isActive)
+                .orElseThrow(InvalidInviteTokenException::new);
+        invite.setUsedAt(Instant.now());
+
+        Vendor vendor = invite.getVendor();
+        vendor.setPasswordHash(passwordEncoder.encode(password));
+        vendor.setFailedLoginAttempts((short) 0);
+        vendor.setLockedUntil(null);
         return issueTokenPair(vendor);
     }
 

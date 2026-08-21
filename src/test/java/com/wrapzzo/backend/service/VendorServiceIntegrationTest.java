@@ -4,9 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.wrapzzo.backend.dto.AddVendorRequest;
-import com.wrapzzo.backend.dto.AddVendorResponse;
 import com.wrapzzo.backend.dto.EditVendorRequest;
-import com.wrapzzo.backend.exception.PasswordMismatchException;
+import com.wrapzzo.backend.dto.VendorResponse;
+import com.wrapzzo.backend.exception.VendorEmailAlreadyExistsException;
 import com.wrapzzo.backend.exception.VendorNotFoundException;
 import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.Role;
@@ -22,17 +22,22 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 
 /** VendorService reads the caller (a User, the Super Admin) from SecurityContextHolder -- set up manually, same as GiftServiceIntegrationTest. */
 @SpringBootTest
+@Import(TestEmailSenderConfig.class)
 @Transactional
 class VendorServiceIntegrationTest {
 
     @Autowired
     private VendorService vendorService;
+
+    @Autowired
+    private TestEmailSenderConfig.RecordingEmailSender emailSender;
 
     @Autowired
     private CompanyRepository companyRepository;
@@ -49,6 +54,9 @@ class VendorServiceIntegrationTest {
         Role role = roleRepository.save(new Role(company, "Whatever Role"));
         User user = userRepository.save(new User(company, role, "Test Admin", "vendor-test-" + UUID.randomUUID() + "@wrapzzo.com", "n/a"));
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(user.getId(), null, List.of()));
+        // The recording bean is a singleton -- @Transactional rollback doesn't clear its
+        // in-memory list, so each test starts with a clean slate explicitly.
+        emailSender.sent.clear();
     }
 
     @AfterEach
@@ -57,35 +65,37 @@ class VendorServiceIntegrationTest {
     }
 
     @Test
-    void addWithNoPasswordGeneratesOne() {
-        AddVendorResponse response =
-                vendorService.add(new AddVendorRequest("Acme Printing", "contact@acme-test.com", "1234567890", null, null));
+    void addSendsAnInviteEmail() {
+        VendorResponse vendor = vendorService.add(new AddVendorRequest("Acme Printing", "contact@acme-test.com", "1234567890"));
 
-        assertThat(response.vendor().status()).isEqualTo(VendorStatus.ACTIVE);
-        assertThat(response.temporaryPassword()).isNotBlank();
+        assertThat(vendor.status()).isEqualTo(VendorStatus.ACTIVE);
+        assertThat(emailSender.sent).hasSize(1);
+        assertThat(emailSender.sent.get(0).to()).isEqualTo("contact@acme-test.com");
+        assertThat(emailSender.sent.get(0).html()).contains("/vendor/setup-password?token=");
     }
 
     @Test
-    void addWithMatchingPasswordDoesNotReturnOne() {
-        AddVendorResponse response = vendorService.add(
-                new AddVendorRequest("Acme Printing 2", "contact2@acme-test.com", null, "SuperSecret123!", "SuperSecret123!"));
+    void addWithDuplicateEmailThrows() {
+        vendorService.add(new AddVendorRequest("First", "dup@acme-test.com", null));
 
-        assertThat(response.temporaryPassword()).isNull();
+        assertThatThrownBy(() -> vendorService.add(new AddVendorRequest("Second", "dup@acme-test.com", null)))
+                .isInstanceOf(VendorEmailAlreadyExistsException.class);
     }
 
     @Test
-    void addWithMismatchedPasswordThrows() {
-        assertThatThrownBy(() -> vendorService.add(
-                        new AddVendorRequest("Acme Printing 3", "contact3@acme-test.com", null, "SuperSecret123!", "Different!")))
-                .isInstanceOf(PasswordMismatchException.class);
+    void resendInviteSendsANewEmail() {
+        VendorResponse vendor = vendorService.add(new AddVendorRequest("Resend Vendor", "resend@acme-test.com", null));
+
+        vendorService.resendInvite(vendor.id());
+
+        assertThat(emailSender.sent).hasSize(2);
     }
 
     @Test
     void editChangesFields() {
-        AddVendorResponse added =
-                vendorService.add(new AddVendorRequest("Old Name", "contact4@acme-test.com", null, null, null));
+        VendorResponse added = vendorService.add(new AddVendorRequest("Old Name", "contact4@acme-test.com", null));
 
-        var updated = vendorService.edit(added.vendor().id(), new EditVendorRequest("New Name", "999"));
+        var updated = vendorService.edit(added.id(), new EditVendorRequest("New Name", "999"));
 
         assertThat(updated.name()).isEqualTo("New Name");
         assertThat(updated.contactPhone()).isEqualTo("999");
@@ -93,14 +103,13 @@ class VendorServiceIntegrationTest {
 
     @Test
     void suspendAndReactivateToggleStatus() {
-        AddVendorResponse added =
-                vendorService.add(new AddVendorRequest("Toggle Vendor", "contact5@acme-test.com", null, null, null));
+        VendorResponse added = vendorService.add(new AddVendorRequest("Toggle Vendor", "contact5@acme-test.com", null));
 
-        vendorService.setStatus(added.vendor().id(), VendorStatus.SUSPENDED);
-        assertThat(vendorService.view(added.vendor().id()).status()).isEqualTo(VendorStatus.SUSPENDED);
+        vendorService.setStatus(added.id(), VendorStatus.SUSPENDED);
+        assertThat(vendorService.view(added.id()).status()).isEqualTo(VendorStatus.SUSPENDED);
 
-        vendorService.setStatus(added.vendor().id(), VendorStatus.ACTIVE);
-        assertThat(vendorService.view(added.vendor().id()).status()).isEqualTo(VendorStatus.ACTIVE);
+        vendorService.setStatus(added.id(), VendorStatus.ACTIVE);
+        assertThat(vendorService.view(added.id()).status()).isEqualTo(VendorStatus.ACTIVE);
     }
 
     @Test
@@ -110,9 +119,8 @@ class VendorServiceIntegrationTest {
 
     @Test
     void listIncludesAddedVendors() {
-        AddVendorResponse added =
-                vendorService.add(new AddVendorRequest("Listed Vendor", "contact6@acme-test.com", null, null, null));
+        VendorResponse added = vendorService.add(new AddVendorRequest("Listed Vendor", "contact6@acme-test.com", null));
 
-        assertThat(vendorService.list()).extracting(v -> v.id()).contains(added.vendor().id());
+        assertThat(vendorService.list()).extracting(VendorResponse::id).contains(added.id());
     }
 }

@@ -1,7 +1,6 @@
 package com.wrapzzo.backend.controller;
 
 import com.wrapzzo.backend.dto.AddVendorRequest;
-import com.wrapzzo.backend.dto.AddVendorResponse;
 import com.wrapzzo.backend.dto.EditVendorRequest;
 import com.wrapzzo.backend.dto.VendorResponse;
 import com.wrapzzo.backend.model.VendorStatus;
@@ -28,7 +27,7 @@ public class VendorController {
     private final VendorService vendorService;
 
     @PostMapping("/add")
-    public AddVendorResponse add(@Valid @RequestBody AddVendorRequest request) {
+    public VendorResponse add(@Valid @RequestBody AddVendorRequest request) {
         return vendorService.add(request);
     }
 
@@ -55,5 +54,10 @@ public class VendorController {
     @PostMapping("/reactivate/{id}")
     public VendorResponse reactivate(@PathVariable UUID id) {
         return vendorService.setStatus(id, VendorStatus.ACTIVE);
+    }
+
+    @PostMapping("/resendInvite/{id}")
+    public VendorResponse resendInvite(@PathVariable UUID id) {
+        return vendorService.resendInvite(id);
     }
 }

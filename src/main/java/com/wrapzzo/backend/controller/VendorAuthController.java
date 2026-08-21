@@ -3,6 +3,7 @@ package com.wrapzzo.backend.controller;
 import com.wrapzzo.backend.dto.LoginRequest;
 import com.wrapzzo.backend.dto.LogoutRequest;
 import com.wrapzzo.backend.dto.RefreshRequest;
+import com.wrapzzo.backend.dto.SetupVendorPasswordRequest;
 import com.wrapzzo.backend.dto.TokenResponse;
 import com.wrapzzo.backend.service.TokenPair;
 import com.wrapzzo.backend.service.VendorAuthService;
@@ -33,6 +34,11 @@ public class VendorAuthController {
     @PostMapping("/logout")
     public void logout(@Valid @RequestBody LogoutRequest request) {
         vendorAuthService.logout(request.refreshToken());
+    }
+
+    @PostMapping("/setupPassword")
+    public TokenResponse setupPassword(@Valid @RequestBody SetupVendorPasswordRequest request) {
+        return toResponse(vendorAuthService.setupPassword(request.token(), request.password(), request.confirmPassword()));
     }
 
     private TokenResponse toResponse(TokenPair tokens) {

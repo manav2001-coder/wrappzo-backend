@@ -3,20 +3,28 @@ package com.wrapzzo.backend.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import static org.assertj.core.api.Assertions.assertThatCode;
+
 import com.wrapzzo.backend.exception.AccountLockedException;
 import com.wrapzzo.backend.exception.InvalidCredentialsException;
+import com.wrapzzo.backend.exception.InvalidInviteTokenException;
 import com.wrapzzo.backend.exception.InvalidRefreshTokenException;
+import com.wrapzzo.backend.exception.PasswordMismatchException;
 import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.Role;
 import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.model.Vendor;
+import com.wrapzzo.backend.model.VendorInviteToken;
 import com.wrapzzo.backend.model.VendorStatus;
 import com.wrapzzo.backend.repository.CompanyRepository;
 import com.wrapzzo.backend.repository.RoleRepository;
 import com.wrapzzo.backend.repository.UserRepository;
+import com.wrapzzo.backend.repository.VendorInviteTokenRepository;
 import com.wrapzzo.backend.repository.VendorRepository;
 import com.wrapzzo.backend.security.JwtService;
+import com.wrapzzo.backend.security.TokenHasher;
 import com.wrapzzo.backend.security.VendorPrincipalClaims;
+import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -53,7 +61,16 @@ class VendorAuthServiceIntegrationTest {
     @Autowired
     private VendorRepository vendorRepository;
 
+    @Autowired
+    private VendorInviteTokenRepository vendorInviteTokenRepository;
+
     private Vendor vendor;
+
+    private String issueInviteToken() {
+        String rawToken = TokenHasher.generateOpaqueToken();
+        vendorInviteTokenRepository.save(new VendorInviteToken(vendor, TokenHasher.sha256Hex(rawToken), Instant.now().plusSeconds(3600)));
+        return rawToken;
+    }
 
     @BeforeEach
     void seedVendor() {
@@ -118,5 +135,39 @@ class VendorAuthServiceIntegrationTest {
         vendorAuthService.logout(tokens.refreshToken());
 
         assertThatThrownBy(() -> vendorAuthService.refresh(tokens.refreshToken())).isInstanceOf(InvalidRefreshTokenException.class);
+    }
+
+    @Test
+    void setupPasswordWithValidTokenLogsVendorIn() {
+        String rawToken = issueInviteToken();
+
+        TokenPair tokens = vendorAuthService.setupPassword(rawToken, "BrandNewPassword123!", "BrandNewPassword123!");
+
+        var claims = jwtService.parseAccessToken(tokens.accessToken());
+        assertThat(claims).isInstanceOf(VendorPrincipalClaims.class);
+        assertThatCode(() -> vendorAuthService.login(vendor.getContactEmail(), "BrandNewPassword123!")).doesNotThrowAnyException();
+    }
+
+    @Test
+    void setupPasswordWithMismatchedConfirmationThrows() {
+        String rawToken = issueInviteToken();
+
+        assertThatThrownBy(() -> vendorAuthService.setupPassword(rawToken, "Abc12345!", "Different123!"))
+                .isInstanceOf(PasswordMismatchException.class);
+    }
+
+    @Test
+    void setupPasswordWithUnknownTokenThrows() {
+        assertThatThrownBy(() -> vendorAuthService.setupPassword("not-a-real-token", "Abc12345!", "Abc12345!"))
+                .isInstanceOf(InvalidInviteTokenException.class);
+    }
+
+    @Test
+    void setupPasswordTokenIsSingleUse() {
+        String rawToken = issueInviteToken();
+        vendorAuthService.setupPassword(rawToken, "FirstPassword123!", "FirstPassword123!");
+
+        assertThatThrownBy(() -> vendorAuthService.setupPassword(rawToken, "SecondPassword123!", "SecondPassword123!"))
+                .isInstanceOf(InvalidInviteTokenException.class);
     }
 }

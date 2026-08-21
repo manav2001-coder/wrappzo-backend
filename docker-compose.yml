@@ -64,6 +64,11 @@ services:
       S3_PUBLIC_BASE_URL: http://localhost:9000/wrapzzo-assets
       S3_ACCESS_KEY: minioadmin
       S3_SECRET_KEY: minioadmin
+      # Unset by default -- vendor invite emails just fail loudly (502) until
+      # you export these in your shell before `docker compose up`.
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:5173}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_ADDRESS: ${RESEND_FROM_ADDRESS:-}
     depends_on:
       postgres:
         condition: service_healthy
