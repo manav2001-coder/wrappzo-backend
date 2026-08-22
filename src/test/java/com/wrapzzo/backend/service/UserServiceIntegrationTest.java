@@ -126,6 +126,32 @@ class UserServiceIntegrationTest {
     }
 
     @Test
+    void duplicateEmployeeCodeWithinTheSameSheetFailsValidationWithASpecificMessage() {
+        List<BulkImportUserRow> rows = List.of(
+                new BulkImportUserRow("First", "code1@nanz-test.com", null, "KAM", "DUP-1", null, null),
+                new BulkImportUserRow("Second", "code2@nanz-test.com", null, "KAM", "DUP-1", null, null));
+
+        assertThatThrownBy(() -> userService.bulkImport(company.getId(), rows))
+                .isInstanceOf(UserImportValidationException.class)
+                .satisfies(e -> assertThat(((UserImportValidationException) e).getErrors())
+                        .anyMatch(msg -> msg.contains("DUP-1") && msg.contains("code1@nanz-test.com")));
+        assertThat(userRepository.findByEmail("code1@nanz-test.com")).isEmpty();
+        assertThat(userRepository.findByEmail("code2@nanz-test.com")).isEmpty();
+    }
+
+    @Test
+    void employeeCodeAlreadyUsedByAnExistingUserFailsValidation() {
+        userService.bulkImport(
+                company.getId(),
+                List.of(new BulkImportUserRow("Existing", "existing-code@nanz-test.com", null, "KAM", "EXIST-1", null, null)));
+
+        List<BulkImportUserRow> rows = List.of(new BulkImportUserRow("New Person", "new-code@nanz-test.com", null, "KAM", "EXIST-1", null, null));
+
+        assertThatThrownBy(() -> userService.bulkImport(company.getId(), rows)).isInstanceOf(UserImportValidationException.class);
+        assertThat(userRepository.findByEmail("new-code@nanz-test.com")).isEmpty();
+    }
+
+    @Test
     void emailAlreadyBelongingToAnotherCompanyFailsValidation() {
         Company otherCompany = companyRepository.save(new Company("Other Test Co"));
         userService.bulkImport(

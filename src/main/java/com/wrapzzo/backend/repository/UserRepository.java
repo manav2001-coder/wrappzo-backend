@@ -15,4 +15,7 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     /** One round-trip for a whole bulk-import batch instead of a findByEmail per row. */
     List<User> findByEmailIn(Collection<String> emails);
+
+    /** For bulk-import's employee-code uniqueness pre-check -- see UserService.validate. */
+    List<User> findByCompanyIdAndEmployeeCodeIsNotNull(UUID companyId);
 }

@@ -204,6 +204,32 @@ public class UserService {
             }
         }
 
+        // Same idea as the email checks above -- catch a duplicate employee code as a
+        // specific, actionable row-level error here, instead of letting it reach the DB's
+        // partial unique index and come back as a generic "conflicts with existing data".
+        Map<String, String> employeeCodeOwnerEmail = new HashMap<>();
+        for (User existing : userRepository.findByCompanyIdAndEmployeeCodeIsNotNull(companyId)) {
+            employeeCodeOwnerEmail.put(existing.getEmployeeCode(), existing.getEmail());
+        }
+        for (int i = 0; i < rows.size(); i++) {
+            BulkImportUserRow row = rows.get(i);
+            String code = blankToNull(row.employeeCode());
+            if (code == null) {
+                continue;
+            }
+            String email = normalizedEmail(row.email());
+            String existingOwner = employeeCodeOwnerEmail.get(code);
+            if (existingOwner != null && !existingOwner.equals(email)) {
+                errors.add("Row " + (i + 1) + " (" + row.email() + "): employee code '" + code + "' is already used by " + existingOwner);
+                continue;
+            }
+            String previousOwnerInBatch = employeeCodeOwnerEmail.put(code, email);
+            if (previousOwnerInBatch != null && !previousOwnerInBatch.equals(email)) {
+                errors.add("Row " + (i + 1) + " (" + row.email() + "): employee code '" + code
+                        + "' is also used by " + previousOwnerInBatch + " in this sheet");
+            }
+        }
+
         return errors;
     }
 
