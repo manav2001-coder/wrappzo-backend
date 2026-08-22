@@ -101,6 +101,14 @@ public class UserService {
         Role memberRole = findOrCreateMemberRole(company);
         Map<String, OrgUnit> orgUnitCache = loadOrgUnitCache(company);
 
+        // Argon2 is deliberately expensive (that's the point, for a real password) --
+        // computed once per row it dominates a large batch's runtime for no security
+        // benefit, since this placeholder is never actually checked: AuthService.login()
+        // rejects an INVITED user on status alone, before any password comparison runs.
+        // It's fully replaced by the user's own real hash once they set one via the
+        // invite link, so every new row in this batch sharing it until then is safe.
+        String placeholderHash = passwordEncoder.encode(TokenHasher.generateOpaqueToken());
+
         int createdCount = 0;
         int updatedCount = 0;
         List<User> toSave = new ArrayList<>(rows.size());
@@ -111,7 +119,6 @@ public class UserService {
 
             User user = byEmail.get(email);
             if (user == null) {
-                String placeholderHash = passwordEncoder.encode(TokenHasher.generateOpaqueToken());
                 user = new User(company, memberRole, row.name(), email, placeholderHash);
                 user.setStatus(UserStatus.INVITED);
                 createdCount++;
@@ -129,7 +136,12 @@ public class UserService {
         // Batched (hibernate.jdbc.batch_size in application.properties) rather than one
         // insert/update round-trip per row -- ids are client-generated (GenerationType.UUID),
         // so nothing here needs a round-trip back for a DB-assigned key to allow batching.
+        // Flushed immediately, deliberately: the invite-issuing step below runs a
+        // @Modifying bulk delete, which auto-flushes the whole pending session before it
+        // runs -- leaving thousands of these inserts unflushed until then would turn that
+        // one delete into the point where all of this batch's write cost actually lands.
         userRepository.saveAll(toSave);
+        userRepository.flush();
 
         for (BulkImportUserRow row : rows) {
             String reportsToEmail = blankToNull(row.reportsToEmail());
@@ -142,15 +154,10 @@ public class UserService {
             byEmail.get(normalizedEmail(row.email())).setReportsTo(manager);
         }
 
-        List<UserResponse> responses = new ArrayList<>();
-        for (BulkImportUserRow row : rows) {
-            User user = byEmail.get(normalizedEmail(row.email()));
-            if (user.getStatus() == UserStatus.INVITED) {
-                issueInviteAndSendEmail(user);
-            }
-            responses.add(UserResponse.from(user));
-        }
+        List<User> toInvite = toSave.stream().filter(user -> user.getStatus() == UserStatus.INVITED).toList();
+        issueInvitesAndSendEmails(toInvite);
 
+        List<UserResponse> responses = rows.stream().map(row -> UserResponse.from(byEmail.get(normalizedEmail(row.email())))).toList();
         return new BulkImportUsersResponse(createdCount, updatedCount, responses);
     }
 
@@ -242,24 +249,45 @@ public class UserService {
         return (parentId == null ? "ROOT" : parentId.toString()) + "::" + name.trim().toLowerCase();
     }
 
-    private void issueInviteAndSendEmail(User user) {
-        userInviteTokenRepository.deleteUnusedByUserId(user.getId());
+    /**
+     * Batched on purpose: a @Modifying query auto-flushes the entire pending session
+     * before it runs, so doing the delete-then-save per user inside a loop turned every
+     * other pending write in that session into repeated, ever-larger flush work -- one
+     * bulk delete + one batched saveAll instead, regardless of how many users this is.
+     */
+    private void issueInvitesAndSendEmails(List<User> users) {
+        if (users.isEmpty()) {
+            return;
+        }
+        userInviteTokenRepository.deleteUnusedByUserIdIn(users.stream().map(User::getId).toList());
 
-        String rawToken = TokenHasher.generateOpaqueToken();
         Instant expiresAt = Instant.now().plus(Duration.ofHours(inviteTokenExpiryHours));
-        userInviteTokenRepository.save(new UserInviteToken(user, TokenHasher.sha256Hex(rawToken), expiresAt));
+        List<UserInviteToken> tokens = new ArrayList<>(users.size());
+        Map<UUID, String> rawTokenByUserId = new HashMap<>();
+        for (User user : users) {
+            String rawToken = TokenHasher.generateOpaqueToken();
+            rawTokenByUserId.put(user.getId(), rawToken);
+            tokens.add(new UserInviteToken(user, TokenHasher.sha256Hex(rawToken), expiresAt));
+        }
+        userInviteTokenRepository.saveAll(tokens);
 
-        String setupUrl = frontendBaseUrl + "/setup-password?token=" + rawToken;
-        emailSender.send(
-                user.getEmail(),
-                "Set up your Wrapzzo account",
-                """
-                <p>Hi %s,</p>
-                <p>You've been added on Wrapzzo. Set up your password to get started:</p>
-                <p><a href="%s">Set up your password</a></p>
-                <p>This link expires in %d hours.</p>
-                """
-                        .formatted(user.getName(), setupUrl, inviteTokenExpiryHours));
+        // Still one HTTP call per recipient -- Resend has no batch-send endpoint, so this
+        // remains the one genuinely per-user cost left for a real (non-test) import of
+        // thousands of rows. Worth revisiting (background job / queue) if that matters in
+        // practice; not building that ahead of being asked for it.
+        for (User user : users) {
+            String setupUrl = frontendBaseUrl + "/setup-password?token=" + rawTokenByUserId.get(user.getId());
+            emailSender.send(
+                    user.getEmail(),
+                    "Set up your Wrapzzo account",
+                    """
+                    <p>Hi %s,</p>
+                    <p>You've been added on Wrapzzo. Set up your password to get started:</p>
+                    <p><a href="%s">Set up your password</a></p>
+                    <p>This link expires in %d hours.</p>
+                    """
+                            .formatted(user.getName(), setupUrl, inviteTokenExpiryHours));
+        }
     }
 
     private String normalizedEmail(String email) {
