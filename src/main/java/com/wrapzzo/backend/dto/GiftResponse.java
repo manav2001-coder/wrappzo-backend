@@ -14,6 +14,8 @@ public record GiftResponse(
         Integer moq,
         Integer leadTimeDays,
         boolean active,
+        UUID vendorId,
+        String vendorName,
         List<GiftImageResponse> images,
         Instant createdAt) {
 
@@ -27,6 +29,8 @@ public record GiftResponse(
                 gift.getMoq(),
                 gift.getLeadTimeDays(),
                 gift.isActive(),
+                gift.getVendor() != null ? gift.getVendor().getId() : null,
+                gift.getVendor() != null ? gift.getVendor().getName() : null,
                 images,
                 gift.getCreatedAt());
     }

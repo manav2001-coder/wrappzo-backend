@@ -19,7 +19,7 @@ import lombok.Setter;
 import org.hibernate.annotations.Generated;
 import org.hibernate.generator.EventType;
 
-/** A catalogue entry in the global, platform-owned gift store. No pricing/vendor columns yet -- see the migration's comment. */
+/** A catalogue entry in the global gift store -- either admin-authored (vendor null) or submitted by a vendor. */
 @Entity
 @Table(name = "gifts")
 @Getter
@@ -54,13 +54,19 @@ public class Gift {
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "created_by", nullable = false)
+    /** Null for a vendor-submitted gift until (if ever) an admin actually touches it. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "created_by")
     private User createdBy;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "updated_by", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "updated_by")
     private User updatedBy;
+
+    /** Null for Wrapzzo's own catalogue entries; set when a vendor submitted this gift themselves. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "vendor_id")
+    private Vendor vendor;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -76,6 +82,15 @@ public class Gift {
         this.leadTimeDays = leadTimeDays;
         this.createdBy = creator;
         this.updatedBy = creator;
+    }
+
+    public Gift(String name, String category, String description, Integer moq, Integer leadTimeDays, Vendor vendor) {
+        this.name = name;
+        this.category = category;
+        this.description = description;
+        this.moq = moq;
+        this.leadTimeDays = leadTimeDays;
+        this.vendor = vendor;
     }
 
     @PrePersist

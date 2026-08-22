@@ -1,6 +1,7 @@
 package com.wrapzzo.backend.exception;
 
 import java.util.Map;
+import org.hibernate.LazyInitializationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -72,6 +73,11 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
     }
 
+    @ExceptionHandler(VendorGiftEditNotAllowedException.class)
+    public ResponseEntity<Map<String, String>> handleVendorGiftEditNotAllowed(VendorGiftEditNotAllowedException e) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", e.getMessage()));
+    }
+
     /**
      * Safety net for any unique/foreign-key violation that reaches the database without an
      * explicit pre-check above -- without this, it bubbles up uncaught and Spring's
@@ -81,5 +87,17 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleDataIntegrityViolation(DataIntegrityViolationException e) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(Map.of("error", "This conflicts with existing data -- a unique value may already be in use."));
+    }
+
+    /**
+     * Safety net for a lazy association touched outside an open Hibernate session -- e.g. a
+     * @Transactional-less read method whose response-mapping code accesses a lazy field. Same
+     * "opaque 403 with no body" problem as DataIntegrityViolationException above: surface it as
+     * a real 500 with a message instead, so the underlying missing @Transactional is obvious.
+     */
+    @ExceptionHandler(LazyInitializationException.class)
+    public ResponseEntity<Map<String, String>> handleLazyInitialization(LazyInitializationException e) {
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", "Something went wrong loading this data. Please try again."));
     }
 }
