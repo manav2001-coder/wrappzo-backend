@@ -5,7 +5,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.wrapzzo.backend.exception.AccountLockedException;
 import com.wrapzzo.backend.exception.InvalidCredentialsException;
+import com.wrapzzo.backend.exception.InvalidInviteTokenException;
 import com.wrapzzo.backend.exception.InvalidRefreshTokenException;
+import com.wrapzzo.backend.exception.PasswordMismatchException;
 import com.wrapzzo.backend.model.AccessControl;
 import com.wrapzzo.backend.model.AccessControlType;
 import com.wrapzzo.backend.model.AccessEffect;
@@ -14,15 +16,20 @@ import com.wrapzzo.backend.model.Role;
 import com.wrapzzo.backend.model.RoleAccessControl;
 import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.model.UserAccessControl;
+import com.wrapzzo.backend.model.UserInviteToken;
 import com.wrapzzo.backend.model.UserStatus;
 import com.wrapzzo.backend.repository.AccessControlRepository;
 import com.wrapzzo.backend.repository.CompanyRepository;
 import com.wrapzzo.backend.repository.RoleAccessControlRepository;
 import com.wrapzzo.backend.repository.RoleRepository;
 import com.wrapzzo.backend.repository.UserAccessControlRepository;
+import com.wrapzzo.backend.repository.UserInviteTokenRepository;
 import com.wrapzzo.backend.repository.UserRepository;
+import com.wrapzzo.backend.security.TokenHasher;
 import com.wrapzzo.backend.security.UserPrincipalClaims;
 import com.wrapzzo.backend.security.JwtService;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -73,6 +80,9 @@ class AuthServiceIntegrationTest {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private UserInviteTokenRepository userInviteTokenRepository;
 
     private User user;
     private AccessControl campaignCreate;
@@ -150,6 +160,38 @@ class AuthServiceIntegrationTest {
         authService.logout(tokens.refreshToken());
 
         assertThatThrownBy(() -> authService.refresh(tokens.refreshToken())).isInstanceOf(InvalidRefreshTokenException.class);
+    }
+
+    @Test
+    void setupPasswordActivatesAnInvitedUserAndIssuesTokens() {
+        user.setStatus(UserStatus.INVITED);
+        userRepository.save(user);
+        String rawToken = TokenHasher.generateOpaqueToken();
+        userInviteTokenRepository.save(
+                new UserInviteToken(user, TokenHasher.sha256Hex(rawToken), Instant.now().plus(1, ChronoUnit.DAYS)));
+
+        TokenPair tokens = authService.setupPassword(rawToken, "New@Password1", "New@Password1");
+
+        assertThat(tokens.accessToken()).isNotBlank();
+        User reloaded = userRepository.findById(user.getId()).orElseThrow();
+        assertThat(reloaded.getStatus()).isEqualTo(UserStatus.ACTIVE);
+        assertThat(authService.login(user.getEmail(), "New@Password1").accessToken()).isNotBlank();
+    }
+
+    @Test
+    void setupPasswordRejectsMismatchedConfirmation() {
+        String rawToken = TokenHasher.generateOpaqueToken();
+        userInviteTokenRepository.save(
+                new UserInviteToken(user, TokenHasher.sha256Hex(rawToken), Instant.now().plus(1, ChronoUnit.DAYS)));
+
+        assertThatThrownBy(() -> authService.setupPassword(rawToken, "New@Password1", "Different@1"))
+                .isInstanceOf(PasswordMismatchException.class);
+    }
+
+    @Test
+    void setupPasswordRejectsAnUnknownToken() {
+        assertThatThrownBy(() -> authService.setupPassword("not-a-real-token", "New@Password1", "New@Password1"))
+                .isInstanceOf(InvalidInviteTokenException.class);
     }
 
     @Test

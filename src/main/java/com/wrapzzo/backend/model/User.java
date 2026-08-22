@@ -58,6 +58,17 @@ public class User {
     @Column(nullable = false, unique = true)
     private String email;
 
+    @Column
+    private String mobile;
+
+    /** Free-text job title from a client's roster (e.g. "KAM", "Zonal Business Manager") -- not a permission Role. */
+    @Column
+    private String designation;
+
+    /** A client's own employee code, unique within their company -- optional, and not used for login. */
+    @Column(name = "employee_code")
+    private String employeeCode;
+
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 

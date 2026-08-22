@@ -2,16 +2,21 @@ package com.wrapzzo.backend.service;
 
 import com.wrapzzo.backend.exception.AccountLockedException;
 import com.wrapzzo.backend.exception.InvalidCredentialsException;
+import com.wrapzzo.backend.exception.InvalidInviteTokenException;
 import com.wrapzzo.backend.exception.InvalidRefreshTokenException;
+import com.wrapzzo.backend.exception.PasswordMismatchException;
 import com.wrapzzo.backend.model.RefreshToken;
 import com.wrapzzo.backend.model.User;
+import com.wrapzzo.backend.model.UserInviteToken;
 import com.wrapzzo.backend.model.UserStatus;
 import com.wrapzzo.backend.repository.RefreshTokenRepository;
+import com.wrapzzo.backend.repository.UserInviteTokenRepository;
 import com.wrapzzo.backend.repository.UserRepository;
 import com.wrapzzo.backend.security.JwtService;
 import com.wrapzzo.backend.security.TokenHasher;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Objects;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -22,6 +27,7 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final UserInviteTokenRepository userInviteTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final long refreshTokenExpiryDays;
@@ -31,6 +37,7 @@ public class AuthService {
     public AuthService(
             UserRepository userRepository,
             RefreshTokenRepository refreshTokenRepository,
+            UserInviteTokenRepository userInviteTokenRepository,
             PasswordEncoder passwordEncoder,
             JwtService jwtService,
             @Value("${auth.refresh-token-expiry-days}") long refreshTokenExpiryDays,
@@ -38,6 +45,7 @@ public class AuthService {
             @Value("${auth.lockout-duration-minutes}") long lockoutDurationMinutes) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
+        this.userInviteTokenRepository = userInviteTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.refreshTokenExpiryDays = refreshTokenExpiryDays;
@@ -89,6 +97,26 @@ public class AuthService {
         refreshTokenRepository
                 .findByTokenHash(TokenHasher.sha256Hex(rawRefreshToken))
                 .ifPresent(token -> token.setRevokedAt(Instant.now()));
+    }
+
+    @Transactional
+    public TokenPair setupPassword(String rawToken, String password, String confirmPassword) {
+        if (!Objects.equals(password, confirmPassword)) {
+            throw new PasswordMismatchException();
+        }
+
+        UserInviteToken invite = userInviteTokenRepository
+                .findByTokenHash(TokenHasher.sha256Hex(rawToken))
+                .filter(UserInviteToken::isActive)
+                .orElseThrow(InvalidInviteTokenException::new);
+        invite.setUsedAt(Instant.now());
+
+        User user = invite.getUser();
+        user.setPasswordHash(passwordEncoder.encode(password));
+        user.setStatus(UserStatus.ACTIVE);
+        user.setFailedLoginAttempts((short) 0);
+        user.setLockedUntil(null);
+        return issueTokenPair(user);
     }
 
     private TokenPair issueTokenPair(User user) {

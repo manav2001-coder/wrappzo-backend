@@ -78,6 +78,12 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", e.getMessage()));
     }
 
+    @ExceptionHandler(UserImportValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleUserImportValidation(UserImportValidationException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("error", "Import validation failed -- fix these rows and re-upload.", "details", e.getErrors()));
+    }
+
     /**
      * Safety net for any unique/foreign-key violation that reaches the database without an
      * explicit pre-check above -- without this, it bubbles up uncaught and Spring's

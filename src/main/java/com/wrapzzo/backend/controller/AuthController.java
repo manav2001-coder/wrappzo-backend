@@ -3,6 +3,7 @@ package com.wrapzzo.backend.controller;
 import com.wrapzzo.backend.dto.LoginRequest;
 import com.wrapzzo.backend.dto.LogoutRequest;
 import com.wrapzzo.backend.dto.RefreshRequest;
+import com.wrapzzo.backend.dto.SetupPasswordRequest;
 import com.wrapzzo.backend.dto.TokenResponse;
 import com.wrapzzo.backend.service.AuthService;
 import com.wrapzzo.backend.service.TokenPair;
@@ -33,6 +34,11 @@ public class AuthController {
     @PostMapping("/logout")
     public void logout(@Valid @RequestBody LogoutRequest request) {
         authService.logout(request.refreshToken());
+    }
+
+    @PostMapping("/setupPassword")
+    public TokenResponse setupPassword(@Valid @RequestBody SetupPasswordRequest request) {
+        return toResponse(authService.setupPassword(request.token(), request.password(), request.confirmPassword()));
     }
 
     private TokenResponse toResponse(TokenPair tokens) {
