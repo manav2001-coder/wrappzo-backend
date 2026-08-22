@@ -13,6 +13,7 @@ import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.model.UserStatus;
 import com.wrapzzo.backend.repository.CompanyRepository;
 import com.wrapzzo.backend.repository.OrgUnitRepository;
+import com.wrapzzo.backend.repository.UserInviteTokenRepository;
 import com.wrapzzo.backend.repository.UserRepository;
 import java.util.List;
 import java.util.UUID;
@@ -39,6 +40,9 @@ class UserServiceIntegrationTest {
 
     @Autowired
     private OrgUnitRepository orgUnitRepository;
+
+    @Autowired
+    private UserInviteTokenRepository userInviteTokenRepository;
 
     @Autowired
     private TestEmailSenderConfig.RecordingEmailSender emailSender;
@@ -70,8 +74,14 @@ class UserServiceIntegrationTest {
         User rajesh = userRepository.findByEmail("rajesh@nanz-test.com").orElseThrow();
         assertThat(arpita.getReportsTo().getId()).isEqualTo(rajesh.getId());
         assertThat(arpita.getStatus()).isEqualTo(UserStatus.INVITED);
-        assertThat(emailSender.sent).extracting(TestEmailSenderConfig.RecordingEmailSender.Sent::to)
-                .containsExactlyInAnyOrder("arpita@nanz-test.com", "rajesh@nanz-test.com");
+        // The invite tokens are created synchronously (that part has to be, so a setup link
+        // is valid immediately) -- the emails themselves are dispatched asynchronously by
+        // UserInviteEmailListener after this transaction commits, which never happens in a
+        // @Transactional test (it rolls back), so emailSender.sent can't be asserted here.
+        // See UserInviteEmailListenerTest for coverage of the actual send logic.
+        assertThat(userInviteTokenRepository.findAll())
+                .extracting(token -> token.getUser().getEmail())
+                .contains("arpita@nanz-test.com", "rajesh@nanz-test.com");
     }
 
     @Test

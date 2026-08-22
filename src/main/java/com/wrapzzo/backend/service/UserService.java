@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,7 +49,7 @@ public class UserService {
     private final OrgUnitRepository orgUnitRepository;
     private final UserInviteTokenRepository userInviteTokenRepository;
     private final PasswordEncoder passwordEncoder;
-    private final EmailSender emailSender;
+    private final ApplicationEventPublisher eventPublisher;
     private final long inviteTokenExpiryHours;
     private final String frontendBaseUrl;
 
@@ -59,7 +60,7 @@ public class UserService {
             OrgUnitRepository orgUnitRepository,
             UserInviteTokenRepository userInviteTokenRepository,
             PasswordEncoder passwordEncoder,
-            EmailSender emailSender,
+            ApplicationEventPublisher eventPublisher,
             @Value("${user.invite-token-expiry-hours}") long inviteTokenExpiryHours,
             @Value("${app.frontend-base-url}") String frontendBaseUrl) {
         this.userRepository = userRepository;
@@ -68,7 +69,7 @@ public class UserService {
         this.orgUnitRepository = orgUnitRepository;
         this.userInviteTokenRepository = userInviteTokenRepository;
         this.passwordEncoder = passwordEncoder;
-        this.emailSender = emailSender;
+        this.eventPublisher = eventPublisher;
         this.inviteTokenExpiryHours = inviteTokenExpiryHours;
         this.frontendBaseUrl = frontendBaseUrl;
     }
@@ -276,10 +277,13 @@ public class UserService {
     }
 
     /**
-     * Batched on purpose: a @Modifying query auto-flushes the entire pending session
-     * before it runs, so doing the delete-then-save per user inside a loop turned every
-     * other pending write in that session into repeated, ever-larger flush work -- one
-     * bulk delete + one batched saveAll instead, regardless of how many users this is.
+     * The DB side stays batched and synchronous (see UserInviteTokenRepository's own doc
+     * comment for why) -- the tokens have to exist before this returns. The actual emails
+     * don't: they're dispatched via an event so UserInviteEmailListener can send them
+     * asynchronously, after this transaction commits, off the request thread. Sending is
+     * one HTTP call per recipient (Resend has no batch-send endpoint) -- for a
+     * thousands-of-rows import that's the one cost genuinely worth not making the caller
+     * wait on.
      */
     private void issueInvitesAndSendEmails(List<User> users) {
         if (users.isEmpty()) {
@@ -289,31 +293,16 @@ public class UserService {
 
         Instant expiresAt = Instant.now().plus(Duration.ofHours(inviteTokenExpiryHours));
         List<UserInviteToken> tokens = new ArrayList<>(users.size());
-        Map<UUID, String> rawTokenByUserId = new HashMap<>();
+        List<PendingInvite> pendingInvites = new ArrayList<>(users.size());
         for (User user : users) {
             String rawToken = TokenHasher.generateOpaqueToken();
-            rawTokenByUserId.put(user.getId(), rawToken);
             tokens.add(new UserInviteToken(user, TokenHasher.sha256Hex(rawToken), expiresAt));
+            String setupUrl = frontendBaseUrl + "/setup-password?token=" + rawToken;
+            pendingInvites.add(new PendingInvite(user.getEmail(), user.getName(), setupUrl, inviteTokenExpiryHours));
         }
         userInviteTokenRepository.saveAll(tokens);
 
-        // Still one HTTP call per recipient -- Resend has no batch-send endpoint, so this
-        // remains the one genuinely per-user cost left for a real (non-test) import of
-        // thousands of rows. Worth revisiting (background job / queue) if that matters in
-        // practice; not building that ahead of being asked for it.
-        for (User user : users) {
-            String setupUrl = frontendBaseUrl + "/setup-password?token=" + rawTokenByUserId.get(user.getId());
-            emailSender.send(
-                    user.getEmail(),
-                    "Set up your Wrapzzo account",
-                    """
-                    <p>Hi %s,</p>
-                    <p>You've been added on Wrapzzo. Set up your password to get started:</p>
-                    <p><a href="%s">Set up your password</a></p>
-                    <p>This link expires in %d hours.</p>
-                    """
-                            .formatted(user.getName(), setupUrl, inviteTokenExpiryHours));
-        }
+        eventPublisher.publishEvent(new UserInvitesIssuedEvent(pendingInvites));
     }
 
     private String normalizedEmail(String email) {
