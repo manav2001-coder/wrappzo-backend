@@ -1,15 +1,36 @@
 package com.wrapzzo.backend.exception;
 
+import java.util.List;
 import java.util.Map;
 import org.hibernate.LazyInitializationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    /**
+     * Safety net for plain @Valid/@NotBlank/@Email-style request-body validation failures
+     * that reach no domain-specific handler above -- same "opaque 403 with no body" problem
+     * as DataIntegrityViolationException and LazyInitializationException below: with no
+     * handler, this bubbles up uncaught and Spring's error-dispatch machinery turns it into
+     * a bodyless 403 instead of a real 400. That reads as a permissions error and is
+     * indistinguishable from an actual auth failure client-side, e.g. a bulk import row
+     * with a malformed email surfaced as "Request failed with status code 403" instead of
+     * a row-level message. Real 400 with the actual field errors here instead.
+     */
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Map<String, Object>> handleMethodArgumentNotValid(MethodArgumentNotValidException e) {
+        List<String> details = e.getBindingResult().getFieldErrors().stream()
+                .map(fieldError -> fieldError.getField() + ": " + fieldError.getDefaultMessage())
+                .toList();
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("error", "Validation failed.", "details", details));
+    }
 
     @ExceptionHandler(InvalidCredentialsException.class)
     public ResponseEntity<Map<String, String>> handleInvalidCredentials(InvalidCredentialsException e) {
