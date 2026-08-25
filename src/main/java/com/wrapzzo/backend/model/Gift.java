@@ -1,7 +1,11 @@
 package com.wrapzzo.backend.model;
 
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -12,6 +16,8 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -53,6 +59,13 @@ public class Gift {
 
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
+
+    /** Which commerce paths this gift can be picked from (Quick Gift / Bulk Gifting / Campaign). */
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "gift_modules", joinColumns = @JoinColumn(name = "gift_id"))
+    @Enumerated(EnumType.STRING)
+    @Column(name = "module", nullable = false)
+    private Set<GiftModule> modules = new HashSet<>();
 
     /** Null for a vendor-submitted gift until (if ever) an admin actually touches it. */
     @ManyToOne(fetch = FetchType.LAZY)

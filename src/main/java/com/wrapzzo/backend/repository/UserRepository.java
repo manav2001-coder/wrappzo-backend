@@ -18,4 +18,10 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     /** For bulk-import's employee-code uniqueness pre-check -- see UserService.validate. */
     List<User> findByCompanyIdAndEmployeeCodeIsNotNull(UUID companyId);
+
+    /** Direct reports of a manager -- the building block for walking a whole reporting tree. */
+    List<User> findByReportsToId(UUID managerId);
+
+    /** Everyone assigned to any of these org units -- paired with OrgUnitRepository.findSelfAndDescendants. */
+    List<User> findByOrgUnitIdIn(Collection<UUID> orgUnitIds);
 }

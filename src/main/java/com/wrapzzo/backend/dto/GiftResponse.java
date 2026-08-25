@@ -1,8 +1,10 @@
 package com.wrapzzo.backend.dto;
 
 import com.wrapzzo.backend.model.Gift;
+import com.wrapzzo.backend.model.GiftModule;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 public record GiftResponse(
@@ -14,6 +16,7 @@ public record GiftResponse(
         Integer moq,
         Integer leadTimeDays,
         boolean active,
+        Set<GiftModule> modules,
         UUID vendorId,
         String vendorName,
         List<GiftImageResponse> images,
@@ -29,6 +32,7 @@ public record GiftResponse(
                 gift.getMoq(),
                 gift.getLeadTimeDays(),
                 gift.isActive(),
+                gift.getModules(),
                 gift.getVendor() != null ? gift.getVendor().getId() : null,
                 gift.getVendor() != null ? gift.getVendor().getName() : null,
                 images,

@@ -1,0 +1,41 @@
+package com.wrapzzo.backend.controller;
+
+import com.wrapzzo.backend.dto.AssignOrderVendorRequest;
+import com.wrapzzo.backend.dto.OrderResponse;
+import com.wrapzzo.backend.service.OrderService;
+import jakarta.validation.Valid;
+import java.util.List;
+import java.util.UUID;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+/** Admin-side Fulfillment & Operations (PRD Part 1.5) -- every company's orders, and routing them to a vendor. */
+@RestController
+@RequestMapping("/api/platform/orders")
+@RequiredArgsConstructor
+@PreAuthorize("hasAuthority('order.manage')")
+public class PlatformOrderController {
+
+    private final OrderService orderService;
+
+    @GetMapping
+    public List<OrderResponse> list() {
+        return orderService.listAllForPlatform();
+    }
+
+    @PostMapping("/{id}/assign")
+    public OrderResponse assign(@PathVariable UUID id, @Valid @RequestBody AssignOrderVendorRequest request) {
+        return orderService.assignVendorManually(id, request.vendorId());
+    }
+
+    @PostMapping("/{id}/autoAssign")
+    public OrderResponse autoAssign(@PathVariable UUID id) {
+        return orderService.autoAssignVendor(id);
+    }
+}
