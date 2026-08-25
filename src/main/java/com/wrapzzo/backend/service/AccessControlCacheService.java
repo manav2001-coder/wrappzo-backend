@@ -1,7 +1,12 @@
 package com.wrapzzo.backend.service;
 
+import com.wrapzzo.backend.model.AccessControl;
+import com.wrapzzo.backend.model.AccessControlType;
 import com.wrapzzo.backend.model.AccessEffect;
+import com.wrapzzo.backend.model.Role;
+import com.wrapzzo.backend.repository.AccessControlRepository;
 import com.wrapzzo.backend.repository.RoleAccessControlRepository;
+import com.wrapzzo.backend.repository.RoleRepository;
 import com.wrapzzo.backend.repository.UserAccessControlRepository;
 import com.wrapzzo.backend.repository.UserAccessKeyEffect;
 import java.time.Duration;
@@ -36,6 +41,8 @@ public class AccessControlCacheService {
 
     private final RoleAccessControlRepository roleAccessControlRepository;
     private final UserAccessControlRepository userAccessControlRepository;
+    private final RoleRepository roleRepository;
+    private final AccessControlRepository accessControlRepository;
     private final StringRedisTemplate redisTemplate;
 
     /** Role's granted keys, plus this user's GRANT overrides, minus their REVOKE overrides. */
@@ -58,9 +65,19 @@ public class AccessControlCacheService {
         if (cached != null) {
             return decodeKeySet(cached);
         }
-        Set<String> keys = new HashSet<>(roleAccessControlRepository.findAccessControlKeysByRoleId(roleId));
+        Set<String> keys = new HashSet<>(isPlatformSuperAdmin(roleId)
+                ? accessControlRepository.findByType(AccessControlType.FUNCTIONAL).stream().map(AccessControl::getKey).toList()
+                : roleAccessControlRepository.findAccessControlKeysByRoleId(roleId));
         redisTemplate.opsForValue().set(redisKey, encodeKeySet(keys), CACHE_TTL);
         return keys;
+    }
+
+    /**
+     * Super Admin gets every FUNCTIONAL key dynamically rather than an explicit grant list
+     * that has to be remembered and updated every time a new module ships a new key.
+     */
+    private boolean isPlatformSuperAdmin(UUID roleId) {
+        return roleRepository.findById(roleId).map(Role::isPlatformSuperAdmin).orElse(false);
     }
 
     @Transactional(readOnly = true)

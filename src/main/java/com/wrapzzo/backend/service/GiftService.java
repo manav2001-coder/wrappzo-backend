@@ -53,10 +53,11 @@ public class GiftService {
         }
 
         User creator = currentUser();
+        Gift toSave = new Gift(request.name(), request.category(), request.description(), request.moq(), request.leadTimeDays(), creator);
+        toSave.setModules(request.modules() != null ? new java.util.HashSet<>(request.modules()) : new java.util.HashSet<>());
         // saveAndFlush -- giftNo is DB-generated and only readable after the physical
         // INSERT runs, which plain save() would otherwise defer until transaction commit.
-        Gift gift = giftRepository.saveAndFlush(
-                new Gift(request.name(), request.category(), request.description(), request.moq(), request.leadTimeDays(), creator));
+        Gift gift = giftRepository.saveAndFlush(toSave);
         return toResponse(gift);
     }
 
@@ -98,6 +99,7 @@ public class GiftService {
         gift.setDescription(request.description());
         gift.setMoq(request.moq());
         gift.setLeadTimeDays(request.leadTimeDays());
+        gift.setModules(request.modules() != null ? new java.util.HashSet<>(request.modules()) : new java.util.HashSet<>());
         gift.setUpdatedBy(currentUser());
         return toResponse(gift);
     }

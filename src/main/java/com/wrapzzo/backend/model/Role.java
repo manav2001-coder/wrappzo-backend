@@ -46,6 +46,10 @@ public class Role {
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
 
+    /** The one platform Super Admin role -- gets every FUNCTIONAL access-control key dynamically (see AccessControlCacheService), not an explicit grant list that has to be kept in sync with every new module. */
+    @Column(name = "is_platform_super_admin", nullable = false)
+    private boolean platformSuperAdmin = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

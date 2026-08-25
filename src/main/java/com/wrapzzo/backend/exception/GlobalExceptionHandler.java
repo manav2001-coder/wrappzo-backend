@@ -105,6 +105,72 @@ public class GlobalExceptionHandler {
                 .body(Map.of("error", "Import validation failed -- fix these rows and re-upload.", "details", e.getErrors()));
     }
 
+    @ExceptionHandler(CampaignNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleCampaignNotFound(CampaignNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
+    }
+
+    @ExceptionHandler(CampaignClosedException.class)
+    public ResponseEntity<Map<String, String>> handleCampaignClosed(CampaignClosedException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+    }
+
+    @ExceptionHandler(CampaignNotActiveException.class)
+    public ResponseEntity<Map<String, String>> handleCampaignNotActive(CampaignNotActiveException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+    }
+
+    @ExceptionHandler(NotInCampaignAudienceException.class)
+    public ResponseEntity<Map<String, String>> handleNotInCampaignAudience(NotInCampaignAudienceException e) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", e.getMessage()));
+    }
+
+    @ExceptionHandler(SubmissionNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleSubmissionNotFound(SubmissionNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
+    }
+
+    @ExceptionHandler(SubmissionAlreadyReviewedException.class)
+    public ResponseEntity<Map<String, String>> handleSubmissionAlreadyReviewed(SubmissionAlreadyReviewedException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+    }
+
+    @ExceptionHandler(NotAuthorizedToReviewException.class)
+    public ResponseEntity<Map<String, String>> handleNotAuthorizedToReview(NotAuthorizedToReviewException e) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", e.getMessage()));
+    }
+
+    @ExceptionHandler(SubmissionValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleSubmissionValidation(SubmissionValidationException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("error", "Submission validation failed.", "details", e.getErrors()));
+    }
+
+    @ExceptionHandler(OrderNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleOrderNotFound(OrderNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
+    }
+
+    @ExceptionHandler(CampaignAudienceRequiredException.class)
+    public ResponseEntity<Map<String, String>> handleCampaignAudienceRequired(CampaignAudienceRequiredException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+    }
+
+    @ExceptionHandler(CampaignFieldsLockedException.class)
+    public ResponseEntity<Map<String, String>> handleCampaignFieldsLocked(CampaignFieldsLockedException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+    }
+
+    @ExceptionHandler(GiftNotOfferedByCampaignException.class)
+    public ResponseEntity<Map<String, String>> handleGiftNotOfferedByCampaign(GiftNotOfferedByCampaignException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+    }
+
+    @ExceptionHandler(NoAvailableVendorException.class)
+    public ResponseEntity<Map<String, String>> handleNoAvailableVendor(NoAvailableVendorException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+    }
+
     /**
      * Safety net for any unique/foreign-key violation that reaches the database without an
      * explicit pre-check above -- without this, it bubbles up uncaught and Spring's
