@@ -53,6 +53,11 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
     }
 
+    @ExceptionHandler(UserNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleUserNotFound(UserNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
+    }
+
     @ExceptionHandler(GiftNotFoundException.class)
     public ResponseEntity<Map<String, String>> handleGiftNotFound(GiftNotFoundException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
@@ -80,6 +85,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(InvalidInviteTokenException.class)
     public ResponseEntity<Map<String, String>> handleInvalidInviteToken(InvalidInviteTokenException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+    }
+
+    @ExceptionHandler(InvalidRecipientUploadTokenException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidRecipientUploadToken(InvalidRecipientUploadTokenException e) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
     }
 

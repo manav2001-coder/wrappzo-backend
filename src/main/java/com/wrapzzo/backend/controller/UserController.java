@@ -34,4 +34,9 @@ public class UserController {
     public List<UserResponse> list(@PathVariable UUID companyId) {
         return userService.listByCompany(companyId);
     }
+
+    @PostMapping("/{userId}/makeCompanyAdmin")
+    public UserResponse makeCompanyAdmin(@PathVariable UUID companyId, @PathVariable UUID userId) {
+        return userService.makeCompanyAdmin(companyId, userId);
+    }
 }

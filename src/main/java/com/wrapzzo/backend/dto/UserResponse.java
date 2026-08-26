@@ -15,6 +15,8 @@ public record UserResponse(
         UserStatus status,
         String reportsToName,
         String orgUnitName,
+        UUID roleId,
+        String roleName,
         Instant createdAt) {
 
     public static UserResponse from(User user) {
@@ -28,6 +30,8 @@ public record UserResponse(
                 user.getStatus(),
                 user.getReportsTo() != null ? user.getReportsTo().getName() : null,
                 user.getOrgUnit() != null ? user.getOrgUnit().getName() : null,
+                user.getRole().getId(),
+                user.getRole().getName(),
                 user.getCreatedAt());
     }
 }

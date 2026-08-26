@@ -1,5 +1,6 @@
 package com.wrapzzo.backend.service;
 
+import com.wrapzzo.backend.dto.BulkAssignResponse;
 import com.wrapzzo.backend.dto.OrderResponse;
 import com.wrapzzo.backend.exception.NoAvailableVendorException;
 import com.wrapzzo.backend.exception.OrderNotFoundException;
@@ -84,6 +85,51 @@ public class OrderService {
                 : leastLoadedActiveVendor();
         applyAssignment(order, vendor, OrderAssignmentMode.AUTO);
         return OrderResponse.from(order);
+    }
+
+    /**
+     * Campaign-level bulk auto-assign -- one click for every unassigned order under a
+     * campaign, instead of Admin repeating the per-order Auto-assign button one at a time.
+     * Best-effort: an order with no fallback vendor available is skipped, not fatal to the
+     * rest of the batch.
+     */
+    @Transactional
+    public BulkAssignResponse autoAssignCampaign(UUID campaignId) {
+        int assigned = 0;
+        int skipped = 0;
+        for (Order order : unassignedOrders(campaignId)) {
+            try {
+                Vendor vendor = order.getGift() != null && order.getGift().getVendor() != null
+                        ? order.getGift().getVendor()
+                        : leastLoadedActiveVendor();
+                applyAssignment(order, vendor, OrderAssignmentMode.AUTO);
+                assigned++;
+            } catch (NoAvailableVendorException e) {
+                skipped++;
+            }
+        }
+        return new BulkAssignResponse(assigned, skipped, campaignOrders(campaignId));
+    }
+
+    /** Campaign-level bulk manual assign -- routes every unassigned order under a campaign to one chosen vendor. */
+    @Transactional
+    public BulkAssignResponse assignCampaignVendor(UUID campaignId, UUID vendorId) {
+        Vendor vendor = vendorRepository.findById(vendorId).orElseThrow(() -> new VendorNotFoundException(vendorId));
+        List<Order> orders = unassignedOrders(campaignId);
+        for (Order order : orders) {
+            applyAssignment(order, vendor, OrderAssignmentMode.MANUAL);
+        }
+        return new BulkAssignResponse(orders.size(), 0, campaignOrders(campaignId));
+    }
+
+    private List<Order> unassignedOrders(UUID campaignId) {
+        return orderRepository.findByCampaignIdOrderByCreatedAtDesc(campaignId).stream()
+                .filter(order -> order.getAssignedVendor() == null && order.getStatus() != OrderStatus.CANCELLED)
+                .toList();
+    }
+
+    private List<OrderResponse> campaignOrders(UUID campaignId) {
+        return orderRepository.findByCampaignIdOrderByCreatedAtDesc(campaignId).stream().map(OrderResponse::from).toList();
     }
 
     private Vendor leastLoadedActiveVendor() {
