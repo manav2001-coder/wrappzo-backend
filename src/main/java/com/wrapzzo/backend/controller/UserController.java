@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -38,5 +39,15 @@ public class UserController {
     @PostMapping("/{userId}/makeCompanyAdmin")
     public UserResponse makeCompanyAdmin(@PathVariable UUID companyId, @PathVariable UUID userId) {
         return userService.makeCompanyAdmin(companyId, userId);
+    }
+
+    @PostMapping("/{userId}/removeCompanyAdmin")
+    public UserResponse removeCompanyAdmin(@PathVariable UUID companyId, @PathVariable UUID userId) {
+        return userService.removeCompanyAdmin(companyId, userId);
+    }
+
+    @DeleteMapping("/{userId}")
+    public void delete(@PathVariable UUID companyId, @PathVariable UUID userId) {
+        userService.deleteUser(companyId, userId);
     }
 }

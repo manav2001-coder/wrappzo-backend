@@ -3,7 +3,10 @@ package com.wrapzzo.backend.service;
 import com.wrapzzo.backend.dto.BulkImportUserRow;
 import com.wrapzzo.backend.dto.BulkImportUsersResponse;
 import com.wrapzzo.backend.dto.UserResponse;
+import com.wrapzzo.backend.exception.CannotDeleteSelfException;
 import com.wrapzzo.backend.exception.CompanyNotFoundException;
+import com.wrapzzo.backend.exception.LastCompanyAdminException;
+import com.wrapzzo.backend.exception.UserHasActivityException;
 import com.wrapzzo.backend.exception.UserImportValidationException;
 import com.wrapzzo.backend.exception.UserNotFoundException;
 import com.wrapzzo.backend.model.AccessControl;
@@ -21,6 +24,7 @@ import com.wrapzzo.backend.repository.RoleAccessControlRepository;
 import com.wrapzzo.backend.repository.RoleRepository;
 import com.wrapzzo.backend.repository.UserInviteTokenRepository;
 import com.wrapzzo.backend.repository.UserRepository;
+import com.wrapzzo.backend.security.CurrentUser;
 import com.wrapzzo.backend.security.TokenHasher;
 import java.time.Duration;
 import java.time.Instant;
@@ -33,6 +37,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -212,6 +217,57 @@ public class UserService {
         user.setRole(companyAdminRole);
         userRepository.save(user);
         return UserResponse.from(user);
+    }
+
+    /**
+     * Demotes a Company Admin back to Member -- e.g. someone was promoted by mistake.
+     * Refuses to leave a company with zero admins; same JWT-staleness caveat as
+     * makeCompanyAdmin applies to when this takes effect for the demoted user.
+     */
+    @Transactional
+    public UserResponse removeCompanyAdmin(UUID companyId, UUID userId) {
+        companyAccessGuard.requireOwnCompanyOrPlatformStaff(companyId);
+        User user = userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException(userId));
+        if (user.getCompany() == null || !user.getCompany().getId().equals(companyId)) {
+            throw new UserNotFoundException(userId);
+        }
+        Role companyAdminRole = roleRepository
+                .findByCompanyIdAndName(companyId, COMPANY_ADMIN_ROLE_NAME)
+                .orElseThrow(() -> new IllegalStateException("Company Admin role missing for company " + companyId));
+        if (userRepository.countByCompanyIdAndRoleId(companyId, companyAdminRole.getId()) <= 1) {
+            throw new LastCompanyAdminException(companyId);
+        }
+        Role memberRole = roleRepository
+                .findByCompanyIdAndName(companyId, DEFAULT_MEMBER_ROLE_NAME)
+                .orElseThrow(() -> new IllegalStateException("Member role missing for company " + companyId));
+
+        user.setRole(memberRole);
+        userRepository.save(user);
+        return UserResponse.from(user);
+    }
+
+    /**
+     * Hard-deletes a user added by mistake. Refuses (409, via the FK constraint itself) if
+     * they have any campaign/submission/order history referencing them -- that history must
+     * stay intact, so such a user can't be removed this way at all today.
+     */
+    @Transactional
+    public void deleteUser(UUID companyId, UUID userId) {
+        companyAccessGuard.requireOwnCompanyOrPlatformStaff(companyId);
+        if (userId.equals(CurrentUser.id())) {
+            throw new CannotDeleteSelfException();
+        }
+        User user = userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException(userId));
+        if (user.getCompany() == null || !user.getCompany().getId().equals(companyId)) {
+            throw new UserNotFoundException(userId);
+        }
+        try {
+            userInviteTokenRepository.deleteUnusedByUserId(userId);
+            userRepository.delete(user);
+            userRepository.flush();
+        } catch (DataIntegrityViolationException e) {
+            throw new UserHasActivityException(userId);
+        }
     }
 
     /**
