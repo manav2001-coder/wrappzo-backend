@@ -1,6 +1,7 @@
 package com.wrapzzo.backend.controller;
 
 import com.wrapzzo.backend.dto.AssignOrderVendorRequest;
+import com.wrapzzo.backend.dto.BulkAssignResponse;
 import com.wrapzzo.backend.dto.OrderResponse;
 import com.wrapzzo.backend.service.OrderService;
 import jakarta.validation.Valid;
@@ -37,5 +38,15 @@ public class PlatformOrderController {
     @PostMapping("/{id}/autoAssign")
     public OrderResponse autoAssign(@PathVariable UUID id) {
         return orderService.autoAssignVendor(id);
+    }
+
+    @PostMapping("/campaign/{campaignId}/assign")
+    public BulkAssignResponse assignCampaign(@PathVariable UUID campaignId, @Valid @RequestBody AssignOrderVendorRequest request) {
+        return orderService.assignCampaignVendor(campaignId, request.vendorId());
+    }
+
+    @PostMapping("/campaign/{campaignId}/autoAssign")
+    public BulkAssignResponse autoAssignCampaign(@PathVariable UUID campaignId) {
+        return orderService.autoAssignCampaign(campaignId);
     }
 }

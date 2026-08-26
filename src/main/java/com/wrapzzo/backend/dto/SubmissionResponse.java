@@ -21,9 +21,16 @@ public record SubmissionResponse(
         Instant submittedAt,
         List<SubmissionValueDto> values,
         List<SubmissionAttachmentDto> attachments,
-        Instant createdAt) {
+        Instant createdAt,
+        /** Only non-null right after an approve() call that just issued a fresh recipient photo-upload link -- lets the Admin UI offer to share it (e.g. via WhatsApp) immediately, on top of the email that's already sent. */
+        String recipientUploadUrl) {
 
     public static SubmissionResponse from(Submission submission, List<SubmissionValueDto> values, List<SubmissionAttachmentDto> attachments) {
+        return from(submission, values, attachments, null);
+    }
+
+    public static SubmissionResponse from(
+            Submission submission, List<SubmissionValueDto> values, List<SubmissionAttachmentDto> attachments, String recipientUploadUrl) {
         return new SubmissionResponse(
                 submission.getId(),
                 submission.getCampaign().getId(),
@@ -39,6 +46,7 @@ public record SubmissionResponse(
                 submission.getSubmittedAt(),
                 values,
                 attachments,
-                submission.getCreatedAt());
+                submission.getCreatedAt(),
+                recipientUploadUrl);
     }
 }

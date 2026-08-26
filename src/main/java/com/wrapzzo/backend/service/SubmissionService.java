@@ -59,6 +59,7 @@ public class SubmissionService {
     private final OrderRepository orderRepository;
     private final CampaignService campaignService;
     private final FileStorageService fileStorageService;
+    private final RecipientUploadService recipientUploadService;
 
     public PresignSubmissionAttachmentResponse presignAttachment(UUID campaignId, String contentType) {
         Campaign campaign = campaignService.getEntity(campaignId);
@@ -160,7 +161,13 @@ public class SubmissionService {
                 recipientName, recipientPhone, approver);
         orderRepository.save(order);
 
-        return toResponse(submission);
+        // Best-effort: if this recipient wasn't given a photo at submission time (the
+        // default Photo field is optional), hand them a self-serve upload link now that
+        // there's a real Order to fulfill. No-ops silently if there's no recipient email
+        // or no Photo field on this campaign's form -- never blocks the approval itself.
+        String recipientUploadUrl = recipientUploadService.requestPhotoIfMissing(submission);
+
+        return toResponse(submission, recipientUploadUrl);
     }
 
     @Transactional
@@ -287,6 +294,10 @@ public class SubmissionService {
     }
 
     private SubmissionResponse toResponse(Submission submission) {
+        return toResponse(submission, null);
+    }
+
+    private SubmissionResponse toResponse(Submission submission, String recipientUploadUrl) {
         List<SubmissionValueDto> values = submissionValueRepository.findBySubmissionId(submission.getId()).stream()
                 .map(v -> new SubmissionValueDto(v.getCampaignField().getFieldKey(), v.getCampaignField().getLabel(), valueOf(v)))
                 .toList();
@@ -295,7 +306,7 @@ public class SubmissionService {
                         a.getCampaignField().getFieldKey(), a.getCampaignField().getLabel(), a.getFileName(),
                         fileStorageService.publicUrl(a.getFileKey())))
                 .toList();
-        return SubmissionResponse.from(submission, values, attachments);
+        return SubmissionResponse.from(submission, values, attachments, recipientUploadUrl);
     }
 
     private Object valueOf(SubmissionValue v) {

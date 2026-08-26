@@ -14,11 +14,13 @@ import org.springframework.transaction.annotation.Transactional;
 public class OrgUnitService {
 
     private final OrgUnitRepository orgUnitRepository;
+    private final CompanyAccessGuard companyAccessGuard;
 
     // readOnly transaction, not a plain read -- OrgUnitResponse.from touches the lazy
     // parent association (see GiftService/UserService's own doc comments on this exact bug).
     @Transactional(readOnly = true)
     public List<OrgUnitResponse> listByCompany(UUID companyId) {
+        companyAccessGuard.requireOwnCompanyOrPlatformStaff(companyId);
         return orgUnitRepository.findByCompanyId(companyId).stream().map(OrgUnitResponse::from).toList();
     }
 }

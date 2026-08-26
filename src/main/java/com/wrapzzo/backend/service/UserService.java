@@ -5,14 +5,19 @@ import com.wrapzzo.backend.dto.BulkImportUsersResponse;
 import com.wrapzzo.backend.dto.UserResponse;
 import com.wrapzzo.backend.exception.CompanyNotFoundException;
 import com.wrapzzo.backend.exception.UserImportValidationException;
+import com.wrapzzo.backend.exception.UserNotFoundException;
+import com.wrapzzo.backend.model.AccessControl;
 import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.OrgUnit;
 import com.wrapzzo.backend.model.Role;
+import com.wrapzzo.backend.model.RoleAccessControl;
 import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.model.UserInviteToken;
 import com.wrapzzo.backend.model.UserStatus;
+import com.wrapzzo.backend.repository.AccessControlRepository;
 import com.wrapzzo.backend.repository.CompanyRepository;
 import com.wrapzzo.backend.repository.OrgUnitRepository;
+import com.wrapzzo.backend.repository.RoleAccessControlRepository;
 import com.wrapzzo.backend.repository.RoleRepository;
 import com.wrapzzo.backend.repository.UserInviteTokenRepository;
 import com.wrapzzo.backend.repository.UserRepository;
@@ -35,21 +40,30 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Bulk employee onboarding from a client's roster sheet -- see BulkImportUserRow's doc
  * comment for the generic template shape. No per-designation Role mapping yet: every
- * imported user lands in one auto-created "Member" role with no elevated access, until
- * real Role management exists.
+ * imported user lands in one auto-created "Member" role, granted just enough to see the
+ * campaigns they're in the audience of and submit recipients into them (campaign.submit)
+ * -- until real Role management exists, Company Admin and Member are the only two roles
+ * a company gets.
  */
 @Service
 public class UserService {
 
     private static final String DEFAULT_MEMBER_ROLE_NAME = "Member";
+    private static final String COMPANY_ADMIN_ROLE_NAME = "Company Admin";
+
+    /** Granted to every new company's auto-seeded "Member" role. */
+    private static final List<String> DEFAULT_MEMBER_ACCESS_KEYS = List.of("campaign.submit");
 
     private final UserRepository userRepository;
     private final CompanyRepository companyRepository;
     private final RoleRepository roleRepository;
+    private final AccessControlRepository accessControlRepository;
+    private final RoleAccessControlRepository roleAccessControlRepository;
     private final OrgUnitRepository orgUnitRepository;
     private final UserInviteTokenRepository userInviteTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
+    private final CompanyAccessGuard companyAccessGuard;
     private final long inviteTokenExpiryHours;
     private final String frontendBaseUrl;
 
@@ -57,25 +71,32 @@ public class UserService {
             UserRepository userRepository,
             CompanyRepository companyRepository,
             RoleRepository roleRepository,
+            AccessControlRepository accessControlRepository,
+            RoleAccessControlRepository roleAccessControlRepository,
             OrgUnitRepository orgUnitRepository,
             UserInviteTokenRepository userInviteTokenRepository,
             PasswordEncoder passwordEncoder,
             ApplicationEventPublisher eventPublisher,
+            CompanyAccessGuard companyAccessGuard,
             @Value("${user.invite-token-expiry-hours}") long inviteTokenExpiryHours,
             @Value("${app.frontend-base-url}") String frontendBaseUrl) {
         this.userRepository = userRepository;
         this.companyRepository = companyRepository;
         this.roleRepository = roleRepository;
+        this.accessControlRepository = accessControlRepository;
+        this.roleAccessControlRepository = roleAccessControlRepository;
         this.orgUnitRepository = orgUnitRepository;
         this.userInviteTokenRepository = userInviteTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.eventPublisher = eventPublisher;
+        this.companyAccessGuard = companyAccessGuard;
         this.inviteTokenExpiryHours = inviteTokenExpiryHours;
         this.frontendBaseUrl = frontendBaseUrl;
     }
 
     @Transactional
     public BulkImportUsersResponse bulkImport(UUID companyId, List<BulkImportUserRow> rows) {
+        companyAccessGuard.requireOwnCompanyOrPlatformStaff(companyId);
         Company company = companyRepository.findById(companyId).orElseThrow(() -> new CompanyNotFoundException(companyId));
 
         // One query for every email this batch could possibly need -- each row's own email,
@@ -164,7 +185,33 @@ public class UserService {
 
     @Transactional(readOnly = true)
     public List<UserResponse> listByCompany(UUID companyId) {
+        companyAccessGuard.requireOwnCompanyOrPlatformStaff(companyId);
         return userRepository.findByCompanyId(companyId).stream().map(UserResponse::from).toList();
+    }
+
+    /**
+     * Promotes a company user to that company's own "Company Admin" role -- distinct from
+     * the platform Super Admin (Wrapzzo's own staff, company_id null). Every company gets a
+     * Company Admin role auto-seeded at creation time (see CompanyService), so this only
+     * ever reassigns an existing user onto it; it never creates the role itself.
+     *
+     * The user's roleId is baked into their JWT at login (see JwtService), so this takes
+     * effect on their next token refresh/login, not necessarily their very next request.
+     */
+    @Transactional
+    public UserResponse makeCompanyAdmin(UUID companyId, UUID userId) {
+        companyAccessGuard.requireOwnCompanyOrPlatformStaff(companyId);
+        User user = userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException(userId));
+        if (user.getCompany() == null || !user.getCompany().getId().equals(companyId)) {
+            throw new UserNotFoundException(userId);
+        }
+        Role companyAdminRole = roleRepository
+                .findByCompanyIdAndName(companyId, COMPANY_ADMIN_ROLE_NAME)
+                .orElseThrow(() -> new IllegalStateException("Company Admin role missing for company " + companyId));
+
+        user.setRole(companyAdminRole);
+        userRepository.save(user);
+        return UserResponse.from(user);
     }
 
     /**
@@ -238,7 +285,16 @@ public class UserService {
         return roleRepository.findByCompanyId(company.getId()).stream()
                 .filter(role -> role.getName().equals(DEFAULT_MEMBER_ROLE_NAME))
                 .findFirst()
-                .orElseGet(() -> roleRepository.save(new Role(company, DEFAULT_MEMBER_ROLE_NAME)));
+                .orElseGet(() -> {
+                    Role role = roleRepository.save(new Role(company, DEFAULT_MEMBER_ROLE_NAME));
+                    for (String key : DEFAULT_MEMBER_ACCESS_KEYS) {
+                        AccessControl accessControl = accessControlRepository
+                                .findByKey(key)
+                                .orElseThrow(() -> new IllegalStateException("Missing seeded access control: " + key));
+                        roleAccessControlRepository.save(new RoleAccessControl(role, accessControl));
+                    }
+                    return role;
+                });
     }
 
     private Map<String, OrgUnit> loadOrgUnitCache(Company company) {
