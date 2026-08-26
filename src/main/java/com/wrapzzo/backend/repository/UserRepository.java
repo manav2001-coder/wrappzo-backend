@@ -24,4 +24,7 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     /** Everyone assigned to any of these org units -- paired with OrgUnitRepository.findSelfAndDescendants. */
     List<User> findByOrgUnitIdIn(Collection<UUID> orgUnitIds);
+
+    /** Guards against removing the last Company Admin a company has left. */
+    long countByCompanyIdAndRoleId(UUID companyId, UUID roleId);
 }

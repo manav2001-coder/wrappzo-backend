@@ -58,6 +58,21 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
     }
 
+    @ExceptionHandler(LastCompanyAdminException.class)
+    public ResponseEntity<Map<String, String>> handleLastCompanyAdmin(LastCompanyAdminException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+    }
+
+    @ExceptionHandler(UserHasActivityException.class)
+    public ResponseEntity<Map<String, String>> handleUserHasActivity(UserHasActivityException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+    }
+
+    @ExceptionHandler(CannotDeleteSelfException.class)
+    public ResponseEntity<Map<String, String>> handleCannotDeleteSelf(CannotDeleteSelfException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+    }
+
     @ExceptionHandler(GiftNotFoundException.class)
     public ResponseEntity<Map<String, String>> handleGiftNotFound(GiftNotFoundException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
