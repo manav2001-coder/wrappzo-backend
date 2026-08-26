@@ -228,7 +228,7 @@ public class CampaignService {
     }
 
     public boolean canManage(User user) {
-        return accessControlCacheService.resolveEffectiveKeys(user.getId(), user.getRole().getId()).contains("campaign.manage");
+        return accessControlCacheService.resolveEffectiveKeys(user).contains("campaign.manage");
     }
 
     // --- internal ---

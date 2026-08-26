@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface UserRepository extends JpaRepository<User, UUID> {
 
@@ -27,4 +29,8 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     /** Guards against removing the last Company Admin a company has left. */
     long countByCompanyIdAndRoleId(UUID companyId, UUID roleId);
+
+    /** Populates the designation picker for a company's Access Control page -- see DesignationAccessService. */
+    @Query("select distinct u.designation from User u where u.company.id = :companyId and u.designation is not null order by u.designation")
+    List<String> findDistinctDesignationsByCompanyId(@Param("companyId") UUID companyId);
 }

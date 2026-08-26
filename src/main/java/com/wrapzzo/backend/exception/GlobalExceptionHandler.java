@@ -73,6 +73,11 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
     }
 
+    @ExceptionHandler(InvalidAccessControlSelectionException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidAccessControlSelection(InvalidAccessControlSelectionException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+    }
+
     @ExceptionHandler(GiftNotFoundException.class)
     public ResponseEntity<Map<String, String>> handleGiftNotFound(GiftNotFoundException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));

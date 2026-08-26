@@ -64,7 +64,7 @@ public class AuthService {
     public CurrentUserResponse getCurrentUser() {
         UUID userId = CurrentUser.id();
         User user = userRepository.findById(userId).orElseThrow(() -> new IllegalStateException("Authenticated user not found: " + userId));
-        return new CurrentUserResponse(accessControlCacheService.resolveEffectiveKeys(userId, user.getRole().getId()));
+        return new CurrentUserResponse(accessControlCacheService.resolveEffectiveKeys(user));
     }
 
     @Transactional

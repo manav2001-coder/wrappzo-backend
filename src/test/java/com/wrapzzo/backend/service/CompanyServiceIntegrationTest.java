@@ -46,7 +46,8 @@ class CompanyServiceIntegrationTest {
         assertThat(companyAdminRole.getName()).isEqualTo("Company Admin");
 
         List<String> grantedKeys = roleAccessControlRepository.findAccessControlKeysByRoleId(companyAdminRole.getId());
-        assertThat(grantedKeys).containsExactlyInAnyOrder("user.manage", "role.manage");
+        assertThat(grantedKeys)
+                .containsExactlyInAnyOrder("user.manage", "role.manage", "campaign.manage", "campaign.submit", "campaign.approve");
     }
 
     @Test

@@ -9,21 +9,32 @@ import com.wrapzzo.backend.dto.UserResponse;
 import com.wrapzzo.backend.exception.UserImportValidationException;
 import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.OrgUnit;
+import com.wrapzzo.backend.model.Role;
 import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.model.UserStatus;
 import com.wrapzzo.backend.repository.CompanyRepository;
 import com.wrapzzo.backend.repository.OrgUnitRepository;
+import com.wrapzzo.backend.repository.RoleRepository;
 import com.wrapzzo.backend.repository.UserInviteTokenRepository;
 import com.wrapzzo.backend.repository.UserRepository;
 import java.util.List;
 import java.util.UUID;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * UserService's write methods now go through CompanyAccessGuard (see its own doc comment),
+ * which reads the caller from SecurityContextHolder -- same pattern GiftServiceIntegrationTest
+ * /RoleServiceIntegrationTest use, with a platform-staff caller (company null) since these
+ * tests exercise the service directly, not the guard itself.
+ */
 @SpringBootTest
 @Import(TestEmailSenderConfig.class)
 @Transactional
@@ -42,6 +53,9 @@ class UserServiceIntegrationTest {
     private OrgUnitRepository orgUnitRepository;
 
     @Autowired
+    private RoleRepository roleRepository;
+
+    @Autowired
     private UserInviteTokenRepository userInviteTokenRepository;
 
     @Autowired
@@ -53,6 +67,17 @@ class UserServiceIntegrationTest {
     void seedCompany() {
         company = companyRepository.save(new Company("Nanz Test Pharma"));
         emailSender.sent.clear();
+
+        Role platformRole = roleRepository.save(new Role(null, "Test Platform Staff " + UUID.randomUUID()));
+        User platformStaff = userRepository.save(new User(
+                null, platformRole, "Platform Staff", "platform-" + UUID.randomUUID() + "@wrapzzo.com", "n/a"));
+        SecurityContextHolder.getContext()
+                .setAuthentication(new UsernamePasswordAuthenticationToken(platformStaff.getId(), null, List.of()));
+    }
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test

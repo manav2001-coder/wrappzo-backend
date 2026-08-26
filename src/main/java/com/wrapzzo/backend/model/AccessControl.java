@@ -51,6 +51,10 @@ public class AccessControl {
     @Column(nullable = false, length = 16)
     private AccessControlType type;
 
+    /** False for platform-wide keys (e.g. order.manage) that must never be grantable to a single company's designation -- see DesignationAccessService. */
+    @Column(name = "company_assignable", nullable = false)
+    private boolean companyAssignable = true;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

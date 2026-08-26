@@ -196,20 +196,20 @@ class AuthServiceIntegrationTest {
 
     @Test
     void effectivePermissionsCombineRoleGrantsWithUserOverridesAndInvalidateCorrectly() {
-        Set<String> initial = accessControlCacheService.resolveEffectiveKeys(user.getId(), user.getRole().getId());
+        Set<String> initial = accessControlCacheService.resolveEffectiveKeys(user);
         assertThat(initial).containsExactly("campaign.create");
 
         userAccessControlRepository.save(
                 new UserAccessControl(user, billingView, AccessEffect.GRANT, null));
         accessControlCacheService.invalidateUserOverrides(user.getId());
 
-        Set<String> afterGrant = accessControlCacheService.resolveEffectiveKeys(user.getId(), user.getRole().getId());
+        Set<String> afterGrant = accessControlCacheService.resolveEffectiveKeys(user);
         assertThat(afterGrant).containsExactlyInAnyOrder("campaign.create", "billing.view");
 
         roleAccessControlRepository.deleteAll(roleAccessControlRepository.findByRoleId(user.getRole().getId()));
         accessControlCacheService.invalidateRolePermissions(user.getRole().getId());
 
-        Set<String> afterRoleChange = accessControlCacheService.resolveEffectiveKeys(user.getId(), user.getRole().getId());
+        Set<String> afterRoleChange = accessControlCacheService.resolveEffectiveKeys(user);
         assertThat(afterRoleChange).containsExactly("billing.view");
     }
 }

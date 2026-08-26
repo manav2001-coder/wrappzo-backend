@@ -29,6 +29,7 @@ public class JwtService {
     private static final String CLAIM_TYPE = "type";
     private static final String CLAIM_ROLE_ID = "roleId";
     private static final String CLAIM_COMPANY_ID = "companyId";
+    private static final String CLAIM_DESIGNATION = "designation";
     private static final String TYPE_USER = "USER";
     private static final String TYPE_VENDOR = "VENDOR";
 
@@ -53,6 +54,9 @@ public class JwtService {
                 .signWith(signingKey);
         if (user.getCompany() != null) {
             builder.claim(CLAIM_COMPANY_ID, user.getCompany().getId().toString());
+        }
+        if (user.getDesignation() != null) {
+            builder.claim(CLAIM_DESIGNATION, user.getDesignation());
         }
         return builder.compact();
     }
@@ -81,7 +85,8 @@ public class JwtService {
         UUID roleId = UUID.fromString(claims.get(CLAIM_ROLE_ID, String.class));
         String companyIdClaim = claims.get(CLAIM_COMPANY_ID, String.class);
         UUID companyId = companyIdClaim != null ? UUID.fromString(companyIdClaim) : null;
-        return new UserPrincipalClaims(subject, roleId, companyId);
+        String designation = claims.get(CLAIM_DESIGNATION, String.class);
+        return new UserPrincipalClaims(subject, roleId, companyId, designation);
     }
 
     public Duration getAccessTokenExpiry() {

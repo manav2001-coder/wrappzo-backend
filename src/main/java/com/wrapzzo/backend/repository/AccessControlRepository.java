@@ -13,4 +13,7 @@ public interface AccessControlRepository extends JpaRepository<AccessControl, UU
 
     /** Super Admin's blanket-access set (see AccessControlCacheService) -- every FUNCTIONAL key, dynamically. */
     List<AccessControl> findByType(AccessControlType type);
+
+    /** The catalog a company's Access Control page may grant to a designation -- excludes platform-only keys. */
+    List<AccessControl> findByCompanyAssignableTrue();
 }

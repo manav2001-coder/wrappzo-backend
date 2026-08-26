@@ -4,7 +4,9 @@ import com.wrapzzo.backend.model.AccessControl;
 import com.wrapzzo.backend.model.AccessControlType;
 import com.wrapzzo.backend.model.AccessEffect;
 import com.wrapzzo.backend.model.Role;
+import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.repository.AccessControlRepository;
+import com.wrapzzo.backend.repository.DesignationAccessControlRepository;
 import com.wrapzzo.backend.repository.RoleAccessControlRepository;
 import com.wrapzzo.backend.repository.RoleRepository;
 import com.wrapzzo.backend.repository.UserAccessControlRepository;
@@ -38,16 +40,31 @@ public class AccessControlCacheService {
     private static final Duration CACHE_TTL = Duration.ofHours(1);
     private static final String ROLE_KEY_PREFIX = "role-permissions:";
     private static final String USER_OVERRIDE_KEY_PREFIX = "user-overrides:";
+    private static final String DESIGNATION_KEY_PREFIX = "designation-permissions:";
 
     private final RoleAccessControlRepository roleAccessControlRepository;
     private final UserAccessControlRepository userAccessControlRepository;
+    private final DesignationAccessControlRepository designationAccessControlRepository;
     private final RoleRepository roleRepository;
     private final AccessControlRepository accessControlRepository;
     private final StringRedisTemplate redisTemplate;
 
-    /** Role's granted keys, plus this user's GRANT overrides, minus their REVOKE overrides. */
-    public Set<String> resolveEffectiveKeys(UUID userId, UUID roleId) {
+    /** Convenience for call sites that already have the User loaded -- see the 4-arg overload. */
+    public Set<String> resolveEffectiveKeys(User user) {
+        UUID companyId = user.getCompany() != null ? user.getCompany().getId() : null;
+        return resolveEffectiveKeys(user.getId(), user.getRole().getId(), companyId, user.getDesignation());
+    }
+
+    /**
+     * Role's granted keys, UNION their designation's granted keys (additive, independent
+     * layer -- see DesignationAccessControl's doc comment), plus this user's GRANT overrides,
+     * minus their REVOKE overrides.
+     */
+    public Set<String> resolveEffectiveKeys(UUID userId, UUID roleId, UUID companyId, String designation) {
         Set<String> effective = new HashSet<>(getRolePermissionKeys(roleId));
+        if (companyId != null && designation != null) {
+            effective.addAll(getDesignationPermissionKeys(companyId, designation));
+        }
         for (Map.Entry<String, AccessEffect> override : getUserOverrides(userId).entrySet()) {
             if (override.getValue() == AccessEffect.GRANT) {
                 effective.add(override.getKey());
@@ -81,6 +98,19 @@ public class AccessControlCacheService {
     }
 
     @Transactional(readOnly = true)
+    public Set<String> getDesignationPermissionKeys(UUID companyId, String designation) {
+        String redisKey = DESIGNATION_KEY_PREFIX + companyId + ":" + designation;
+        String cached = redisTemplate.opsForValue().get(redisKey);
+        if (cached != null) {
+            return decodeKeySet(cached);
+        }
+        Set<String> keys =
+                new HashSet<>(designationAccessControlRepository.findAccessControlKeysByCompanyIdAndDesignation(companyId, designation));
+        redisTemplate.opsForValue().set(redisKey, encodeKeySet(keys), CACHE_TTL);
+        return keys;
+    }
+
+    @Transactional(readOnly = true)
     public Map<String, AccessEffect> getUserOverrides(UUID userId) {
         String redisKey = USER_OVERRIDE_KEY_PREFIX + userId;
         String cached = redisTemplate.opsForValue().get(redisKey);
@@ -102,6 +132,11 @@ public class AccessControlCacheService {
     /** Call whenever a specific user's access-control overrides change. */
     public void invalidateUserOverrides(UUID userId) {
         redisTemplate.delete(USER_OVERRIDE_KEY_PREFIX + userId);
+    }
+
+    /** Call whenever a designation's granted access-control keys change. */
+    public void invalidateDesignationPermissions(UUID companyId, String designation) {
+        redisTemplate.delete(DESIGNATION_KEY_PREFIX + companyId + ":" + designation);
     }
 
     private static String encodeKeySet(Set<String> keys) {

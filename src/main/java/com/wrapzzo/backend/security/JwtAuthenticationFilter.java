@@ -63,7 +63,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private Set<GrantedAuthority> userAuthorities(UserPrincipalClaims claims) {
-        Set<String> keys = accessControlCacheService.resolveEffectiveKeys(claims.userId(), claims.roleId());
+        Set<String> keys =
+                accessControlCacheService.resolveEffectiveKeys(claims.userId(), claims.roleId(), claims.companyId(), claims.designation());
         return keys.stream().map(SimpleGrantedAuthority::new).collect(Collectors.toSet());
     }
 }

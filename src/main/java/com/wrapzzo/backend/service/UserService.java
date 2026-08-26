@@ -35,6 +35,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -69,6 +70,7 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
     private final CompanyAccessGuard companyAccessGuard;
+    private final DesignationAccessService designationAccessService;
     private final long inviteTokenExpiryHours;
     private final String frontendBaseUrl;
 
@@ -83,6 +85,7 @@ public class UserService {
             PasswordEncoder passwordEncoder,
             ApplicationEventPublisher eventPublisher,
             CompanyAccessGuard companyAccessGuard,
+            DesignationAccessService designationAccessService,
             @Value("${user.invite-token-expiry-hours}") long inviteTokenExpiryHours,
             @Value("${app.frontend-base-url}") String frontendBaseUrl) {
         this.userRepository = userRepository;
@@ -95,6 +98,7 @@ public class UserService {
         this.passwordEncoder = passwordEncoder;
         this.eventPublisher = eventPublisher;
         this.companyAccessGuard = companyAccessGuard;
+        this.designationAccessService = designationAccessService;
         this.inviteTokenExpiryHours = inviteTokenExpiryHours;
         this.frontendBaseUrl = frontendBaseUrl;
     }
@@ -200,6 +204,12 @@ public class UserService {
      * Company Admin role auto-seeded at creation time (see CompanyService), so this only
      * ever reassigns an existing user onto it; it never creates the role itself.
      *
+     * Also propagates Company Admin's current grants onto the promoted user's designation
+     * (additive, see DesignationAccessService.grantAccessControls) -- so anyone else sharing
+     * that same designation, now or hired later, picks up the same access without Super Admin
+     * having to hand-configure that designation separately. This is a one-time snapshot, not a
+     * live link: demoting this user back to Member does NOT revert it (see removeCompanyAdmin).
+     *
      * The user's roleId is baked into their JWT at login (see JwtService), so this takes
      * effect on their next token refresh/login, not necessarily their very next request.
      */
@@ -216,6 +226,14 @@ public class UserService {
 
         user.setRole(companyAdminRole);
         userRepository.save(user);
+
+        if (user.getDesignation() != null) {
+            Set<UUID> companyAdminGrantIds = roleAccessControlRepository.findByRoleId(companyAdminRole.getId()).stream()
+                    .map(rac -> rac.getAccessControl().getId())
+                    .collect(Collectors.toSet());
+            designationAccessService.grantAccessControls(companyId, user.getDesignation(), companyAdminGrantIds);
+        }
+
         return UserResponse.from(user);
     }
 
