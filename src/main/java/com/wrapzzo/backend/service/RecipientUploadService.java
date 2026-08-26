@@ -4,6 +4,7 @@ import com.wrapzzo.backend.dto.PresignSubmissionAttachmentResponse;
 import com.wrapzzo.backend.dto.RecipientUploadDetailsResponse;
 import com.wrapzzo.backend.dto.SubmitRecipientPhotoRequest;
 import com.wrapzzo.backend.exception.InvalidRecipientUploadTokenException;
+import com.wrapzzo.backend.exception.RecipientPhotoRequestNotPossibleException;
 import com.wrapzzo.backend.model.CampaignField;
 import com.wrapzzo.backend.model.CampaignForm;
 import com.wrapzzo.backend.model.Gift;
@@ -79,14 +80,12 @@ public class RecipientUploadService {
      * Called from SubmissionService.approve() right after the Order is created. Returns
      * the freshly-issued upload link (already emailed) so the Admin UI can also offer a
      * one-click "share via WhatsApp" for it, or null if nothing needed to be requested.
+     * Best-effort: silently does nothing if there's no Photo field or no recipient email,
+     * since this runs automatically as a side effect of approval and must never block it.
      */
     @Transactional
     public String requestPhotoIfMissing(Submission submission) {
-        Optional<CampaignForm> form = campaignFormRepository.findByCampaignId(submission.getCampaign().getId());
-        if (form.isEmpty()) {
-            return null;
-        }
-        Optional<CampaignField> photoField = campaignFieldRepository.findByCampaignFormIdAndFieldKey(form.get().getId(), PHOTO_FIELD_KEY);
+        Optional<CampaignField> photoField = findPhotoField(submission);
         if (photoField.isEmpty() || hasPhoto(submission.getId())) {
             return null;
         }
@@ -94,7 +93,35 @@ public class RecipientUploadService {
         if (recipientEmail == null || recipientEmail.isBlank()) {
             return null;
         }
+        return issueTokenAndSend(submission, recipientEmail);
+    }
 
+    /**
+     * Explicitly triggered by the submitter from "My submissions" -- e.g. the recipient's
+     * first photo wasn't clear enough. Unlike requestPhotoIfMissing, this always issues a
+     * fresh link (even if a photo already exists -- it'll be replaced on the next upload)
+     * and surfaces a real error instead of silently no-op-ing, since a person just asked
+     * for this to happen and needs to know if it can't.
+     */
+    @Transactional
+    public String requestAgain(Submission submission) {
+        if (findPhotoField(submission).isEmpty()) {
+            throw new RecipientPhotoRequestNotPossibleException("This campaign's form doesn't have a Photo field to request.");
+        }
+        String recipientEmail = valueText(submission.getId(), "recipientEmail");
+        if (recipientEmail == null || recipientEmail.isBlank()) {
+            throw new RecipientPhotoRequestNotPossibleException("This recipient has no email on file to send the link to.");
+        }
+        return issueTokenAndSend(submission, recipientEmail);
+    }
+
+    private Optional<CampaignField> findPhotoField(Submission submission) {
+        return campaignFormRepository
+                .findByCampaignId(submission.getCampaign().getId())
+                .flatMap(form -> campaignFieldRepository.findByCampaignFormIdAndFieldKey(form.getId(), PHOTO_FIELD_KEY));
+    }
+
+    private String issueTokenAndSend(Submission submission, String recipientEmail) {
         String rawToken = TokenHasher.generateOpaqueToken();
         Instant expiresAt = Instant.now().plus(UPLOAD_TOKEN_EXPIRY);
         tokenRepository.save(new RecipientUploadToken(submission, TokenHasher.sha256Hex(rawToken), expiresAt));
@@ -157,6 +184,15 @@ public class RecipientUploadService {
         CampaignField photoField = campaignFieldRepository
                 .findByCampaignFormIdAndFieldKey(form.getId(), PHOTO_FIELD_KEY)
                 .orElseThrow(InvalidRecipientUploadTokenException::new);
+
+        // A re-request (requestAgain) can land here a second time for the same submission --
+        // replace, don't accumulate, so the submission never carries two "photo" attachments.
+        submissionAttachmentRepository.findBySubmissionId(submission.getId()).stream()
+                .filter(a -> PHOTO_FIELD_KEY.equals(a.getCampaignField().getFieldKey()))
+                .forEach(a -> {
+                    fileStorageService.delete(a.getFileKey());
+                    submissionAttachmentRepository.delete(a);
+                });
 
         submissionAttachmentRepository.save(new SubmissionAttachment(
                 submission, photoField, request.key(), request.fileName(), request.mimeType(), request.fileSize()));

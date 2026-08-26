@@ -12,6 +12,7 @@ import com.wrapzzo.backend.exception.GiftNotOfferedByCampaignException;
 import com.wrapzzo.backend.exception.NotAuthorizedToReviewException;
 import com.wrapzzo.backend.exception.NotInCampaignAudienceException;
 import com.wrapzzo.backend.exception.SubmissionAlreadyReviewedException;
+import com.wrapzzo.backend.exception.SubmissionNotApprovedException;
 import com.wrapzzo.backend.exception.SubmissionNotFoundException;
 import com.wrapzzo.backend.exception.SubmissionValidationException;
 import com.wrapzzo.backend.model.Campaign;
@@ -168,6 +169,16 @@ public class SubmissionService {
         String recipientUploadUrl = recipientUploadService.requestPhotoIfMissing(submission);
 
         return toResponse(submission, recipientUploadUrl);
+    }
+
+    /** Submitter-triggered, from "My submissions" -- e.g. the recipient's first photo wasn't clear enough, ask again. */
+    @Transactional
+    public String requestPhotoLinkAgain(UUID submissionId) {
+        Submission submission = getOwnEntity(submissionId);
+        if (submission.getStatus() != SubmissionStatus.APPROVED) {
+            throw new SubmissionNotApprovedException(submissionId);
+        }
+        return recipientUploadService.requestAgain(submission);
     }
 
     @Transactional
