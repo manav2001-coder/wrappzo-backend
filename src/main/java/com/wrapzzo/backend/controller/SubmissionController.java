@@ -4,6 +4,7 @@ import com.wrapzzo.backend.dto.CreateSubmissionRequest;
 import com.wrapzzo.backend.dto.PresignSubmissionAttachmentRequest;
 import com.wrapzzo.backend.dto.PresignSubmissionAttachmentResponse;
 import com.wrapzzo.backend.dto.RejectSubmissionRequest;
+import com.wrapzzo.backend.dto.RequestPhotoLinkResponse;
 import com.wrapzzo.backend.dto.SubmissionResponse;
 import com.wrapzzo.backend.service.SubmissionService;
 import jakarta.validation.Valid;
@@ -54,6 +55,12 @@ public class SubmissionController {
     @PreAuthorize("hasAuthority('campaign.submit')")
     public List<SubmissionResponse> mine() {
         return submissionService.listMine();
+    }
+
+    @PostMapping("/api/submissions/{id}/requestPhotoLink")
+    @PreAuthorize("hasAuthority('campaign.submit')")
+    public RequestPhotoLinkResponse requestPhotoLink(@PathVariable UUID id) {
+        return new RequestPhotoLinkResponse(submissionService.requestPhotoLinkAgain(id));
     }
 
     @GetMapping("/api/submissions/pending-approval")

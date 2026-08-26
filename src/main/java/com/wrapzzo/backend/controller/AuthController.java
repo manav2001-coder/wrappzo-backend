@@ -1,5 +1,6 @@
 package com.wrapzzo.backend.controller;
 
+import com.wrapzzo.backend.dto.CurrentUserResponse;
 import com.wrapzzo.backend.dto.LoginRequest;
 import com.wrapzzo.backend.dto.LogoutRequest;
 import com.wrapzzo.backend.dto.RefreshRequest;
@@ -9,6 +10,7 @@ import com.wrapzzo.backend.service.AuthService;
 import com.wrapzzo.backend.service.TokenPair;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -39,6 +41,11 @@ public class AuthController {
     @PostMapping("/setupPassword")
     public TokenResponse setupPassword(@Valid @RequestBody SetupPasswordRequest request) {
         return toResponse(authService.setupPassword(request.token(), request.password(), request.confirmPassword()));
+    }
+
+    @GetMapping("/me")
+    public CurrentUserResponse me() {
+        return authService.getCurrentUser();
     }
 
     private TokenResponse toResponse(TokenPair tokens) {

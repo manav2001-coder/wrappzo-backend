@@ -93,6 +93,16 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
     }
 
+    @ExceptionHandler(SubmissionNotApprovedException.class)
+    public ResponseEntity<Map<String, String>> handleSubmissionNotApproved(SubmissionNotApprovedException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+    }
+
+    @ExceptionHandler(RecipientPhotoRequestNotPossibleException.class)
+    public ResponseEntity<Map<String, String>> handleRecipientPhotoRequestNotPossible(RecipientPhotoRequestNotPossibleException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+    }
+
     @ExceptionHandler(EmailDeliveryException.class)
     public ResponseEntity<Map<String, String>> handleEmailDeliveryFailure(EmailDeliveryException e) {
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
