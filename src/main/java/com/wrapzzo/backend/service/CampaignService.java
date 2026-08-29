@@ -175,7 +175,8 @@ public class CampaignService {
         User user = currentUser();
         UUID companyId = user.getCompany().getId();
         List<AudienceOptionsResponse.OrgUnitOption> orgUnits = orgUnitRepository.findByCompanyId(companyId).stream()
-                .map(u -> new AudienceOptionsResponse.OrgUnitOption(u.getId(), u.getName(), u.getLevelName()))
+                .map(u -> new AudienceOptionsResponse.OrgUnitOption(
+                        u.getId(), u.getName(), u.getLevelName(), u.getParent() != null ? u.getParent().getId() : null))
                 .toList();
         List<AudienceOptionsResponse.UserOption> users = userRepository.findByCompanyId(companyId).stream()
                 .map(u -> new AudienceOptionsResponse.UserOption(u.getId(), u.getName(), u.getEmail()))
