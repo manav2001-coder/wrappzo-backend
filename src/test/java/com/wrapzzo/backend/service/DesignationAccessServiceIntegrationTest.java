@@ -163,7 +163,10 @@ class DesignationAccessServiceIntegrationTest {
 
         Set<String> effective = accessControlCacheService.resolveEffectiveKeys(user);
 
-        assertThat(effective).containsExactlyInAnyOrder("user.manage", "role.manage", "campaign.manage", "campaign.submit", "campaign.approve");
+        assertThat(effective)
+                .containsExactlyInAnyOrder(
+                        "user.manage", "role.manage", "campaign.manage", "campaign.submit", "campaign.approve",
+                        "quickgift.create", "dashboard.view");
     }
 
     @Test
@@ -182,7 +185,9 @@ class DesignationAccessServiceIntegrationTest {
 
         Set<String> peerEffective = accessControlCacheService.resolveEffectiveKeys(peer);
         assertThat(peerEffective)
-                .containsExactlyInAnyOrder("user.manage", "role.manage", "campaign.manage", "campaign.submit", "campaign.approve");
+                .containsExactlyInAnyOrder(
+                        "user.manage", "role.manage", "campaign.manage", "campaign.submit", "campaign.approve",
+                        "quickgift.create", "dashboard.view");
     }
 
     @Test
