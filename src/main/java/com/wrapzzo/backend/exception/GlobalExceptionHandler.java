@@ -211,6 +211,26 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
     }
 
+    @ExceptionHandler(GiftNotAvailableForQuickGiftException.class)
+    public ResponseEntity<Map<String, String>> handleGiftNotAvailableForQuickGift(GiftNotAvailableForQuickGiftException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+    }
+
+    @ExceptionHandler(QuickGiftRequestNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleQuickGiftRequestNotFound(QuickGiftRequestNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
+    }
+
+    @ExceptionHandler(QuickGiftAlreadyReviewedException.class)
+    public ResponseEntity<Map<String, String>> handleQuickGiftAlreadyReviewed(QuickGiftAlreadyReviewedException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+    }
+
+    @ExceptionHandler(QuickGiftNotApprovedException.class)
+    public ResponseEntity<Map<String, String>> handleQuickGiftNotApproved(QuickGiftNotApprovedException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+    }
+
     /**
      * Safety net for any unique/foreign-key violation that reaches the database without an
      * explicit pre-check above -- without this, it bubbles up uncaught and Spring's

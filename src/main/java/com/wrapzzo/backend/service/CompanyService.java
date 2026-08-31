@@ -25,8 +25,9 @@ import org.springframework.transaction.annotation.Transactional;
 public class CompanyService {
 
     /** Granted to every new company's auto-seeded "Company Admin" role. */
-    private static final List<String> DEFAULT_COMPANY_ADMIN_ACCESS_KEYS =
-            List.of("user.manage", "role.manage", "campaign.manage", "campaign.submit", "campaign.approve");
+    private static final List<String> DEFAULT_COMPANY_ADMIN_ACCESS_KEYS = List.of(
+            "user.manage", "role.manage", "campaign.manage", "campaign.submit", "campaign.approve",
+            "quickgift.create", "dashboard.view");
 
     private static final Duration LOGO_UPLOAD_URL_EXPIRY = Duration.ofMinutes(5);
 

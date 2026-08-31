@@ -13,6 +13,8 @@ public interface SubmissionRepository extends JpaRepository<Submission, UUID> {
 
     List<Submission> findByCampaignIdOrderByCreatedAtDesc(UUID campaignId);
 
+    List<Submission> findByCompanyIdOrderByCreatedAtDesc(UUID companyId);
+
     List<Submission> findBySubmittedByIdOrderByCreatedAtDesc(UUID userId);
 
     List<Submission> findByCampaignIdAndSubmittedByIdOrderByCreatedAtDesc(UUID campaignId, UUID userId);

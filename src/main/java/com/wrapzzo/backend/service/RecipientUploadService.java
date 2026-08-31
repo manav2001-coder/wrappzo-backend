@@ -122,6 +122,14 @@ public class RecipientUploadService {
     }
 
     private String issueTokenAndSend(Submission submission, String recipientEmail) {
+        // Retire any still-active older links for this submission first -- a resend ("photo
+        // wasn't clear, send it again") should mean exactly one working link, not two.
+        for (RecipientUploadToken old : tokenRepository.findBySubmissionId(submission.getId())) {
+            if (old.isActive()) {
+                old.setUsedAt(Instant.now());
+            }
+        }
+
         String rawToken = TokenHasher.generateOpaqueToken();
         Instant expiresAt = Instant.now().plus(UPLOAD_TOKEN_EXPIRY);
         tokenRepository.save(new RecipientUploadToken(submission, TokenHasher.sha256Hex(rawToken), expiresAt));
@@ -155,7 +163,11 @@ public class RecipientUploadService {
                 : giftImageRepository.findByGiftIdOrderByDisplayOrderAsc(gift.getId()).stream()
                         .map(image -> fileStorageService.publicUrl(image.getImageKey()))
                         .toList();
-        boolean alreadyUploaded = token.getUsedAt() != null || hasPhoto(submission.getId());
+        // Deliberately just this token's own usedAt -- NOT "does the submission currently have a
+        // photo," which is true precisely when this is a resend (the old photo wasn't right, a
+        // fresh unused token was just issued) and would otherwise show "already uploaded" and
+        // block the very re-upload this link exists for.
+        boolean alreadyUploaded = token.getUsedAt() != null;
 
         return new RecipientUploadDetailsResponse(
                 valueText(submission.getId(), "recipientName"),
