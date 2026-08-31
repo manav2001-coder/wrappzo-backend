@@ -170,6 +170,9 @@ public class DashboardService {
                     "Orders — " + value);
             case "week" -> weekDrilldown(value, data.submissions(), data.quickGifts());
             case "monthlySpend" -> monthlySpendDrilldown(data.orders(), data.quickGiftRequesterByOrderId());
+            case "pipelineStage" -> ordersDrilldown(
+                    data.orders().stream().filter(o -> pipelineStageMatches(o.getStatus(), value)).toList(),
+                    "Orders — " + pipelineStageTitle(value));
             default -> new DashboardDrilldownResponse(value, List.of());
         };
     }
@@ -212,6 +215,25 @@ public class DashboardService {
         return (s.getStatus() == SubmissionStatus.SUBMITTED || s.getStatus() == SubmissionStatus.RESUBMITTED)
                 ? "PENDING"
                 : s.getStatus().name();
+    }
+
+    /** Matches PipelineFlow's three stages -- "inProgress" groups PROCESSING+PRODUCTION_QUEUE, same as summary()'s own count. */
+    private boolean pipelineStageMatches(OrderStatus status, String stage) {
+        return switch (stage) {
+            case "inProgress" -> IN_PROGRESS_STATUSES.contains(status);
+            case "dispatched" -> status == OrderStatus.DISPATCHED;
+            case "delivered" -> status == OrderStatus.DELIVERED;
+            default -> false;
+        };
+    }
+
+    private String pipelineStageTitle(String stage) {
+        return switch (stage) {
+            case "inProgress" -> "In progress";
+            case "dispatched" -> "Dispatched";
+            case "delivered" -> "Delivered";
+            default -> stage;
+        };
     }
 
     /** "QUICK_GIFT" -> "Quick Gift". */
