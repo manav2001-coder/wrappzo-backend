@@ -20,7 +20,7 @@ import com.wrapzzo.backend.security.CurrentUser;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -39,13 +39,12 @@ public class OrderService {
     /** An order already routed to a vendor counts toward that vendor's load for auto-assign's naive balancing. */
     private static final List<OrderStatus> IN_FLIGHT_STATUSES = List.of(OrderStatus.PROCESSING, OrderStatus.PRODUCTION_QUEUE);
 
-    /**
-     * For now, a vendor's only action is marking an order delivered -- no separate "dispatched"
-     * step -- from either state it's routed to them in. Revisit if a real dispatch step is
-     * needed later; this map is the one place that decision lives.
-     */
-    private static final Map<OrderStatus, OrderStatus> VENDOR_TRANSITIONS =
-            Map.of(OrderStatus.PRODUCTION_QUEUE, OrderStatus.DELIVERED, OrderStatus.DISPATCHED, OrderStatus.DELIVERED);
+    /** A vendor can freely move an order between these -- picked directly from a dropdown, not a forced sequence. */
+    private static final Set<OrderStatus> VENDOR_SELECTABLE_STATUSES =
+            Set.of(OrderStatus.PRODUCTION_QUEUE, OrderStatus.DISPATCHED, OrderStatus.DELIVERED);
+
+    /** Once an order leaves these (delivered, cancelled, or still unassigned/PROCESSING), it's no longer the vendor's to edit. */
+    private static final Set<OrderStatus> VENDOR_EDITABLE_SOURCE_STATUSES = Set.of(OrderStatus.PRODUCTION_QUEUE, OrderStatus.DISPATCHED);
 
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
@@ -82,7 +81,7 @@ public class OrderService {
     @Transactional
     public VendorOrderResponse updateStatusForVendor(UUID id, UUID vendorId, OrderStatus newStatus) {
         Order order = getEntityForVendor(id, vendorId);
-        if (!newStatus.equals(VENDOR_TRANSITIONS.get(order.getStatus()))) {
+        if (!VENDOR_EDITABLE_SOURCE_STATUSES.contains(order.getStatus()) || !VENDOR_SELECTABLE_STATUSES.contains(newStatus)) {
             throw new InvalidOrderStatusTransitionException(id, order.getStatus(), newStatus);
         }
         order.setStatus(newStatus);

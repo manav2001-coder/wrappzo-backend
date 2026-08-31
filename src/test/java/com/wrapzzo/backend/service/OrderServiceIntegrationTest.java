@@ -130,11 +130,39 @@ class OrderServiceIntegrationTest {
     }
 
     @Test
-    void updateStatusForVendorRejectsSettingDispatchedDirectly() {
+    void updateStatusForVendorCanSetDispatchedDirectlyFromProductionQueue() {
         Order order = newOrder(vendor, OrderStatus.PRODUCTION_QUEUE);
 
         actAsVendor(vendor);
+        VendorOrderResponse dispatched = orderService.updateStatusForVendor(order.getId(), vendor.getId(), OrderStatus.DISPATCHED);
+        assertThat(dispatched.status()).isEqualTo(OrderStatus.DISPATCHED);
+    }
+
+    @Test
+    void updateStatusForVendorCanMoveBackward() {
+        Order order = newOrder(vendor, OrderStatus.DISPATCHED);
+
+        actAsVendor(vendor);
+        VendorOrderResponse backToQueue =
+                orderService.updateStatusForVendor(order.getId(), vendor.getId(), OrderStatus.PRODUCTION_QUEUE);
+        assertThat(backToQueue.status()).isEqualTo(OrderStatus.PRODUCTION_QUEUE);
+    }
+
+    @Test
+    void updateStatusForVendorRejectsOnceAlreadyDelivered() {
+        Order order = newOrder(vendor, OrderStatus.DELIVERED);
+
+        actAsVendor(vendor);
         assertThatThrownBy(() -> orderService.updateStatusForVendor(order.getId(), vendor.getId(), OrderStatus.DISPATCHED))
+                .isInstanceOf(InvalidOrderStatusTransitionException.class);
+    }
+
+    @Test
+    void updateStatusForVendorRejectsCancelledAsATarget() {
+        Order order = newOrder(vendor, OrderStatus.PRODUCTION_QUEUE);
+
+        actAsVendor(vendor);
+        assertThatThrownBy(() -> orderService.updateStatusForVendor(order.getId(), vendor.getId(), OrderStatus.CANCELLED))
                 .isInstanceOf(InvalidOrderStatusTransitionException.class);
     }
 
@@ -148,7 +176,7 @@ class OrderServiceIntegrationTest {
     }
 
     @Test
-    void listForVendorPriceExcludesMarkupButIncludesCommission() {
+    void listForVendorPriceExcludesMarkupAndCommission() {
         gift.setPrice(BigDecimal.valueOf(1000));
         gift.setMarkupFeePercentage(BigDecimal.valueOf(20));
         gift.setCommissionFeePercentage(BigDecimal.valueOf(10));
@@ -158,7 +186,7 @@ class OrderServiceIntegrationTest {
         actAsVendor(vendor);
         List<VendorOrderResponse> orders = orderService.listForVendor(vendor.getId());
 
-        // 1000 + 10% commission = 1100 -- the 20% markup never enters the vendor's number.
-        assertThat(orders.get(0).price()).isEqualByComparingTo(BigDecimal.valueOf(1100).setScale(2));
+        // Raw gift price only -- neither the 20% markup nor the 10% commission enters the vendor's number.
+        assertThat(orders.get(0).price()).isEqualByComparingTo(BigDecimal.valueOf(1000));
     }
 }
