@@ -1,9 +1,10 @@
 package com.wrapzzo.backend.dto;
 
-import com.wrapzzo.backend.model.GiftModule;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
-import java.util.Set;
+import jakarta.validation.constraints.PositiveOrZero;
+import java.math.BigDecimal;
 
 public record CreateGiftRequest(
         @NotBlank String name,
@@ -11,5 +12,7 @@ public record CreateGiftRequest(
         String description,
         @Positive Integer moq,
         @Positive Integer leadTimeDays,
-        Set<GiftModule> modules) {
+        @NotNull @PositiveOrZero BigDecimal price,
+        @PositiveOrZero BigDecimal markupFeePercentage,
+        @PositiveOrZero BigDecimal commissionFeePercentage) {
 }

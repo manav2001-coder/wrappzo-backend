@@ -30,6 +30,7 @@ import com.wrapzzo.backend.repository.QuickGiftRequestRepository;
 import com.wrapzzo.backend.repository.SubmissionRepository;
 import com.wrapzzo.backend.repository.UserRepository;
 import com.wrapzzo.backend.security.CurrentUser;
+import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -106,6 +107,11 @@ public class DashboardService {
         long quickGiftsThisMonth = quickGifts.stream().filter(q -> !q.getCreatedAt().isBefore(monthStart)).count();
         long quickGiftsPending = quickGifts.stream().filter(q -> q.getStatus() == QuickGiftStatus.SUBMITTED).count();
 
+        BigDecimal monthlySpend = orders.stream()
+                .filter(o -> o.getStatus() == OrderStatus.DELIVERED && !o.getUpdatedAt().isBefore(monthStart) && o.getTotalPrice() != null)
+                .map(Order::getTotalPrice)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
         Map<String, Long> orderSourceBreakdown = orders.stream()
                 .collect(Collectors.groupingBy(o -> o.getSource().name(), Collectors.counting()));
         Map<String, Long> quickGiftStatusBreakdown = quickGifts.stream()
@@ -125,6 +131,7 @@ public class DashboardService {
                 submissionsPending,
                 quickGiftsThisMonth,
                 quickGiftsPending,
+                monthlySpend,
                 orderSourceBreakdown,
                 quickGiftStatusBreakdown,
                 submissionStatusBreakdown,

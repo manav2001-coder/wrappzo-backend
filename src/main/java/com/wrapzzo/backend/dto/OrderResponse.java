@@ -4,6 +4,7 @@ import com.wrapzzo.backend.model.Order;
 import com.wrapzzo.backend.model.OrderAssignmentMode;
 import com.wrapzzo.backend.model.OrderSource;
 import com.wrapzzo.backend.model.OrderStatus;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -20,6 +21,8 @@ public record OrderResponse(
         String giftName,
         String recipientName,
         String recipientPhone,
+        /** Snapshotted off the gift's total price at approval time -- see Order.totalPrice. */
+        BigDecimal totalPrice,
         OrderSource source,
         OrderStatus status,
         UUID assignedVendorId,
@@ -41,6 +44,7 @@ public record OrderResponse(
                 order.getGift() != null ? order.getGift().getName() : null,
                 order.getRecipientName(),
                 order.getRecipientPhone(),
+                order.getTotalPrice(),
                 order.getSource(),
                 order.getStatus(),
                 order.getAssignedVendor() != null ? order.getAssignedVendor().getId() : null,

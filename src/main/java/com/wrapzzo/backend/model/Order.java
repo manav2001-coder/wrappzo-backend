@@ -13,6 +13,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 import lombok.Getter;
@@ -68,6 +69,11 @@ public class Order {
     @Column(name = "recipient_phone")
     private String recipientPhone;
 
+    /** Snapshotted off the gift's total price (price + fee percentages) at approval time --
+     * stable even if the gift is repriced afterward. Null for an order whose gift had no price set. */
+    @Column(name = "total_price", precision = 10, scale = 2)
+    private BigDecimal totalPrice;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     private OrderSource source = OrderSource.CAMPAIGN;
@@ -112,6 +118,7 @@ public class Order {
         this.gift = gift;
         this.recipientName = recipientName;
         this.recipientPhone = recipientPhone;
+        this.totalPrice = gift != null ? gift.getTotalPrice() : null;
         this.createdBy = createdBy;
     }
 
@@ -122,6 +129,7 @@ public class Order {
         this.source = source;
         this.recipientName = recipientName;
         this.recipientPhone = recipientPhone;
+        this.totalPrice = gift != null ? gift.getTotalPrice() : null;
         this.createdBy = createdBy;
     }
 

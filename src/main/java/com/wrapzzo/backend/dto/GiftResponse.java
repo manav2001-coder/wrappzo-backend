@@ -2,6 +2,7 @@ package com.wrapzzo.backend.dto;
 
 import com.wrapzzo.backend.model.Gift;
 import com.wrapzzo.backend.model.GiftModule;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
@@ -17,6 +18,10 @@ public record GiftResponse(
         Integer leadTimeDays,
         boolean active,
         Set<GiftModule> modules,
+        BigDecimal price,
+        BigDecimal markupFeePercentage,
+        BigDecimal commissionFeePercentage,
+        BigDecimal totalPrice,
         UUID vendorId,
         String vendorName,
         List<GiftImageResponse> images,
@@ -33,6 +38,10 @@ public record GiftResponse(
                 gift.getLeadTimeDays(),
                 gift.isActive(),
                 gift.getModules(),
+                gift.getPrice(),
+                gift.getMarkupFeePercentage(),
+                gift.getCommissionFeePercentage(),
+                gift.getTotalPrice(),
                 gift.getVendor() != null ? gift.getVendor().getId() : null,
                 gift.getVendor() != null ? gift.getVendor().getName() : null,
                 images,

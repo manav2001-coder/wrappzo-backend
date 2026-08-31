@@ -12,6 +12,7 @@ import com.wrapzzo.backend.exception.VendorGiftEditNotAllowedException;
 import com.wrapzzo.backend.exception.VendorNotFoundException;
 import com.wrapzzo.backend.model.Gift;
 import com.wrapzzo.backend.model.GiftImage;
+import com.wrapzzo.backend.model.GiftModule;
 import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.model.Vendor;
 import com.wrapzzo.backend.repository.GiftImageRepository;
@@ -19,7 +20,9 @@ import com.wrapzzo.backend.repository.GiftRepository;
 import com.wrapzzo.backend.repository.UserRepository;
 import com.wrapzzo.backend.repository.VendorRepository;
 import com.wrapzzo.backend.security.CurrentUser;
+import java.math.BigDecimal;
 import java.time.Duration;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -32,6 +35,9 @@ import org.springframework.transaction.annotation.Transactional;
 public class GiftService {
 
     private static final Duration IMAGE_UPLOAD_URL_EXPIRY = Duration.ofMinutes(5);
+
+    /** Every gift is available in every commerce path unconditionally -- no per-gift picker. */
+    private static final EnumSet<GiftModule> ALL_MODULES = EnumSet.allOf(GiftModule.class);
 
     private static final Map<String, String> EXTENSION_BY_CONTENT_TYPE = Map.of(
             "image/png", "png",
@@ -54,7 +60,10 @@ public class GiftService {
 
         User creator = currentUser();
         Gift toSave = new Gift(request.name(), request.category(), request.description(), request.moq(), request.leadTimeDays(), creator);
-        toSave.setModules(request.modules() != null ? new java.util.HashSet<>(request.modules()) : new java.util.HashSet<>());
+        toSave.setModules(new java.util.HashSet<>(ALL_MODULES));
+        toSave.setPrice(request.price());
+        toSave.setMarkupFeePercentage(feeOrZero(request.markupFeePercentage()));
+        toSave.setCommissionFeePercentage(feeOrZero(request.commissionFeePercentage()));
         // saveAndFlush -- giftNo is DB-generated and only readable after the physical
         // INSERT runs, which plain save() would otherwise defer until transaction commit.
         Gift gift = giftRepository.saveAndFlush(toSave);
@@ -99,7 +108,9 @@ public class GiftService {
         gift.setDescription(request.description());
         gift.setMoq(request.moq());
         gift.setLeadTimeDays(request.leadTimeDays());
-        gift.setModules(request.modules() != null ? new java.util.HashSet<>(request.modules()) : new java.util.HashSet<>());
+        gift.setPrice(request.price());
+        gift.setMarkupFeePercentage(feeOrZero(request.markupFeePercentage()));
+        gift.setCommissionFeePercentage(feeOrZero(request.commissionFeePercentage()));
         gift.setUpdatedBy(currentUser());
         return toResponse(gift);
     }
@@ -150,10 +161,14 @@ public class GiftService {
         }
 
         Vendor vendor = getVendorEntity(vendorId);
+        Gift toSave = new Gift(request.name(), request.category(), request.description(), request.moq(), request.leadTimeDays(), vendor);
+        toSave.setModules(new java.util.HashSet<>(ALL_MODULES));
+        toSave.setPrice(request.price());
+        toSave.setMarkupFeePercentage(feeOrZero(request.markupFeePercentage()));
+        toSave.setCommissionFeePercentage(feeOrZero(request.commissionFeePercentage()));
         // saveAndFlush -- giftNo is DB-generated and only readable after the physical
         // INSERT runs, which plain save() would otherwise defer until transaction commit.
-        Gift gift = giftRepository.saveAndFlush(
-                new Gift(request.name(), request.category(), request.description(), request.moq(), request.leadTimeDays(), vendor));
+        Gift gift = giftRepository.saveAndFlush(toSave);
         return toResponse(gift);
     }
 
@@ -178,6 +193,9 @@ public class GiftService {
         gift.setDescription(request.description());
         gift.setMoq(request.moq());
         gift.setLeadTimeDays(request.leadTimeDays());
+        gift.setPrice(request.price());
+        gift.setMarkupFeePercentage(feeOrZero(request.markupFeePercentage()));
+        gift.setCommissionFeePercentage(feeOrZero(request.commissionFeePercentage()));
         return toResponse(gift);
     }
 
@@ -232,6 +250,10 @@ public class GiftService {
     private User currentUser() {
         UUID userId = CurrentUser.id();
         return userRepository.findById(userId).orElseThrow(() -> new IllegalStateException("Authenticated user not found: " + userId));
+    }
+
+    private BigDecimal feeOrZero(BigDecimal fee) {
+        return fee != null ? fee : BigDecimal.ZERO;
     }
 
     private PresignGiftImageUploadResponse presign(UUID giftId, String contentType) {

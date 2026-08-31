@@ -15,6 +15,8 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.Set;
@@ -60,12 +62,24 @@ public class Gift {
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
 
-    /** Which commerce paths this gift can be picked from (Quick Gift / Bulk Gifting / Campaign). */
+    /** Which commerce paths this gift can be picked from -- every gift is available in all three, unconditionally. */
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "gift_modules", joinColumns = @JoinColumn(name = "gift_id"))
     @Enumerated(EnumType.STRING)
     @Column(name = "module", nullable = false)
     private Set<GiftModule> modules = new HashSet<>();
+
+    /** Base cost. Null until an admin/vendor sets one -- Total Price shows nothing until then. */
+    @Column(precision = 10, scale = 2)
+    private BigDecimal price;
+
+    /** Percentage, e.g. 12.50 means 12.50%, layered onto price for the Total Price shown. */
+    @Column(name = "markup_fee_percentage", nullable = false, precision = 5, scale = 2)
+    private BigDecimal markupFeePercentage = BigDecimal.ZERO;
+
+    /** Percentage, e.g. 12.50 means 12.50%, layered onto price for the Total Price shown. */
+    @Column(name = "commission_fee_percentage", nullable = false, precision = 5, scale = 2)
+    private BigDecimal commissionFeePercentage = BigDecimal.ZERO;
 
     /** Null for a vendor-submitted gift until (if ever) an admin actually touches it. */
     @ManyToOne(fetch = FetchType.LAZY)
@@ -104,6 +118,17 @@ public class Gift {
         this.moq = moq;
         this.leadTimeDays = leadTimeDays;
         this.vendor = vendor;
+    }
+
+    /** price + price*markup% + price*commission% -- null until price itself is set. */
+    public BigDecimal getTotalPrice() {
+        if (price == null) {
+            return null;
+        }
+        BigDecimal hundred = BigDecimal.valueOf(100);
+        BigDecimal markupAmount = price.multiply(markupFeePercentage).divide(hundred, 2, RoundingMode.HALF_UP);
+        BigDecimal commissionAmount = price.multiply(commissionFeePercentage).divide(hundred, 2, RoundingMode.HALF_UP);
+        return price.add(markupAmount).add(commissionAmount);
     }
 
     @PrePersist
