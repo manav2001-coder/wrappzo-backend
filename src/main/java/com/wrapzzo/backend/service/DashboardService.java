@@ -103,7 +103,7 @@ public class DashboardService {
                 .filter(s -> s.getStatus() == SubmissionStatus.SUBMITTED || s.getStatus() == SubmissionStatus.RESUBMITTED)
                 .count();
 
-        Instant monthStart = LocalDate.now().with(TemporalAdjusters.firstDayOfMonth()).atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant monthStart = monthStart();
         long quickGiftsThisMonth = quickGifts.stream().filter(q -> !q.getCreatedAt().isBefore(monthStart)).count();
         long quickGiftsPending = quickGifts.stream().filter(q -> q.getStatus() == QuickGiftStatus.SUBMITTED).count();
 
@@ -169,6 +169,7 @@ public class DashboardService {
                     data.orders().stream().filter(o -> departmentOf(o, data.quickGiftRequesterByOrderId()).equals(value)).toList(),
                     "Orders — " + value);
             case "week" -> weekDrilldown(value, data.submissions(), data.quickGifts());
+            case "monthlySpend" -> monthlySpendDrilldown(data.orders(), data.quickGiftRequesterByOrderId());
             default -> new DashboardDrilldownResponse(value, List.of());
         };
     }
@@ -234,7 +235,8 @@ public class DashboardService {
                         o.getRecipientName() != null ? o.getRecipientName() : (o.getCampaign() != null ? o.getCampaign().getName() : "—"),
                         o.getStatus().name(),
                         o.getCreatedAt(),
-                        o.getCampaign() != null ? o.getCampaign().getId() : null))
+                        o.getCampaign() != null ? o.getCampaign().getId() : null,
+                        o.getTotalPrice()))
                 .toList();
         return new DashboardDrilldownResponse(title, rows);
     }
@@ -249,7 +251,8 @@ public class DashboardService {
                         q.getRecipientName(),
                         q.getStatus().name(),
                         q.getCreatedAt(),
-                        null))
+                        null,
+                        q.getOrder() != null ? q.getOrder().getTotalPrice() : null))
                 .toList();
         return new DashboardDrilldownResponse(title, rows);
     }
@@ -264,9 +267,42 @@ public class DashboardService {
                         s.getSubmittedBy().getName(),
                         s.getStatus().name(),
                         s.getSubmittedAt() != null ? s.getSubmittedAt() : s.getCreatedAt(),
-                        s.getCampaign().getId()))
+                        s.getCampaign().getId(),
+                        null))
                 .toList();
         return new DashboardDrilldownResponse(title, rows);
+    }
+
+    /** Every DELIVERED, priced order this calendar month -- who submitted/requested it, what gift, and how much. */
+    private DashboardDrilldownResponse monthlySpendDrilldown(List<Order> orders, Map<UUID, User> quickGiftRequesterByOrderId) {
+        Instant monthStart = monthStart();
+        List<Row> rows = orders.stream()
+                .filter(o -> o.getStatus() == OrderStatus.DELIVERED && !o.getUpdatedAt().isBefore(monthStart) && o.getTotalPrice() != null)
+                .sorted(Comparator.comparing(Order::getUpdatedAt).reversed())
+                .limit(DRILLDOWN_LIMIT)
+                .map(o -> new Row(
+                        "ORD-" + o.getOrderNo(),
+                        submitterName(o, quickGiftRequesterByOrderId),
+                        o.getGift() != null ? o.getGift().getName() : "—",
+                        o.getStatus().name(),
+                        o.getUpdatedAt(),
+                        o.getCampaign() != null ? o.getCampaign().getId() : null,
+                        o.getTotalPrice()))
+                .toList();
+        return new DashboardDrilldownResponse("Monthly spend", rows);
+    }
+
+    /** CAMPAIGN orders attribute to the submitter; Quick Gift orders to the requester -- "who spent it", not the recipient. */
+    private String submitterName(Order order, Map<UUID, User> quickGiftRequesterByOrderId) {
+        if (order.getSource() == OrderSource.CAMPAIGN && order.getSubmission() != null) {
+            return order.getSubmission().getSubmittedBy().getName();
+        }
+        User requester = quickGiftRequesterByOrderId.get(order.getId());
+        return requester != null ? requester.getName() : "—";
+    }
+
+    private Instant monthStart() {
+        return LocalDate.now().with(TemporalAdjusters.firstDayOfMonth()).atStartOfDay(ZoneOffset.UTC).toInstant();
     }
 
     /**
@@ -294,14 +330,14 @@ public class DashboardService {
         if ("QUICK_GIFT".equals(seriesKey)) {
             for (QuickGiftRequest q : quickGifts) {
                 if (!q.getCreatedAt().isBefore(start) && q.getCreatedAt().isBefore(end)) {
-                    rows.add(new Row("QG-" + q.getRequestNo(), q.getGift().getName(), q.getRecipientName(), q.getStatus().name(), q.getCreatedAt(), null));
+                    rows.add(new Row("QG-" + q.getRequestNo(), q.getGift().getName(), q.getRecipientName(), q.getStatus().name(), q.getCreatedAt(), null, null));
                 }
             }
             title = "Quick Gift requests — week of " + weekLabel;
         } else {
             for (Submission s : submissions) {
                 if (s.getSubmittedAt() != null && !s.getSubmittedAt().isBefore(start) && s.getSubmittedAt().isBefore(end)) {
-                    rows.add(new Row(null, s.getCampaign().getName(), s.getSubmittedBy().getName(), s.getStatus().name(), s.getSubmittedAt(), s.getCampaign().getId()));
+                    rows.add(new Row(null, s.getCampaign().getName(), s.getSubmittedBy().getName(), s.getStatus().name(), s.getSubmittedAt(), s.getCampaign().getId(), null));
                 }
             }
             title = "Campaign submissions — week of " + weekLabel;
