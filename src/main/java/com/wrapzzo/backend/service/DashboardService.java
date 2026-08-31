@@ -258,7 +258,8 @@ public class DashboardService {
                         o.getStatus().name(),
                         o.getCreatedAt(),
                         o.getCampaign() != null ? o.getCampaign().getId() : null,
-                        o.getTotalPrice()))
+                        o.getTotalPrice(),
+                        null))
                 .toList();
         return new DashboardDrilldownResponse(title, rows);
     }
@@ -274,7 +275,8 @@ public class DashboardService {
                         q.getStatus().name(),
                         q.getCreatedAt(),
                         null,
-                        q.getOrder() != null ? q.getOrder().getTotalPrice() : null))
+                        q.getOrder() != null ? q.getOrder().getTotalPrice() : null,
+                        null))
                 .toList();
         return new DashboardDrilldownResponse(title, rows);
     }
@@ -290,12 +292,15 @@ public class DashboardService {
                         s.getStatus().name(),
                         s.getSubmittedAt() != null ? s.getSubmittedAt() : s.getCreatedAt(),
                         s.getCampaign().getId(),
+                        null,
                         null))
                 .toList();
         return new DashboardDrilldownResponse(title, rows);
     }
 
-    /** Every DELIVERED, priced order this calendar month -- who submitted/requested it, what gift, and how much. */
+    /** Every DELIVERED, priced order this calendar month -- who submitted/requested it, what gift, and how much.
+     * source is populated here (unlike the other drilldowns) so the frontend can segregate Campaign orders from
+     * Quick Gift ones instead of showing one undifferentiated list. */
     private DashboardDrilldownResponse monthlySpendDrilldown(List<Order> orders, Map<UUID, User> quickGiftRequesterByOrderId) {
         Instant monthStart = monthStart();
         List<Row> rows = orders.stream()
@@ -309,7 +314,8 @@ public class DashboardService {
                         o.getStatus().name(),
                         o.getUpdatedAt(),
                         o.getCampaign() != null ? o.getCampaign().getId() : null,
-                        o.getTotalPrice()))
+                        o.getTotalPrice(),
+                        o.getSource().name()))
                 .toList();
         return new DashboardDrilldownResponse("Monthly spend", rows);
     }
@@ -352,14 +358,14 @@ public class DashboardService {
         if ("QUICK_GIFT".equals(seriesKey)) {
             for (QuickGiftRequest q : quickGifts) {
                 if (!q.getCreatedAt().isBefore(start) && q.getCreatedAt().isBefore(end)) {
-                    rows.add(new Row("QG-" + q.getRequestNo(), q.getGift().getName(), q.getRecipientName(), q.getStatus().name(), q.getCreatedAt(), null, null));
+                    rows.add(new Row("QG-" + q.getRequestNo(), q.getGift().getName(), q.getRecipientName(), q.getStatus().name(), q.getCreatedAt(), null, null, null));
                 }
             }
             title = "Quick Gift requests — week of " + weekLabel;
         } else {
             for (Submission s : submissions) {
                 if (s.getSubmittedAt() != null && !s.getSubmittedAt().isBefore(start) && s.getSubmittedAt().isBefore(end)) {
-                    rows.add(new Row(null, s.getCampaign().getName(), s.getSubmittedBy().getName(), s.getStatus().name(), s.getSubmittedAt(), s.getCampaign().getId(), null));
+                    rows.add(new Row(null, s.getCampaign().getName(), s.getSubmittedBy().getName(), s.getStatus().name(), s.getSubmittedAt(), s.getCampaign().getId(), null, null));
                 }
             }
             title = "Campaign submissions — week of " + weekLabel;

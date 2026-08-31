@@ -9,7 +9,9 @@ import java.util.UUID;
 public record DashboardDrilldownResponse(String title, List<Row> rows) {
 
     /** campaignId is set (and the row clickable) whenever it traces back to a campaign.
-     * amount is set only where an order's price is meaningful (order/monthly-spend rows) -- null elsewhere. */
-    public record Row(String displayId, String title, String subtitle, String status, Instant at, UUID campaignId, BigDecimal amount) {
+     * amount is set only where an order's price is meaningful (order/monthly-spend rows) -- null elsewhere.
+     * source ("CAMPAIGN"/"QUICK_GIFT"/"BULK_GIFT") is set only where rows need grouping by it
+     * (monthly-spend rows) -- null elsewhere. */
+    public record Row(String displayId, String title, String subtitle, String status, Instant at, UUID campaignId, BigDecimal amount, String source) {
     }
 }
