@@ -2,6 +2,7 @@ package com.wrapzzo.backend.service;
 
 import com.wrapzzo.backend.dto.BulkAssignResponse;
 import com.wrapzzo.backend.dto.OrderResponse;
+import com.wrapzzo.backend.dto.VendorOrderResponse;
 import com.wrapzzo.backend.exception.InvalidOrderStatusTransitionException;
 import com.wrapzzo.backend.exception.NoAvailableVendorException;
 import com.wrapzzo.backend.exception.OrderNotFoundException;
@@ -38,9 +39,13 @@ public class OrderService {
     /** An order already routed to a vendor counts toward that vendor's load for auto-assign's naive balancing. */
     private static final List<OrderStatus> IN_FLIGHT_STATUSES = List.of(OrderStatus.PROCESSING, OrderStatus.PRODUCTION_QUEUE);
 
-    /** The one forward step a vendor may move an order -- no skipping stages, no going backward, no touching CANCELLED. */
+    /**
+     * For now, a vendor's only action is marking an order delivered -- no separate "dispatched"
+     * step -- from either state it's routed to them in. Revisit if a real dispatch step is
+     * needed later; this map is the one place that decision lives.
+     */
     private static final Map<OrderStatus, OrderStatus> VENDOR_TRANSITIONS =
-            Map.of(OrderStatus.PRODUCTION_QUEUE, OrderStatus.DISPATCHED, OrderStatus.DISPATCHED, OrderStatus.DELIVERED);
+            Map.of(OrderStatus.PRODUCTION_QUEUE, OrderStatus.DELIVERED, OrderStatus.DISPATCHED, OrderStatus.DELIVERED);
 
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
@@ -65,23 +70,23 @@ public class OrderService {
     // --- Vendor self-service side: only orders routed to this vendor, and moving them through fulfillment. ---
 
     @Transactional(readOnly = true)
-    public List<OrderResponse> listForVendor(UUID vendorId) {
-        return orderRepository.findByAssignedVendorIdOrderByCreatedAtDesc(vendorId).stream().map(OrderResponse::from).toList();
+    public List<VendorOrderResponse> listForVendor(UUID vendorId) {
+        return orderRepository.findByAssignedVendorIdOrderByCreatedAtDesc(vendorId).stream().map(VendorOrderResponse::from).toList();
     }
 
     @Transactional(readOnly = true)
-    public OrderResponse getForVendor(UUID id, UUID vendorId) {
-        return OrderResponse.from(getEntityForVendor(id, vendorId));
+    public VendorOrderResponse getForVendor(UUID id, UUID vendorId) {
+        return VendorOrderResponse.from(getEntityForVendor(id, vendorId));
     }
 
     @Transactional
-    public OrderResponse updateStatusForVendor(UUID id, UUID vendorId, OrderStatus newStatus) {
+    public VendorOrderResponse updateStatusForVendor(UUID id, UUID vendorId, OrderStatus newStatus) {
         Order order = getEntityForVendor(id, vendorId);
         if (!newStatus.equals(VENDOR_TRANSITIONS.get(order.getStatus()))) {
             throw new InvalidOrderStatusTransitionException(id, order.getStatus(), newStatus);
         }
         order.setStatus(newStatus);
-        return OrderResponse.from(order);
+        return VendorOrderResponse.from(order);
     }
 
     private Order getEntityForVendor(UUID id, UUID vendorId) {

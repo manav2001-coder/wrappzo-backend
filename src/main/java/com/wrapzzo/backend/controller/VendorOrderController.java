@@ -1,7 +1,7 @@
 package com.wrapzzo.backend.controller;
 
-import com.wrapzzo.backend.dto.OrderResponse;
 import com.wrapzzo.backend.dto.UpdateOrderStatusRequest;
+import com.wrapzzo.backend.dto.VendorOrderResponse;
 import com.wrapzzo.backend.security.CurrentVendor;
 import com.wrapzzo.backend.service.OrderService;
 import jakarta.validation.Valid;
@@ -24,17 +24,17 @@ public class VendorOrderController {
     private final OrderService orderService;
 
     @GetMapping("/list")
-    public List<OrderResponse> list() {
+    public List<VendorOrderResponse> list() {
         return orderService.listForVendor(CurrentVendor.id());
     }
 
     @GetMapping("/view/{id}")
-    public OrderResponse view(@PathVariable UUID id) {
+    public VendorOrderResponse view(@PathVariable UUID id) {
         return orderService.getForVendor(id, CurrentVendor.id());
     }
 
     @PostMapping("/updateStatus/{id}")
-    public OrderResponse updateStatus(@PathVariable UUID id, @Valid @RequestBody UpdateOrderStatusRequest request) {
+    public VendorOrderResponse updateStatus(@PathVariable UUID id, @Valid @RequestBody UpdateOrderStatusRequest request) {
         return orderService.updateStatusForVendor(id, CurrentVendor.id(), request.status());
     }
 }

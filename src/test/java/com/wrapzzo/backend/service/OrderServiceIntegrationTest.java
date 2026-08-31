@@ -3,7 +3,7 @@ package com.wrapzzo.backend.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.wrapzzo.backend.dto.OrderResponse;
+import com.wrapzzo.backend.dto.VendorOrderResponse;
 import com.wrapzzo.backend.exception.InvalidOrderStatusTransitionException;
 import com.wrapzzo.backend.exception.OrderNotFoundException;
 import com.wrapzzo.backend.model.Company;
@@ -20,6 +20,7 @@ import com.wrapzzo.backend.repository.OrderRepository;
 import com.wrapzzo.backend.repository.RoleRepository;
 import com.wrapzzo.backend.repository.UserRepository;
 import com.wrapzzo.backend.repository.VendorRepository;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
@@ -95,7 +96,7 @@ class OrderServiceIntegrationTest {
         newOrder(null, OrderStatus.PROCESSING);
 
         actAsVendor(vendor);
-        List<OrderResponse> orders = orderService.listForVendor(vendor.getId());
+        List<VendorOrderResponse> orders = orderService.listForVendor(vendor.getId());
 
         assertThat(orders).hasSize(1);
         assertThat(orders.get(0).id()).isEqualTo(mine.getId());
@@ -111,23 +112,29 @@ class OrderServiceIntegrationTest {
     }
 
     @Test
-    void updateStatusForVendorMovesOneStepForward() {
+    void updateStatusForVendorMarksDeliveredFromProductionQueue() {
         Order order = newOrder(vendor, OrderStatus.PRODUCTION_QUEUE);
 
         actAsVendor(vendor);
-        OrderResponse dispatched = orderService.updateStatusForVendor(order.getId(), vendor.getId(), OrderStatus.DISPATCHED);
-        assertThat(dispatched.status()).isEqualTo(OrderStatus.DISPATCHED);
-
-        OrderResponse delivered = orderService.updateStatusForVendor(order.getId(), vendor.getId(), OrderStatus.DELIVERED);
+        VendorOrderResponse delivered = orderService.updateStatusForVendor(order.getId(), vendor.getId(), OrderStatus.DELIVERED);
         assertThat(delivered.status()).isEqualTo(OrderStatus.DELIVERED);
     }
 
     @Test
-    void updateStatusForVendorRejectsSkippingAStage() {
+    void updateStatusForVendorMarksDeliveredFromDispatched() {
+        Order order = newOrder(vendor, OrderStatus.DISPATCHED);
+
+        actAsVendor(vendor);
+        VendorOrderResponse delivered = orderService.updateStatusForVendor(order.getId(), vendor.getId(), OrderStatus.DELIVERED);
+        assertThat(delivered.status()).isEqualTo(OrderStatus.DELIVERED);
+    }
+
+    @Test
+    void updateStatusForVendorRejectsSettingDispatchedDirectly() {
         Order order = newOrder(vendor, OrderStatus.PRODUCTION_QUEUE);
 
         actAsVendor(vendor);
-        assertThatThrownBy(() -> orderService.updateStatusForVendor(order.getId(), vendor.getId(), OrderStatus.DELIVERED))
+        assertThatThrownBy(() -> orderService.updateStatusForVendor(order.getId(), vendor.getId(), OrderStatus.DISPATCHED))
                 .isInstanceOf(InvalidOrderStatusTransitionException.class);
     }
 
@@ -136,7 +143,22 @@ class OrderServiceIntegrationTest {
         Order theirs = newOrder(otherVendor, OrderStatus.PRODUCTION_QUEUE);
 
         actAsVendor(vendor);
-        assertThatThrownBy(() -> orderService.updateStatusForVendor(theirs.getId(), vendor.getId(), OrderStatus.DISPATCHED))
+        assertThatThrownBy(() -> orderService.updateStatusForVendor(theirs.getId(), vendor.getId(), OrderStatus.DELIVERED))
                 .isInstanceOf(OrderNotFoundException.class);
+    }
+
+    @Test
+    void listForVendorPriceExcludesMarkupButIncludesCommission() {
+        gift.setPrice(BigDecimal.valueOf(1000));
+        gift.setMarkupFeePercentage(BigDecimal.valueOf(20));
+        gift.setCommissionFeePercentage(BigDecimal.valueOf(10));
+        giftRepository.save(gift);
+        newOrder(vendor, OrderStatus.PRODUCTION_QUEUE);
+
+        actAsVendor(vendor);
+        List<VendorOrderResponse> orders = orderService.listForVendor(vendor.getId());
+
+        // 1000 + 10% commission = 1100 -- the 20% markup never enters the vendor's number.
+        assertThat(orders.get(0).price()).isEqualByComparingTo(BigDecimal.valueOf(1100).setScale(2));
     }
 }
