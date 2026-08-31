@@ -173,6 +173,9 @@ public class DashboardService {
             case "pipelineStage" -> ordersDrilldown(
                     data.orders().stream().filter(o -> pipelineStageMatches(o.getStatus(), value)).toList(),
                     "Orders — " + pipelineStageTitle(value));
+            case "quickGiftsThisMonth" -> quickGiftsDrilldown(
+                    data.quickGifts().stream().filter(q -> !q.getCreatedAt().isBefore(monthStart())).toList(),
+                    "Quick Gifts this month");
             default -> new DashboardDrilldownResponse(value, List.of());
         };
     }
