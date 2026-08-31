@@ -49,7 +49,7 @@ class CompanyServiceIntegrationTest {
         assertThat(grantedKeys)
                 .containsExactlyInAnyOrder(
                         "user.manage", "role.manage", "campaign.manage", "campaign.submit", "campaign.approve",
-                        "quickgift.create", "dashboard.view");
+                        "quickgift.create", "dashboard.view", "recipient.manage");
     }
 
     @Test
