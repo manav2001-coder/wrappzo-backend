@@ -4,6 +4,7 @@ import com.wrapzzo.backend.model.Order;
 import com.wrapzzo.backend.model.QuickGiftRequest;
 import com.wrapzzo.backend.model.QuickGiftStatus;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 public record QuickGiftRequestResponse(
@@ -19,6 +20,7 @@ public record QuickGiftRequestResponse(
         String recipientPhone,
         String recipientEmail,
         String deliveryAddress,
+        LocalDate recipientDob,
         String giftMessage,
         String internalNotes,
         String photoUrl,
@@ -49,6 +51,7 @@ public record QuickGiftRequestResponse(
                 request.getRecipientPhone(),
                 request.getRecipientEmail(),
                 request.getDeliveryAddress(),
+                request.getRecipientDob(),
                 request.getGiftMessage(),
                 request.getInternalNotes(),
                 photoUrl,

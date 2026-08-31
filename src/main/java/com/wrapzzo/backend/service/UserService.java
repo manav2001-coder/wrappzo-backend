@@ -58,7 +58,8 @@ public class UserService {
     private static final String COMPANY_ADMIN_ROLE_NAME = "Company Admin";
 
     /** Granted to every new company's auto-seeded "Member" role. */
-    private static final List<String> DEFAULT_MEMBER_ACCESS_KEYS = List.of("campaign.submit", "quickgift.create", "dashboard.view");
+    private static final List<String> DEFAULT_MEMBER_ACCESS_KEYS =
+            List.of("campaign.submit", "quickgift.create", "dashboard.view", "recipient.manage");
 
     private final UserRepository userRepository;
     private final CompanyRepository companyRepository;

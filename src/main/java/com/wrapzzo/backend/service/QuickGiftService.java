@@ -47,6 +47,7 @@ public class QuickGiftService {
     private final UserRepository userRepository;
     private final FileStorageService fileStorageService;
     private final QuickGiftUploadService quickGiftUploadService;
+    private final RecipientService recipientService;
 
     public PresignQuickGiftPhotoResponse presignPhoto(String contentType) {
         User user = currentUser();
@@ -64,12 +65,16 @@ public class QuickGiftService {
         QuickGiftRequest quickGift = new QuickGiftRequest(
                 company, gift, requester, request.recipientName(), request.recipientPhone(),
                 request.recipientEmail(), request.deliveryAddress(), request.giftMessage(), request.internalNotes());
+        quickGift.setRecipientDob(request.recipientDob());
         if (request.photo() != null) {
             quickGift.setPhotoKey(request.photo().key());
             quickGift.setPhotoFileName(request.photo().fileName());
             quickGift.setPhotoContentType(request.photo().contentType());
         }
         quickGift = quickGiftRequestRepository.saveAndFlush(quickGift);
+        recipientService.upsertFromSubmission(
+                company, request.recipientName(), request.recipientPhone(), request.recipientEmail(),
+                request.deliveryAddress(), request.recipientDob(), requester);
         return toResponse(quickGift);
     }
 

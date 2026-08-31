@@ -236,6 +236,16 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
     }
 
+    @ExceptionHandler(RecipientAlreadyExistsException.class)
+    public ResponseEntity<Map<String, String>> handleRecipientAlreadyExists(RecipientAlreadyExistsException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+    }
+
+    @ExceptionHandler(RecipientNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleRecipientNotFound(RecipientNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
+    }
+
     /**
      * Safety net for any unique/foreign-key violation that reaches the database without an
      * explicit pre-check above -- without this, it bubbles up uncaught and Spring's
