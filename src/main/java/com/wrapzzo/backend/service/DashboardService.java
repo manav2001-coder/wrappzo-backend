@@ -107,8 +107,11 @@ public class DashboardService {
         long quickGiftsThisMonth = quickGifts.stream().filter(q -> !q.getCreatedAt().isBefore(monthStart)).count();
         long quickGiftsPending = quickGifts.stream().filter(q -> q.getStatus() == QuickGiftStatus.SUBMITTED).count();
 
+        // Counted from the moment an order exists (i.e. approved -- an Order is only ever created at
+        // approval time, whether that's automatic for a Campaign submission or manual for a Quick
+        // Gift), not from DELIVERED -- the spend is committed the moment it's approved, not on delivery.
         BigDecimal monthlySpend = orders.stream()
-                .filter(o -> o.getStatus() == OrderStatus.DELIVERED && !o.getUpdatedAt().isBefore(monthStart) && o.getTotalPrice() != null)
+                .filter(o -> o.getStatus() != OrderStatus.CANCELLED && !o.getCreatedAt().isBefore(monthStart) && o.getTotalPrice() != null)
                 .map(Order::getTotalPrice)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
@@ -301,21 +304,21 @@ public class DashboardService {
         return new DashboardDrilldownResponse(title, rows);
     }
 
-    /** Every DELIVERED, priced order this calendar month -- who submitted/requested it, what gift, and how much.
+    /** Every priced order approved this calendar month (not yet cancelled) -- who submitted/requested it, what gift, and how much.
      * source is populated here (unlike the other drilldowns) so the frontend can segregate Campaign orders from
      * Quick Gift ones instead of showing one undifferentiated list. */
     private DashboardDrilldownResponse monthlySpendDrilldown(List<Order> orders, Map<UUID, User> quickGiftRequesterByOrderId) {
         Instant monthStart = monthStart();
         List<Row> rows = orders.stream()
-                .filter(o -> o.getStatus() == OrderStatus.DELIVERED && !o.getUpdatedAt().isBefore(monthStart) && o.getTotalPrice() != null)
-                .sorted(Comparator.comparing(Order::getUpdatedAt).reversed())
+                .filter(o -> o.getStatus() != OrderStatus.CANCELLED && !o.getCreatedAt().isBefore(monthStart) && o.getTotalPrice() != null)
+                .sorted(Comparator.comparing(Order::getCreatedAt).reversed())
                 .limit(DRILLDOWN_LIMIT)
                 .map(o -> new Row(
                         "ORD-" + o.getOrderNo(),
                         submitterName(o, quickGiftRequesterByOrderId),
                         o.getGift() != null ? o.getGift().getName() : "—",
                         o.getStatus().name(),
-                        o.getUpdatedAt(),
+                        o.getCreatedAt(),
                         o.getCampaign() != null ? o.getCampaign().getId() : null,
                         o.getTotalPrice(),
                         o.getSource().name()))
