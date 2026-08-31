@@ -9,9 +9,7 @@ import com.wrapzzo.backend.exception.CampaignClosedException;
 import com.wrapzzo.backend.exception.CampaignNotActiveException;
 import com.wrapzzo.backend.exception.GiftNotFoundException;
 import com.wrapzzo.backend.exception.GiftNotOfferedByCampaignException;
-import com.wrapzzo.backend.exception.NotAuthorizedToReviewException;
 import com.wrapzzo.backend.exception.NotInCampaignAudienceException;
-import com.wrapzzo.backend.exception.SubmissionAlreadyReviewedException;
 import com.wrapzzo.backend.exception.SubmissionNotApprovedException;
 import com.wrapzzo.backend.exception.SubmissionNotFoundException;
 import com.wrapzzo.backend.exception.SubmissionValidationException;
@@ -72,6 +70,12 @@ public class SubmissionService {
         return new PresignSubmissionAttachmentResponse(uploadUrl, key);
     }
 
+    /**
+     * No approval gate -- a submitted recipient becomes an Order immediately (approval is
+     * Quick Gift-only now). Mirrors what the old approve() step used to do: mark it
+     * approved, create the Order, and request the recipient's photo if the submission
+     * didn't already carry one.
+     */
     @Transactional
     public SubmissionResponse create(UUID campaignId, CreateSubmissionRequest request) {
         Campaign campaign = campaignService.getEntity(campaignId);
@@ -82,33 +86,24 @@ public class SubmissionService {
         User submitter = campaignService.currentUser();
         Submission submission = submissionRepository.save(new Submission(campaign.getCompany(), campaign, submitter, gift));
         applyValues(submission, campaignId, request.values());
-        submission.setStatus(SubmissionStatus.SUBMITTED);
-        submission.setSubmittedAt(Instant.now());
+        Instant now = Instant.now();
+        submission.setSubmittedAt(now);
+        submission.setStatus(SubmissionStatus.APPROVED);
+        submission.setReviewedAt(now);
         upsertRecipientBestEffort(submission);
-        return toResponse(submission);
-    }
 
-    @Transactional
-    public SubmissionResponse resubmit(UUID submissionId, CreateSubmissionRequest request) {
-        Submission submission = getOwnEntity(submissionId);
-        if (submission.getStatus() != SubmissionStatus.REJECTED) {
-            throw new SubmissionAlreadyReviewedException(submissionId);
-        }
-        Campaign campaign = submission.getCampaign();
-        requireActive(campaign);
-        submission.setGift(resolveOfferedGift(campaign, request.giftId()));
+        String recipientName = valueText(submission.getId(), "recipientName");
+        String recipientPhone = valueText(submission.getId(), "recipientPhone");
+        Order order = new Order(submission.getCompany(), submission.getCampaign(), submission, submission.getGift(), recipientName, recipientPhone, submitter);
+        orderRepository.save(order);
 
-        submissionAttachmentRepository.findBySubmissionId(submissionId).forEach(a -> {
-            fileStorageService.delete(a.getFileKey());
-            submissionAttachmentRepository.delete(a);
-        });
-        submissionValueRepository.findBySubmissionId(submissionId).forEach(submissionValueRepository::delete);
+        // Best-effort: if this recipient wasn't given a photo at submission time (the
+        // default Photo field is optional), hand them a self-serve upload link now that
+        // there's a real Order to fulfill. No-ops silently if there's no recipient email
+        // or no Photo field on this campaign's form -- never blocks the submission itself.
+        String recipientUploadUrl = recipientUploadService.requestPhotoIfMissing(submission);
 
-        applyValues(submission, campaign.getId(), request.values());
-        submission.setStatus(SubmissionStatus.RESUBMITTED);
-        submission.setSubmittedAt(Instant.now());
-        submission.setRejectionReason(null);
-        return toResponse(submission);
+        return toResponse(submission, recipientUploadUrl);
     }
 
     /** Gift choice is mandatory and must be one the campaign actually offers -- not assumed, not free-form. */
@@ -132,47 +127,6 @@ public class SubmissionService {
         return submissionRepository.findBySubmittedByIdOrderByCreatedAtDesc(user.getId()).stream().map(this::toResponse).toList();
     }
 
-    @Transactional(readOnly = true)
-    public List<SubmissionResponse> listPendingApproval() {
-        User approver = campaignService.currentUser();
-        List<SubmissionStatus> pending = List.of(SubmissionStatus.SUBMITTED, SubmissionStatus.RESUBMITTED);
-        return submissionRepository.findByCompanyIdAndStatusInOrderByCreatedAtDesc(approver.getCompany().getId(), pending).stream()
-                .filter(s -> canReview(s, approver))
-                .map(this::toResponse)
-                .toList();
-    }
-
-    @Transactional
-    public SubmissionResponse approve(UUID submissionId) {
-        Submission submission = getEntity(submissionId);
-        User approver = campaignService.currentUser();
-        requireReviewable(submission, approver);
-
-        submission.setStatus(SubmissionStatus.APPROVED);
-        submission.setReviewedBy(approver);
-        submission.setReviewedAt(Instant.now());
-
-        // Idempotency guard: orders.submission_id is also DB-unique (PRD 4.6) -- this check
-        // just turns a double-click into a clean 409 instead of a raw constraint violation.
-        if (orderRepository.findBySubmissionId(submissionId).isPresent()) {
-            throw new SubmissionAlreadyReviewedException(submissionId);
-        }
-        String recipientName = valueText(submissionId, "recipientName");
-        String recipientPhone = valueText(submissionId, "recipientPhone");
-        Order order = new Order(
-                submission.getCompany(), submission.getCampaign(), submission, submission.getGift(),
-                recipientName, recipientPhone, approver);
-        orderRepository.save(order);
-
-        // Best-effort: if this recipient wasn't given a photo at submission time (the
-        // default Photo field is optional), hand them a self-serve upload link now that
-        // there's a real Order to fulfill. No-ops silently if there's no recipient email
-        // or no Photo field on this campaign's form -- never blocks the approval itself.
-        String recipientUploadUrl = recipientUploadService.requestPhotoIfMissing(submission);
-
-        return toResponse(submission, recipientUploadUrl);
-    }
-
     /** Submitter-triggered, from "My submissions" -- e.g. the recipient's first photo wasn't clear enough, ask again. */
     @Transactional
     public String requestPhotoLinkAgain(UUID submissionId) {
@@ -183,41 +137,7 @@ public class SubmissionService {
         return recipientUploadService.requestAgain(submission);
     }
 
-    @Transactional
-    public SubmissionResponse reject(UUID submissionId, String reason) {
-        Submission submission = getEntity(submissionId);
-        User approver = campaignService.currentUser();
-        requireReviewable(submission, approver);
-
-        submission.setStatus(SubmissionStatus.REJECTED);
-        submission.setRejectionReason(reason);
-        submission.setReviewedBy(approver);
-        submission.setReviewedAt(Instant.now());
-        return toResponse(submission);
-    }
-
     // --- internal ---
-
-    private void requireReviewable(Submission submission, User approver) {
-        if (submission.getCampaign().getStatus() == CampaignStatus.CLOSED) {
-            throw new CampaignClosedException(submission.getCampaign().getId());
-        }
-        if (submission.getStatus() != SubmissionStatus.SUBMITTED && submission.getStatus() != SubmissionStatus.RESUBMITTED) {
-            throw new SubmissionAlreadyReviewedException(submission.getId());
-        }
-        if (!canReview(submission, approver)) {
-            throw new NotAuthorizedToReviewException(submission.getId());
-        }
-    }
-
-    /** PRD 2.7 -- the submitter's direct manager may review, or anyone holding campaign.manage as a company-wide override. */
-    private boolean canReview(Submission submission, User approver) {
-        if (campaignService.canManage(approver)) {
-            return true;
-        }
-        User submittedBy = submission.getSubmittedBy();
-        return submittedBy.getReportsTo() != null && submittedBy.getReportsTo().getId().equals(approver.getId());
-    }
 
     private void requireActive(Campaign campaign) {
         if (campaign.getStatus() == CampaignStatus.CLOSED) {

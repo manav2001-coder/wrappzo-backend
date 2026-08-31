@@ -3,7 +3,6 @@ package com.wrapzzo.backend.controller;
 import com.wrapzzo.backend.dto.CreateSubmissionRequest;
 import com.wrapzzo.backend.dto.PresignSubmissionAttachmentRequest;
 import com.wrapzzo.backend.dto.PresignSubmissionAttachmentResponse;
-import com.wrapzzo.backend.dto.RejectSubmissionRequest;
 import com.wrapzzo.backend.dto.RequestPhotoLinkResponse;
 import com.wrapzzo.backend.dto.SubmissionResponse;
 import com.wrapzzo.backend.service.SubmissionService;
@@ -19,7 +18,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Recipient entries submitted against a Campaign, and their approval workflow -- PRD 2.6/2.7. */
+/** Recipient entries submitted against a Campaign -- no approval gate, an Order is created the moment one is submitted. */
 @RestController
 @RequiredArgsConstructor
 public class SubmissionController {
@@ -45,12 +44,6 @@ public class SubmissionController {
         return submissionService.listForCampaign(campaignId);
     }
 
-    @PostMapping("/api/submissions/{id}/resubmit")
-    @PreAuthorize("hasAuthority('campaign.submit')")
-    public SubmissionResponse resubmit(@PathVariable UUID id, @Valid @RequestBody CreateSubmissionRequest request) {
-        return submissionService.resubmit(id, request);
-    }
-
     @GetMapping("/api/submissions/mine")
     @PreAuthorize("hasAuthority('campaign.submit')")
     public List<SubmissionResponse> mine() {
@@ -61,23 +54,5 @@ public class SubmissionController {
     @PreAuthorize("hasAuthority('campaign.submit')")
     public RequestPhotoLinkResponse requestPhotoLink(@PathVariable UUID id) {
         return new RequestPhotoLinkResponse(submissionService.requestPhotoLinkAgain(id));
-    }
-
-    @GetMapping("/api/submissions/pending-approval")
-    @PreAuthorize("hasAnyAuthority('campaign.approve', 'campaign.manage')")
-    public List<SubmissionResponse> pendingApproval() {
-        return submissionService.listPendingApproval();
-    }
-
-    @PostMapping("/api/submissions/{id}/approve")
-    @PreAuthorize("hasAnyAuthority('campaign.approve', 'campaign.manage')")
-    public SubmissionResponse approve(@PathVariable UUID id) {
-        return submissionService.approve(id);
-    }
-
-    @PostMapping("/api/submissions/{id}/reject")
-    @PreAuthorize("hasAnyAuthority('campaign.approve', 'campaign.manage')")
-    public SubmissionResponse reject(@PathVariable UUID id, @Valid @RequestBody RejectSubmissionRequest request) {
-        return submissionService.reject(id, request.reason());
     }
 }

@@ -170,16 +170,6 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
     }
 
-    @ExceptionHandler(SubmissionAlreadyReviewedException.class)
-    public ResponseEntity<Map<String, String>> handleSubmissionAlreadyReviewed(SubmissionAlreadyReviewedException e) {
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
-    }
-
-    @ExceptionHandler(NotAuthorizedToReviewException.class)
-    public ResponseEntity<Map<String, String>> handleNotAuthorizedToReview(NotAuthorizedToReviewException e) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", e.getMessage()));
-    }
-
     @ExceptionHandler(SubmissionValidationException.class)
     public ResponseEntity<Map<String, Object>> handleSubmissionValidation(SubmissionValidationException e) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
