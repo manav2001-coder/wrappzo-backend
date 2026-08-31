@@ -47,12 +47,14 @@ public class Order {
     @Column(name = "order_no", insertable = false, updatable = false)
     private Integer orderNo;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "campaign_id", nullable = false)
+    /** Null for a Quick Gift order (source != CAMPAIGN) -- see chk_orders_source_linkage. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "campaign_id")
     private Campaign campaign;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "submission_id", nullable = false, unique = true)
+    /** Null for a Quick Gift order (source != CAMPAIGN) -- see chk_orders_source_linkage. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "submission_id", unique = true)
     private Submission submission;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -108,6 +110,16 @@ public class Order {
         this.campaign = campaign;
         this.submission = submission;
         this.gift = gift;
+        this.recipientName = recipientName;
+        this.recipientPhone = recipientPhone;
+        this.createdBy = createdBy;
+    }
+
+    /** Quick Gift path -- no campaign/submission; created the moment the request is sent, no approval gate. */
+    public Order(Company company, Gift gift, OrderSource source, String recipientName, String recipientPhone, User createdBy) {
+        this.company = company;
+        this.gift = gift;
+        this.source = source;
         this.recipientName = recipientName;
         this.recipientPhone = recipientPhone;
         this.createdBy = createdBy;
