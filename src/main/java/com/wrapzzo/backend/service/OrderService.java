@@ -2,6 +2,7 @@ package com.wrapzzo.backend.service;
 
 import com.wrapzzo.backend.dto.BulkAssignResponse;
 import com.wrapzzo.backend.dto.OrderResponse;
+import com.wrapzzo.backend.exception.InvalidOrderStatusTransitionException;
 import com.wrapzzo.backend.exception.NoAvailableVendorException;
 import com.wrapzzo.backend.exception.OrderNotFoundException;
 import com.wrapzzo.backend.exception.VendorNotFoundException;
@@ -18,6 +19,7 @@ import com.wrapzzo.backend.security.CurrentUser;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -35,6 +37,10 @@ public class OrderService {
 
     /** An order already routed to a vendor counts toward that vendor's load for auto-assign's naive balancing. */
     private static final List<OrderStatus> IN_FLIGHT_STATUSES = List.of(OrderStatus.PROCESSING, OrderStatus.PRODUCTION_QUEUE);
+
+    /** The one forward step a vendor may move an order -- no skipping stages, no going backward, no touching CANCELLED. */
+    private static final Map<OrderStatus, OrderStatus> VENDOR_TRANSITIONS =
+            Map.of(OrderStatus.PRODUCTION_QUEUE, OrderStatus.DISPATCHED, OrderStatus.DISPATCHED, OrderStatus.DELIVERED);
 
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
@@ -54,6 +60,36 @@ public class OrderService {
             throw new OrderNotFoundException(id);
         }
         return OrderResponse.from(order);
+    }
+
+    // --- Vendor self-service side: only orders routed to this vendor, and moving them through fulfillment. ---
+
+    @Transactional(readOnly = true)
+    public List<OrderResponse> listForVendor(UUID vendorId) {
+        return orderRepository.findByAssignedVendorIdOrderByCreatedAtDesc(vendorId).stream().map(OrderResponse::from).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public OrderResponse getForVendor(UUID id, UUID vendorId) {
+        return OrderResponse.from(getEntityForVendor(id, vendorId));
+    }
+
+    @Transactional
+    public OrderResponse updateStatusForVendor(UUID id, UUID vendorId, OrderStatus newStatus) {
+        Order order = getEntityForVendor(id, vendorId);
+        if (!newStatus.equals(VENDOR_TRANSITIONS.get(order.getStatus()))) {
+            throw new InvalidOrderStatusTransitionException(id, order.getStatus(), newStatus);
+        }
+        order.setStatus(newStatus);
+        return OrderResponse.from(order);
+    }
+
+    private Order getEntityForVendor(UUID id, UUID vendorId) {
+        Order order = getEntity(id);
+        if (order.getAssignedVendor() == null || !order.getAssignedVendor().getId().equals(vendorId)) {
+            throw new OrderNotFoundException(id);
+        }
+        return order;
     }
 
     // --- Admin/platform side: every company's orders, for fulfillment assignment. ---

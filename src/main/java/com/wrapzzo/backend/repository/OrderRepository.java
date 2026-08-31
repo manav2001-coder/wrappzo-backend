@@ -16,6 +16,9 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
 
     List<Order> findByCampaignIdOrderByCreatedAtDesc(UUID campaignId);
 
+    /** A vendor's own fulfillment queue -- every order routed to them, across companies. */
+    List<Order> findByAssignedVendorIdOrderByCreatedAtDesc(UUID vendorId);
+
     Optional<Order> findBySubmissionId(UUID submissionId);
 
     /** Cross-company -- Admin's Orders oversight (PRD Part 1.5), not scoped to one company. */
