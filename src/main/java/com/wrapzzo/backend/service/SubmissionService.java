@@ -61,6 +61,7 @@ public class SubmissionService {
     private final CampaignService campaignService;
     private final FileStorageService fileStorageService;
     private final RecipientUploadService recipientUploadService;
+    private final RecipientService recipientService;
 
     public PresignSubmissionAttachmentResponse presignAttachment(UUID campaignId, String contentType) {
         Campaign campaign = campaignService.getEntity(campaignId);
@@ -83,6 +84,7 @@ public class SubmissionService {
         applyValues(submission, campaignId, request.values());
         submission.setStatus(SubmissionStatus.SUBMITTED);
         submission.setSubmittedAt(Instant.now());
+        upsertRecipientBestEffort(submission);
         return toResponse(submission);
     }
 
@@ -237,6 +239,29 @@ public class SubmissionService {
         return submissionValueRepository.findBySubmissionIdAndCampaignFieldFieldKey(submissionId, fieldKey)
                 .map(SubmissionValue::getValueText)
                 .orElse(null);
+    }
+
+    private LocalDate valueDate(UUID submissionId, String fieldKey) {
+        return submissionValueRepository.findBySubmissionIdAndCampaignFieldFieldKey(submissionId, fieldKey)
+                .map(SubmissionValue::getValueDate)
+                .orElse(null);
+    }
+
+    /**
+     * Best-effort: matches the default field keys (recipientName/Phone/Email/Address/Dob)
+     * seen by DefaultCampaignFields -- a campaign creator who renamed or removed those
+     * fields just means this quietly finds nothing to add, never blocks the submission.
+     */
+    private void upsertRecipientBestEffort(Submission submission) {
+        String name = valueText(submission.getId(), "recipientName");
+        String phone = valueText(submission.getId(), "recipientPhone");
+        if (name == null || phone == null) {
+            return;
+        }
+        String email = valueText(submission.getId(), "recipientEmail");
+        String address = valueText(submission.getId(), "recipientAddress");
+        LocalDate dob = valueDate(submission.getId(), "recipientDob");
+        recipientService.upsertFromSubmission(submission.getCompany(), name, phone, email, address, dob, submission.getSubmittedBy());
     }
 
     @SuppressWarnings("unchecked")

@@ -3,6 +3,7 @@ package com.wrapzzo.backend.dto;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import java.time.LocalDate;
 import java.util.UUID;
 
 public record CreateQuickGiftRequest(
@@ -11,6 +12,7 @@ public record CreateQuickGiftRequest(
         @NotBlank String recipientPhone,
         String recipientEmail,
         @NotBlank String deliveryAddress,
+        LocalDate recipientDob,
         String giftMessage,
         String internalNotes,
         @Valid QuickGiftPhotoInput photo) {

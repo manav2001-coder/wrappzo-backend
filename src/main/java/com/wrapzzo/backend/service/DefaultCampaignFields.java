@@ -22,6 +22,7 @@ public final class DefaultCampaignFields {
             new Def("recipientPhone", "Phone", FieldType.PHONE, true),
             new Def("recipientEmail", "Email", FieldType.EMAIL, false),
             new Def("recipientAddress", "Address", FieldType.TEXTAREA, false),
+            new Def("recipientDob", "Date of Birth", FieldType.DATE, false),
             new Def("doctorName", "Doctor / HCP Name", FieldType.TEXT, false),
             new Def("hospital", "Hospital", FieldType.TEXT, false),
             new Def("territory", "Territory", FieldType.TEXT, false),

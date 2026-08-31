@@ -15,6 +15,7 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -71,6 +72,9 @@ public class QuickGiftRequest {
 
     @Column(name = "delivery_address", nullable = false)
     private String deliveryAddress;
+
+    @Column(name = "recipient_dob")
+    private LocalDate recipientDob;
 
     @Column(name = "gift_message")
     private String giftMessage;
