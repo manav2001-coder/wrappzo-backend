@@ -21,6 +21,8 @@ public record VendorOrderResponse(
         String giftName,
         String recipientName,
         String recipientPhone,
+        /** Null until the recipient uploads one -- shown so the vendor can produce a personalized gift correctly. */
+        String recipientPhotoUrl,
         /** The gift's raw price -- no markup, no commission. Null if the gift has no price set. */
         BigDecimal price,
         OrderSource source,
@@ -28,7 +30,7 @@ public record VendorOrderResponse(
         Instant assignedAt,
         Instant createdAt) {
 
-    public static VendorOrderResponse from(Order order) {
+    public static VendorOrderResponse from(Order order, String recipientPhotoUrl) {
         return new VendorOrderResponse(
                 order.getId(),
                 "ORD-" + order.getOrderNo(),
@@ -37,6 +39,7 @@ public record VendorOrderResponse(
                 order.getGift() != null ? order.getGift().getName() : null,
                 order.getRecipientName(),
                 order.getRecipientPhone(),
+                recipientPhotoUrl,
                 order.getGift() != null ? order.getGift().getPrice() : null,
                 order.getSource(),
                 order.getStatus(),

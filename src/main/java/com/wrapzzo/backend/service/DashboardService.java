@@ -16,6 +16,8 @@ import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.Order;
 import com.wrapzzo.backend.model.OrderSource;
 import com.wrapzzo.backend.model.OrderStatus;
+import com.wrapzzo.backend.model.GiftImage;
+import com.wrapzzo.backend.model.OrderStatusHistory;
 import com.wrapzzo.backend.model.OrgUnit;
 import com.wrapzzo.backend.model.QuickGiftRequest;
 import com.wrapzzo.backend.model.QuickGiftStatus;
@@ -25,6 +27,7 @@ import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.repository.CampaignFieldRepository;
 import com.wrapzzo.backend.repository.CampaignFormRepository;
 import com.wrapzzo.backend.repository.CampaignRepository;
+import com.wrapzzo.backend.repository.GiftImageRepository;
 import com.wrapzzo.backend.repository.OrderRepository;
 import com.wrapzzo.backend.repository.QuickGiftRequestRepository;
 import com.wrapzzo.backend.repository.SubmissionRepository;
@@ -62,6 +65,7 @@ public class DashboardService {
 
     private static final int TOP_N = 5;
     private static final int RECENT_ACTIVITY_LIMIT = 12;
+    private static final int RECENT_ORDER_LIMIT = 8;
     private static final int TREND_WEEKS = 12;
     private static final int DRILLDOWN_LIMIT = 50;
     private static final Set<OrderStatus> IN_PROGRESS_STATUSES = Set.of(OrderStatus.PROCESSING, OrderStatus.PRODUCTION_QUEUE);
@@ -74,6 +78,9 @@ public class DashboardService {
     private final QuickGiftRequestRepository quickGiftRequestRepository;
     private final UserRepository userRepository;
     private final CampaignService campaignService;
+    private final OrderStatusHistoryService orderStatusHistoryService;
+    private final GiftImageRepository giftImageRepository;
+    private final FileStorageService fileStorageService;
 
     /** Everything the dashboard reads, already scoped to company-wide or just-this-viewer. */
     private record ScopedData(
@@ -144,7 +151,8 @@ public class DashboardService {
                 topDepartments(orders, data.quickGiftRequesterByOrderId()),
                 upcomingDeadlines(campaigns),
                 recentCampaigns(campaigns),
-                recentActivity(campaigns, orders, quickGifts, submissions));
+                recentActivity(campaigns, orders, quickGifts, submissions),
+                recentOrderTimeline(orders, data.quickGiftRequesterByOrderId()));
     }
 
     /**
@@ -333,6 +341,41 @@ public class DashboardService {
         }
         User requester = quickGiftRequesterByOrderId.get(order.getId());
         return requester != null ? requester.getName() : "—";
+    }
+
+    /**
+     * Most-recently-updated orders first, for the Dashboard's fulfillment timeline. Includes
+     * CANCELLED orders (unlike the pipeline-stage counts above) -- the frontend renders those
+     * as a distinct terminal state rather than progress along the pipeline, but hiding them
+     * here would make an order someone knows exists just silently vanish from the list.
+     */
+    private List<DashboardResponse.OrderTimelineItem> recentOrderTimeline(List<Order> orders, Map<UUID, User> quickGiftRequesterByOrderId) {
+        List<Order> recent = orders.stream().sorted(Comparator.comparing(Order::getUpdatedAt).reversed()).limit(RECENT_ORDER_LIMIT).toList();
+        Map<UUID, List<OrderStatusHistory>> historyByOrderId =
+                orderStatusHistoryService.historyByOrderId(recent.stream().map(Order::getId).toList());
+
+        List<UUID> giftIds = recent.stream().map(Order::getGift).filter(g -> g != null).map(g -> g.getId()).distinct().toList();
+        Map<UUID, String> firstImageUrlByGiftId = new HashMap<>();
+        for (GiftImage image : giftImageRepository.findByGiftIdInOrderByDisplayOrderAsc(giftIds)) {
+            firstImageUrlByGiftId.putIfAbsent(image.getGift().getId(), fileStorageService.publicUrl(image.getImageKey()));
+        }
+
+        return recent.stream()
+                .map(o -> new DashboardResponse.OrderTimelineItem(
+                        o.getId(),
+                        "ORD-" + o.getOrderNo(),
+                        o.getGift() != null ? o.getGift().getName() : "—",
+                        o.getGift() != null ? firstImageUrlByGiftId.get(o.getGift().getId()) : null,
+                        o.getRecipientName(),
+                        submitterName(o, quickGiftRequesterByOrderId),
+                        o.getStatus(),
+                        o.getSource().name(),
+                        o.getCreatedAt(),
+                        historyByOrderId.getOrDefault(o.getId(), List.of()).stream()
+                                .map(h -> new DashboardResponse.StageEvent(
+                                        h.getStatus(), h.getChangedAt(), h.getChangedBy() != null ? h.getChangedBy().getName() : null))
+                                .toList()))
+                .toList();
     }
 
     private Instant monthStart() {

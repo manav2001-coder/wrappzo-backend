@@ -1,6 +1,7 @@
 package com.wrapzzo.backend.dto;
 
 import com.wrapzzo.backend.model.CampaignStatus;
+import com.wrapzzo.backend.model.OrderStatus;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -36,7 +37,8 @@ public record DashboardResponse(
         List<TopDepartment> topDepartments,
         List<UpcomingDeadline> upcomingDeadlines,
         List<RecentCampaign> recentCampaigns,
-        List<ActivityItem> recentActivity) {
+        List<ActivityItem> recentActivity,
+        List<OrderTimelineItem> recentOrders) {
 
     public record TopGift(String giftName, long orderCount) {
     }
@@ -77,5 +79,29 @@ public record DashboardResponse(
      * isn't parseable back to a date range.
      */
     public record TrendPoint(String weekLabel, String weekStart, long campaignSubmissions, long quickGiftRequests) {
+    }
+
+    /**
+     * One order's place in the Processing -> Production Queue -> Dispatched -> Delivered
+     * pipeline, for the Dashboard's order timeline. status is the current stage; history is
+     * every stage it has actually passed through with a real timestamp (see
+     * OrderStatusHistory), oldest first.
+     */
+    public record OrderTimelineItem(
+            UUID id,
+            String displayId,
+            String giftName,
+            /** Null if the gift has no image, or the order has no gift (a rare/legacy case). */
+            String giftImageUrl,
+            String recipientName,
+            String requesterName,
+            OrderStatus status,
+            String source,
+            Instant createdAt,
+            List<StageEvent> history) {
+    }
+
+    /** One row of an order's history: the stage it moved to, when, and by whom (null for a vendor-driven change -- vendors aren't Users). */
+    public record StageEvent(OrderStatus status, Instant at, String changedByName) {
     }
 }

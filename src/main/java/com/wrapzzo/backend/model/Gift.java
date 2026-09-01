@@ -62,6 +62,12 @@ public class Gift {
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
 
+    /** When true, an order for this gift needs a recipient photo to be produced -- enforced
+     * at request time (Quick Gift) by requiring either an uploaded photo or an email to send
+     * an upload link to, since there's no photo yet at that point. */
+    @Column(name = "photo_required", nullable = false)
+    private boolean photoRequired = false;
+
     /** Which commerce paths this gift can be picked from -- every gift is available in all three, unconditionally. */
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "gift_modules", joinColumns = @JoinColumn(name = "gift_id"))

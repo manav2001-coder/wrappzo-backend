@@ -1,6 +1,7 @@
 package com.wrapzzo.backend.service;
 
 import com.wrapzzo.backend.dto.BulkAssignResponse;
+import com.wrapzzo.backend.dto.DashboardResponse.StageEvent;
 import com.wrapzzo.backend.dto.OrderResponse;
 import com.wrapzzo.backend.dto.VendorOrderResponse;
 import com.wrapzzo.backend.exception.InvalidOrderStatusTransitionException;
@@ -10,18 +11,26 @@ import com.wrapzzo.backend.exception.VendorNotFoundException;
 import com.wrapzzo.backend.model.Order;
 import com.wrapzzo.backend.model.OrderAssignmentMode;
 import com.wrapzzo.backend.model.OrderStatus;
+import com.wrapzzo.backend.model.OrderStatusHistory;
 import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.model.Vendor;
 import com.wrapzzo.backend.model.VendorStatus;
+import com.wrapzzo.backend.model.Gift;
+import com.wrapzzo.backend.model.GiftImage;
+import com.wrapzzo.backend.repository.GiftImageRepository;
 import com.wrapzzo.backend.repository.OrderRepository;
 import com.wrapzzo.backend.repository.UserRepository;
 import com.wrapzzo.backend.repository.VendorRepository;
 import com.wrapzzo.backend.security.CurrentUser;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Supplier;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,33 +58,48 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
     private final VendorRepository vendorRepository;
+    private final OrderStatusHistoryService orderStatusHistoryService;
+    private final OrderPhotoService orderPhotoService;
+    private final GiftImageRepository giftImageRepository;
+    private final FileStorageService fileStorageService;
 
     @Transactional(readOnly = true)
     public List<OrderResponse> list() {
-        return orderRepository.findByCompanyIdOrderByCreatedAtDesc(currentUser().getCompany().getId()).stream()
-                .map(OrderResponse::from)
-                .toList();
+        return toResponseList(orderRepository.findByCompanyIdOrderByCreatedAtDesc(currentUser().getCompany().getId()));
     }
 
     @Transactional(readOnly = true)
     public OrderResponse get(UUID id) {
-        Order order = orderRepository.findById(id).orElseThrow(() -> new OrderNotFoundException(id));
+        return toResponse(getOwnCompanyEntity(id));
+    }
+
+    /** Reachable by anyone who can already see this order (list()/get() share the same company scoping). */
+    @Transactional
+    public String requestPhotoLink(UUID id) {
+        return orderPhotoService.requestPhotoLink(getOwnCompanyEntity(id));
+    }
+
+    private Order getOwnCompanyEntity(UUID id) {
+        Order order = getEntity(id);
         if (!order.getCompany().getId().equals(currentUser().getCompany().getId())) {
             throw new OrderNotFoundException(id);
         }
-        return OrderResponse.from(order);
+        return order;
     }
 
     // --- Vendor self-service side: only orders routed to this vendor, and moving them through fulfillment. ---
 
     @Transactional(readOnly = true)
     public List<VendorOrderResponse> listForVendor(UUID vendorId) {
-        return orderRepository.findByAssignedVendorIdOrderByCreatedAtDesc(vendorId).stream().map(VendorOrderResponse::from).toList();
+        return orderRepository.findByAssignedVendorIdOrderByCreatedAtDesc(vendorId).stream()
+                .map(o -> VendorOrderResponse.from(o, orderPhotoService.resolvePhotoUrl(o)))
+                .toList();
     }
 
     @Transactional(readOnly = true)
     public VendorOrderResponse getForVendor(UUID id, UUID vendorId) {
-        return VendorOrderResponse.from(getEntityForVendor(id, vendorId));
+        Order order = getEntityForVendor(id, vendorId);
+        return VendorOrderResponse.from(order, orderPhotoService.resolvePhotoUrl(order));
     }
 
     @Transactional
@@ -85,7 +109,10 @@ public class OrderService {
             throw new InvalidOrderStatusTransitionException(id, order.getStatus(), newStatus);
         }
         order.setStatus(newStatus);
-        return VendorOrderResponse.from(order);
+        // null changedBy -- this runs under vendor auth (CurrentVendor), not CurrentUser, and
+        // OrderStatusHistory.changedBy is a User FK; there's no User row for a vendor to record here.
+        orderStatusHistoryService.record(order, newStatus, null);
+        return VendorOrderResponse.from(order, orderPhotoService.resolvePhotoUrl(order));
     }
 
     private Order getEntityForVendor(UUID id, UUID vendorId) {
@@ -100,7 +127,13 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public List<OrderResponse> listAllForPlatform() {
-        return orderRepository.findAllByOrderByCreatedAtDesc().stream().map(OrderResponse::from).toList();
+        return toResponseList(orderRepository.findAllByOrderByCreatedAtDesc());
+    }
+
+    /** Unscoped by company, matching listAllForPlatform() -- platform admin can chase a photo for any order. */
+    @Transactional
+    public String requestPhotoLinkForPlatform(UUID id) {
+        return orderPhotoService.requestPhotoLink(getEntity(id));
     }
 
     @Transactional
@@ -108,7 +141,7 @@ public class OrderService {
         Order order = getEntity(orderId);
         Vendor vendor = vendorRepository.findById(vendorId).orElseThrow(() -> new VendorNotFoundException(vendorId));
         applyAssignment(order, vendor, OrderAssignmentMode.MANUAL);
-        return OrderResponse.from(order);
+        return toResponse(order);
     }
 
     /**
@@ -124,7 +157,7 @@ public class OrderService {
                 ? order.getGift().getVendor()
                 : leastLoadedActiveVendor();
         applyAssignment(order, vendor, OrderAssignmentMode.AUTO);
-        return OrderResponse.from(order);
+        return toResponse(order);
     }
 
     /**
@@ -135,9 +168,30 @@ public class OrderService {
      */
     @Transactional
     public BulkAssignResponse autoAssignCampaign(UUID campaignId) {
+        return bulkAutoAssign(unassignedOrders(campaignId), () -> campaignOrders(campaignId));
+    }
+
+    /** Campaign-level bulk manual assign -- routes every unassigned order under a campaign to one chosen vendor. */
+    @Transactional
+    public BulkAssignResponse assignCampaignVendor(UUID campaignId, UUID vendorId) {
+        return bulkAssign(unassignedOrders(campaignId), vendorId, () -> campaignOrders(campaignId));
+    }
+
+    /** Same bulk auto-assign, but for a company's Quick Gift orders (no campaign to key off). */
+    @Transactional
+    public BulkAssignResponse autoAssignQuickGift(UUID companyId) {
+        return bulkAutoAssign(unassignedQuickGiftOrders(companyId), () -> quickGiftOrders(companyId));
+    }
+
+    @Transactional
+    public BulkAssignResponse assignQuickGiftVendor(UUID companyId, UUID vendorId) {
+        return bulkAssign(unassignedQuickGiftOrders(companyId), vendorId, () -> quickGiftOrders(companyId));
+    }
+
+    private BulkAssignResponse bulkAutoAssign(List<Order> targets, Supplier<List<OrderResponse>> resultLoader) {
         int assigned = 0;
         int skipped = 0;
-        for (Order order : unassignedOrders(campaignId)) {
+        for (Order order : targets) {
             try {
                 Vendor vendor = order.getGift() != null && order.getGift().getVendor() != null
                         ? order.getGift().getVendor()
@@ -148,28 +202,72 @@ public class OrderService {
                 skipped++;
             }
         }
-        return new BulkAssignResponse(assigned, skipped, campaignOrders(campaignId));
+        return new BulkAssignResponse(assigned, skipped, resultLoader.get());
     }
 
-    /** Campaign-level bulk manual assign -- routes every unassigned order under a campaign to one chosen vendor. */
-    @Transactional
-    public BulkAssignResponse assignCampaignVendor(UUID campaignId, UUID vendorId) {
+    private BulkAssignResponse bulkAssign(List<Order> targets, UUID vendorId, Supplier<List<OrderResponse>> resultLoader) {
         Vendor vendor = vendorRepository.findById(vendorId).orElseThrow(() -> new VendorNotFoundException(vendorId));
-        List<Order> orders = unassignedOrders(campaignId);
-        for (Order order : orders) {
+        for (Order order : targets) {
             applyAssignment(order, vendor, OrderAssignmentMode.MANUAL);
         }
-        return new BulkAssignResponse(orders.size(), 0, campaignOrders(campaignId));
+        return new BulkAssignResponse(targets.size(), 0, resultLoader.get());
     }
 
     private List<Order> unassignedOrders(UUID campaignId) {
-        return orderRepository.findByCampaignIdOrderByCreatedAtDesc(campaignId).stream()
-                .filter(order -> order.getAssignedVendor() == null && order.getStatus() != OrderStatus.CANCELLED)
-                .toList();
+        return filterUnassigned(orderRepository.findByCampaignIdOrderByCreatedAtDesc(campaignId));
+    }
+
+    private List<Order> unassignedQuickGiftOrders(UUID companyId) {
+        return filterUnassigned(orderRepository.findByCompanyIdAndCampaignIdIsNullOrderByCreatedAtDesc(companyId));
+    }
+
+    private List<Order> filterUnassigned(List<Order> orders) {
+        return orders.stream().filter(order -> order.getAssignedVendor() == null && order.getStatus() != OrderStatus.CANCELLED).toList();
     }
 
     private List<OrderResponse> campaignOrders(UUID campaignId) {
-        return orderRepository.findByCampaignIdOrderByCreatedAtDesc(campaignId).stream().map(OrderResponse::from).toList();
+        return toResponseList(orderRepository.findByCampaignIdOrderByCreatedAtDesc(campaignId));
+    }
+
+    private List<OrderResponse> quickGiftOrders(UUID companyId) {
+        return toResponseList(orderRepository.findByCompanyIdAndCampaignIdIsNullOrderByCreatedAtDesc(companyId));
+    }
+
+    private OrderResponse toResponse(Order order) {
+        String giftImageUrl = order.getGift() != null ? firstImageUrlByGiftId(List.of(order.getGift().getId())).get(order.getGift().getId()) : null;
+        return OrderResponse.from(order, orderPhotoService.resolvePhotoUrl(order), giftImageUrl, stageEventsFor(order.getId()));
+    }
+
+    private List<OrderResponse> toResponseList(List<Order> orders) {
+        Map<UUID, List<OrderStatusHistory>> historyByOrderId =
+                orderStatusHistoryService.historyByOrderId(orders.stream().map(Order::getId).toList());
+        List<UUID> giftIds = orders.stream().map(Order::getGift).filter(Objects::nonNull).map(Gift::getId).toList();
+        Map<UUID, String> firstImageUrlByGiftId = firstImageUrlByGiftId(giftIds);
+        return orders.stream()
+                .map(o -> OrderResponse.from(
+                        o,
+                        orderPhotoService.resolvePhotoUrl(o),
+                        o.getGift() != null ? firstImageUrlByGiftId.get(o.getGift().getId()) : null,
+                        toStageEvents(historyByOrderId.getOrDefault(o.getId(), List.of()))))
+                .toList();
+    }
+
+    private Map<UUID, String> firstImageUrlByGiftId(List<UUID> giftIds) {
+        Map<UUID, String> map = new HashMap<>();
+        for (GiftImage image : giftImageRepository.findByGiftIdInOrderByDisplayOrderAsc(giftIds)) {
+            map.putIfAbsent(image.getGift().getId(), fileStorageService.publicUrl(image.getImageKey()));
+        }
+        return map;
+    }
+
+    private List<StageEvent> stageEventsFor(UUID orderId) {
+        return toStageEvents(orderStatusHistoryService.historyByOrderId(List.of(orderId)).getOrDefault(orderId, List.of()));
+    }
+
+    private List<StageEvent> toStageEvents(List<OrderStatusHistory> history) {
+        return history.stream()
+                .map(h -> new StageEvent(h.getStatus(), h.getChangedAt(), h.getChangedBy() != null ? h.getChangedBy().getName() : null))
+                .toList();
     }
 
     private Vendor leastLoadedActiveVendor() {
@@ -184,6 +282,7 @@ public class OrderService {
         order.setAssignedAt(Instant.now());
         if (order.getStatus() == OrderStatus.PROCESSING) {
             order.setStatus(OrderStatus.PRODUCTION_QUEUE);
+            orderStatusHistoryService.record(order, OrderStatus.PRODUCTION_QUEUE, currentUser());
         }
     }
 
