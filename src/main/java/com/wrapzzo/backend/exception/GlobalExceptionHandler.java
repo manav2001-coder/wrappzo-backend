@@ -134,6 +134,11 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
     }
 
+    @ExceptionHandler(PhotoOrEmailRequiredException.class)
+    public ResponseEntity<Map<String, String>> handlePhotoOrEmailRequired(PhotoOrEmailRequiredException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+    }
+
     @ExceptionHandler(VendorGiftEditNotAllowedException.class)
     public ResponseEntity<Map<String, String>> handleVendorGiftEditNotAllowed(VendorGiftEditNotAllowedException e) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", e.getMessage()));

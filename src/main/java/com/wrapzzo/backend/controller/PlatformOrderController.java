@@ -3,6 +3,7 @@ package com.wrapzzo.backend.controller;
 import com.wrapzzo.backend.dto.AssignOrderVendorRequest;
 import com.wrapzzo.backend.dto.BulkAssignResponse;
 import com.wrapzzo.backend.dto.OrderResponse;
+import com.wrapzzo.backend.dto.RequestPhotoLinkResponse;
 import com.wrapzzo.backend.service.OrderService;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -30,6 +31,11 @@ public class PlatformOrderController {
         return orderService.listAllForPlatform();
     }
 
+    @PostMapping("/{id}/requestPhotoLink")
+    public RequestPhotoLinkResponse requestPhotoLink(@PathVariable UUID id) {
+        return new RequestPhotoLinkResponse(orderService.requestPhotoLinkForPlatform(id));
+    }
+
     @PostMapping("/{id}/assign")
     public OrderResponse assign(@PathVariable UUID id, @Valid @RequestBody AssignOrderVendorRequest request) {
         return orderService.assignVendorManually(id, request.vendorId());
@@ -48,5 +54,16 @@ public class PlatformOrderController {
     @PostMapping("/campaign/{campaignId}/autoAssign")
     public BulkAssignResponse autoAssignCampaign(@PathVariable UUID campaignId) {
         return orderService.autoAssignCampaign(campaignId);
+    }
+
+    /** Same bulk-assign convenience as a campaign's, but for a company's Quick Gift orders -- these have no campaign to key off, so companyId stands in for it. */
+    @PostMapping("/quickGift/{companyId}/assign")
+    public BulkAssignResponse assignQuickGift(@PathVariable UUID companyId, @Valid @RequestBody AssignOrderVendorRequest request) {
+        return orderService.assignQuickGiftVendor(companyId, request.vendorId());
+    }
+
+    @PostMapping("/quickGift/{companyId}/autoAssign")
+    public BulkAssignResponse autoAssignQuickGift(@PathVariable UUID companyId) {
+        return orderService.autoAssignQuickGift(companyId);
     }
 }

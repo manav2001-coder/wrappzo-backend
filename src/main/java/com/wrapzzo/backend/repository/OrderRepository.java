@@ -16,6 +16,9 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
 
     List<Order> findByCampaignIdOrderByCreatedAtDesc(UUID campaignId);
 
+    /** A company's Quick Gift orders -- no campaign to key off, so this is the bulk-assign source for that pseudo-group. */
+    List<Order> findByCompanyIdAndCampaignIdIsNullOrderByCreatedAtDesc(UUID companyId);
+
     /** A vendor's own fulfillment queue -- every order routed to them, across companies. */
     List<Order> findByAssignedVendorIdOrderByCreatedAtDesc(UUID vendorId);
 

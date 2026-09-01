@@ -1,6 +1,7 @@
 package com.wrapzzo.backend.repository;
 
 import com.wrapzzo.backend.model.GiftImage;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -8,4 +9,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface GiftImageRepository extends JpaRepository<GiftImage, UUID> {
 
     List<GiftImage> findByGiftIdOrderByDisplayOrderAsc(UUID giftId);
+
+    List<GiftImage> findByGiftIdInOrderByDisplayOrderAsc(Collection<UUID> giftIds);
 }

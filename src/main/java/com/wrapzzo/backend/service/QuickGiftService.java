@@ -5,6 +5,7 @@ import com.wrapzzo.backend.dto.PresignQuickGiftPhotoResponse;
 import com.wrapzzo.backend.dto.QuickGiftRequestResponse;
 import com.wrapzzo.backend.exception.GiftNotAvailableForQuickGiftException;
 import com.wrapzzo.backend.exception.GiftNotFoundException;
+import com.wrapzzo.backend.exception.PhotoOrEmailRequiredException;
 import com.wrapzzo.backend.exception.QuickGiftAlreadyReviewedException;
 import com.wrapzzo.backend.exception.QuickGiftNotApprovedException;
 import com.wrapzzo.backend.exception.QuickGiftRequestNotFoundException;
@@ -13,6 +14,7 @@ import com.wrapzzo.backend.model.Gift;
 import com.wrapzzo.backend.model.GiftModule;
 import com.wrapzzo.backend.model.Order;
 import com.wrapzzo.backend.model.OrderSource;
+import com.wrapzzo.backend.model.OrderStatus;
 import com.wrapzzo.backend.model.QuickGiftRequest;
 import com.wrapzzo.backend.model.QuickGiftStatus;
 import com.wrapzzo.backend.model.User;
@@ -48,6 +50,7 @@ public class QuickGiftService {
     private final FileStorageService fileStorageService;
     private final QuickGiftUploadService quickGiftUploadService;
     private final RecipientService recipientService;
+    private final OrderStatusHistoryService orderStatusHistoryService;
 
     public PresignQuickGiftPhotoResponse presignPhoto(String contentType) {
         User user = currentUser();
@@ -61,6 +64,11 @@ public class QuickGiftService {
         User requester = currentUser();
         Company company = requester.getCompany();
         Gift gift = resolveQuickGiftEligibleGift(request.giftId());
+
+        boolean hasEmail = request.recipientEmail() != null && !request.recipientEmail().isBlank();
+        if (gift.isPhotoRequired() && request.photo() == null && !hasEmail) {
+            throw new PhotoOrEmailRequiredException();
+        }
 
         QuickGiftRequest quickGift = new QuickGiftRequest(
                 company, gift, requester, request.recipientName(), request.recipientPhone(),
@@ -111,6 +119,7 @@ public class QuickGiftService {
         Order order = orderRepository.saveAndFlush(new Order(
                 request.getCompany(), request.getGift(), OrderSource.QUICK_GIFT, request.getRecipientName(),
                 request.getRecipientPhone(), approver));
+        orderStatusHistoryService.record(order, OrderStatus.PROCESSING, approver);
         request.setOrder(order);
         request.setStatus(QuickGiftStatus.APPROVED);
         request.setReviewedBy(approver);

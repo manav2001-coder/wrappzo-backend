@@ -14,5 +14,6 @@ public record UpdateGiftRequest(
         @Positive Integer leadTimeDays,
         @NotNull @PositiveOrZero BigDecimal price,
         @PositiveOrZero BigDecimal markupFeePercentage,
-        @PositiveOrZero BigDecimal commissionFeePercentage) {
+        @PositiveOrZero BigDecimal commissionFeePercentage,
+        boolean photoRequired) {
 }

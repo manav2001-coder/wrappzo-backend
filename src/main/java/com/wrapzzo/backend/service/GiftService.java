@@ -64,6 +64,7 @@ public class GiftService {
         toSave.setPrice(request.price());
         toSave.setMarkupFeePercentage(feeOrZero(request.markupFeePercentage()));
         toSave.setCommissionFeePercentage(feeOrZero(request.commissionFeePercentage()));
+        toSave.setPhotoRequired(request.photoRequired());
         // saveAndFlush -- giftNo is DB-generated and only readable after the physical
         // INSERT runs, which plain save() would otherwise defer until transaction commit.
         Gift gift = giftRepository.saveAndFlush(toSave);
@@ -111,6 +112,7 @@ public class GiftService {
         gift.setPrice(request.price());
         gift.setMarkupFeePercentage(feeOrZero(request.markupFeePercentage()));
         gift.setCommissionFeePercentage(feeOrZero(request.commissionFeePercentage()));
+        gift.setPhotoRequired(request.photoRequired());
         gift.setUpdatedBy(currentUser());
         return toResponse(gift);
     }
@@ -166,6 +168,7 @@ public class GiftService {
         toSave.setPrice(request.price());
         toSave.setMarkupFeePercentage(feeOrZero(request.markupFeePercentage()));
         toSave.setCommissionFeePercentage(feeOrZero(request.commissionFeePercentage()));
+        toSave.setPhotoRequired(request.photoRequired());
         // saveAndFlush -- giftNo is DB-generated and only readable after the physical
         // INSERT runs, which plain save() would otherwise defer until transaction commit.
         Gift gift = giftRepository.saveAndFlush(toSave);
@@ -196,6 +199,7 @@ public class GiftService {
         gift.setPrice(request.price());
         gift.setMarkupFeePercentage(feeOrZero(request.markupFeePercentage()));
         gift.setCommissionFeePercentage(feeOrZero(request.commissionFeePercentage()));
+        gift.setPhotoRequired(request.photoRequired());
         return toResponse(gift);
     }
 

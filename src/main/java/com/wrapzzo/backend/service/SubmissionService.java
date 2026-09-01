@@ -20,6 +20,7 @@ import com.wrapzzo.backend.model.CampaignStatus;
 import com.wrapzzo.backend.model.FieldType;
 import com.wrapzzo.backend.model.Gift;
 import com.wrapzzo.backend.model.Order;
+import com.wrapzzo.backend.model.OrderStatus;
 import com.wrapzzo.backend.model.Submission;
 import com.wrapzzo.backend.model.SubmissionAttachment;
 import com.wrapzzo.backend.model.SubmissionStatus;
@@ -60,6 +61,7 @@ public class SubmissionService {
     private final FileStorageService fileStorageService;
     private final RecipientUploadService recipientUploadService;
     private final RecipientService recipientService;
+    private final OrderStatusHistoryService orderStatusHistoryService;
 
     public PresignSubmissionAttachmentResponse presignAttachment(UUID campaignId, String contentType) {
         Campaign campaign = campaignService.getEntity(campaignId);
@@ -85,7 +87,7 @@ public class SubmissionService {
 
         User submitter = campaignService.currentUser();
         Submission submission = submissionRepository.save(new Submission(campaign.getCompany(), campaign, submitter, gift));
-        applyValues(submission, campaignId, request.values());
+        applyValues(submission, campaignId, gift, request.values());
         Instant now = Instant.now();
         submission.setSubmittedAt(now);
         submission.setStatus(SubmissionStatus.APPROVED);
@@ -96,6 +98,7 @@ public class SubmissionService {
         String recipientPhone = valueText(submission.getId(), "recipientPhone");
         Order order = new Order(submission.getCompany(), submission.getCampaign(), submission, submission.getGift(), recipientName, recipientPhone, submitter);
         orderRepository.save(order);
+        orderStatusHistoryService.record(order, OrderStatus.PROCESSING, submitter);
 
         // Best-effort: if this recipient wasn't given a photo at submission time (the
         // default Photo field is optional), hand them a self-serve upload link now that
@@ -185,14 +188,30 @@ public class SubmissionService {
     }
 
     @SuppressWarnings("unchecked")
-    private void applyValues(Submission submission, UUID campaignId, Map<String, Object> values) {
+    private void applyValues(Submission submission, UUID campaignId, Gift gift, Map<String, Object> values) {
         CampaignForm form = campaignFormRepository.findByCampaignId(campaignId).orElseThrow();
         List<CampaignField> fields = campaignFieldRepository.findByCampaignFormIdOrderByDisplayOrderAsc(form.getId());
         List<String> errors = new ArrayList<>();
 
+        // Tracked alongside the per-field required checks below, so a gift that demands a
+        // photo can be satisfied either way -- mirrors Quick Gift's same rule. Skipped
+        // entirely (never blocks) if this campaign's form doesn't have both fields under
+        // their default keys, same "quietly finds nothing to check" philosophy as
+        // upsertRecipientBestEffort/requestPhotoIfMissing for a renamed/removed field.
+        boolean hasPhotoField = fields.stream().anyMatch(f -> "photo".equals(f.getFieldKey()));
+        boolean hasEmailField = fields.stream().anyMatch(f -> "recipientEmail".equals(f.getFieldKey()));
+        boolean photoProvided = false;
+        boolean emailProvided = false;
+
         for (CampaignField field : fields) {
             Object raw = values.get(field.getFieldKey());
             boolean blank = raw == null || (raw instanceof String s && s.isBlank()) || (raw instanceof List<?> l && l.isEmpty());
+            if ("photo".equals(field.getFieldKey()) && !blank) {
+                photoProvided = true;
+            }
+            if ("recipientEmail".equals(field.getFieldKey()) && !blank) {
+                emailProvided = true;
+            }
             if (field.isRequired() && blank) {
                 errors.add(field.getLabel() + " is required.");
                 continue;
@@ -226,6 +245,10 @@ public class SubmissionService {
             } catch (ClassCastException | NullPointerException e) {
                 errors.add(field.getLabel() + " has an invalid value.");
             }
+        }
+
+        if (gift.isPhotoRequired() && hasPhotoField && hasEmailField && !photoProvided && !emailProvided) {
+            errors.add("This gift needs a recipient photo -- upload one, or provide the recipient's email so we can send them an upload link.");
         }
 
         if (!errors.isEmpty()) {
