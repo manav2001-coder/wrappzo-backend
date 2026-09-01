@@ -64,9 +64,11 @@ public record DashboardResponse(
     /**
      * A synthesized activity feed -- e.g. "Sharad created campaign Product Launch" -- derived
      * live from campaigns/submissions/orders/Quick Gift requests, not a persisted audit log.
-     * campaignId is set (and the item clickable) whenever the activity is campaign-related.
+     * Exactly one of campaignId/quickGiftId is set (and the item clickable) depending on
+     * which kind of activity this is; both are null for order-dispatch/delivery events with
+     * no campaign link.
      */
-    public record ActivityItem(String actorName, String verb, String subject, Instant at, UUID campaignId) {
+    public record ActivityItem(String actorName, String verb, String subject, Instant at, UUID campaignId, UUID quickGiftId) {
     }
 
     /**

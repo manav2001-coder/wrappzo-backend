@@ -497,19 +497,19 @@ public class DashboardService {
     private List<ActivityItem> recentActivity(List<Campaign> campaigns, List<Order> orders, List<QuickGiftRequest> quickGifts, List<Submission> submissions) {
         List<ActivityItem> activity = new ArrayList<>();
         for (Campaign c : campaigns) {
-            activity.add(new ActivityItem(c.getCreatedBy().getName(), "created campaign", c.getName(), c.getCreatedAt(), c.getId()));
+            activity.add(new ActivityItem(c.getCreatedBy().getName(), "created campaign", c.getName(), c.getCreatedAt(), c.getId(), null));
         }
         for (Submission s : submissions) {
             if (s.getSubmittedAt() != null) {
                 String verb = s.getStatus() == SubmissionStatus.RESUBMITTED ? "resubmitted a recipient for" : "submitted a recipient for";
-                activity.add(new ActivityItem(s.getSubmittedBy().getName(), verb, s.getCampaign().getName(), s.getSubmittedAt(), s.getCampaign().getId()));
+                activity.add(new ActivityItem(s.getSubmittedBy().getName(), verb, s.getCampaign().getName(), s.getSubmittedAt(), s.getCampaign().getId(), null));
             }
             if (s.getReviewedAt() != null && s.getReviewedBy() != null) {
                 String verb = s.getStatus() == SubmissionStatus.APPROVED ? "approved a submission for"
                         : s.getStatus() == SubmissionStatus.REJECTED ? "rejected a submission for"
                         : null;
                 if (verb != null) {
-                    activity.add(new ActivityItem(s.getReviewedBy().getName(), verb, s.getCampaign().getName(), s.getReviewedAt(), s.getCampaign().getId()));
+                    activity.add(new ActivityItem(s.getReviewedBy().getName(), verb, s.getCampaign().getName(), s.getReviewedAt(), s.getCampaign().getId(), null));
                 }
             }
         }
@@ -518,17 +518,17 @@ public class DashboardService {
                 String verb = o.getStatus() == OrderStatus.DISPATCHED ? "dispatched order" : "delivered order";
                 String actor = o.getCreatedBy() != null ? o.getCreatedBy().getName() : "Wrapzzo";
                 UUID campaignId = o.getCampaign() != null ? o.getCampaign().getId() : null;
-                activity.add(new ActivityItem(actor, verb, "ORD-" + o.getOrderNo(), o.getUpdatedAt(), campaignId));
+                activity.add(new ActivityItem(actor, verb, "ORD-" + o.getOrderNo(), o.getUpdatedAt(), campaignId, null));
             }
         }
         for (QuickGiftRequest q : quickGifts) {
-            activity.add(new ActivityItem(q.getRequestedBy().getName(), "requested Quick Gift", q.getGift().getName(), q.getCreatedAt(), null));
+            activity.add(new ActivityItem(q.getRequestedBy().getName(), "requested Quick Gift", q.getGift().getName(), q.getCreatedAt(), null, q.getId()));
             if (q.getReviewedAt() != null && q.getReviewedBy() != null) {
                 String verb = q.getStatus() == QuickGiftStatus.APPROVED ? "approved Quick Gift"
                         : q.getStatus() == QuickGiftStatus.REJECTED ? "rejected Quick Gift"
                         : null;
                 if (verb != null) {
-                    activity.add(new ActivityItem(q.getReviewedBy().getName(), verb, q.getGift().getName(), q.getReviewedAt(), null));
+                    activity.add(new ActivityItem(q.getReviewedBy().getName(), verb, q.getGift().getName(), q.getReviewedAt(), null, q.getId()));
                 }
             }
         }
