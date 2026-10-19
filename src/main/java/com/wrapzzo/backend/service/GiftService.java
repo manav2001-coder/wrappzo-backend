@@ -15,6 +15,7 @@ import com.wrapzzo.backend.model.GiftImage;
 import com.wrapzzo.backend.model.GiftModule;
 import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.model.Vendor;
+import com.wrapzzo.backend.repository.CompanyVendorRepository;
 import com.wrapzzo.backend.repository.GiftImageRepository;
 import com.wrapzzo.backend.repository.GiftRepository;
 import com.wrapzzo.backend.repository.UserRepository;
@@ -50,6 +51,7 @@ public class GiftService {
     private final GiftImageRepository giftImageRepository;
     private final UserRepository userRepository;
     private final VendorRepository vendorRepository;
+    private final CompanyVendorRepository companyVendorRepository;
     private final FileStorageService fileStorageService;
 
     @Transactional
@@ -83,6 +85,16 @@ public class GiftService {
         return giftRepository.findByActiveTrue().stream().map(this::toResponse).toList();
     }
 
+    /** The Gift Store / Quick Gift catalog, scoped to the caller's company's vendor roster -- see company_vendors (V31). */
+    @Transactional(readOnly = true)
+    public List<GiftResponse> listActiveForCompany(UUID companyId) {
+        List<UUID> vendorIds = companyVendorRepository.findVendorIdsByCompanyId(companyId);
+        if (vendorIds.isEmpty()) {
+            return List.of();
+        }
+        return giftRepository.findByActiveTrueAndVendorIdIn(vendorIds).stream().map(this::toResponse).toList();
+    }
+
     @Transactional(readOnly = true)
     public GiftResponse get(UUID id) {
         return toResponse(getEntity(id));
@@ -92,6 +104,17 @@ public class GiftService {
     public GiftResponse getActive(UUID id) {
         Gift gift = getEntity(id);
         if (!gift.isActive()) {
+            throw new GiftNotFoundException(id);
+        }
+        return toResponse(gift);
+    }
+
+    /** 404, not a filtered-out empty view -- a company shouldn't be able to tell "not in your roster" apart from "doesn't exist". */
+    @Transactional(readOnly = true)
+    public GiftResponse getActiveForCompany(UUID id, UUID companyId) {
+        Gift gift = getEntity(id);
+        List<UUID> vendorIds = companyVendorRepository.findVendorIdsByCompanyId(companyId);
+        if (!gift.isActive() || gift.getVendor() == null || !vendorIds.contains(gift.getVendor().getId())) {
             throw new GiftNotFoundException(id);
         }
         return toResponse(gift);
