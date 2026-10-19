@@ -81,6 +81,7 @@ public class DashboardService {
     private final OrderStatusHistoryService orderStatusHistoryService;
     private final GiftImageRepository giftImageRepository;
     private final FileStorageService fileStorageService;
+    private final AccessControlCacheService accessControlCacheService;
 
     /** Everything the dashboard reads, already scoped to company-wide or just-this-viewer. */
     private record ScopedData(
@@ -195,7 +196,12 @@ public class DashboardService {
         User user = currentUser();
         Company company = user.getCompany();
         UUID companyId = company.getId();
-        boolean companyWide = campaignService.canManage(user);
+        // campaign.manage is the usual company-wide signal, but order.track/order.design.review
+        // are narrower alternatives (see OrderController) for a company scoped to just order
+        // tracking/design review with no campaign-management access at all -- they still see
+        // their whole company's dashboard, not just their own personal activity.
+        Set<String> keys = accessControlCacheService.resolveEffectiveKeys(user);
+        boolean companyWide = campaignService.canManage(user) || keys.contains("order.track") || keys.contains("order.design.review");
 
         List<Campaign> allCampaigns = campaignRepository.findByCompanyIdOrderByCreatedAtDesc(companyId);
         List<Order> allOrders = orderRepository.findByCompanyIdOrderByCreatedAtDesc(companyId);
