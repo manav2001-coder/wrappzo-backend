@@ -231,6 +231,16 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
     }
 
+    @ExceptionHandler(OrderDesignNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleOrderDesignNotFound(OrderDesignNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
+    }
+
+    @ExceptionHandler(OrderDesignAlreadyReviewedException.class)
+    public ResponseEntity<Map<String, String>> handleOrderDesignAlreadyReviewed(OrderDesignAlreadyReviewedException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+    }
+
     @ExceptionHandler(RecipientAlreadyExistsException.class)
     public ResponseEntity<Map<String, String>> handleRecipientAlreadyExists(RecipientAlreadyExistsException e) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
