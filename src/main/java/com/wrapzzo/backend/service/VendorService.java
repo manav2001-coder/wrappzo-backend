@@ -3,6 +3,7 @@ package com.wrapzzo.backend.service;
 import com.wrapzzo.backend.dto.AddVendorRequest;
 import com.wrapzzo.backend.dto.EditVendorRequest;
 import com.wrapzzo.backend.dto.VendorResponse;
+import com.wrapzzo.backend.exception.EmailDeliveryException;
 import com.wrapzzo.backend.exception.VendorEmailAlreadyExistsException;
 import com.wrapzzo.backend.exception.VendorNotFoundException;
 import com.wrapzzo.backend.model.User;
@@ -18,6 +19,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -25,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /** Super Admin-only vendor onboarding/management -- see Vendor's own doc comment for why this is kept separate from User. */
 @Service
+@Slf4j
 public class VendorService {
 
     private final VendorRepository vendorRepository;
@@ -107,6 +110,13 @@ public class VendorService {
         return VendorResponse.from(vendor);
     }
 
+    /**
+     * The token is always persisted -- the vendor's own onboarding (and the admin's ability
+     * to onboard them at all) must not depend on a third-party email provider being up. A
+     * failed send is logged and swallowed rather than rolling back the surrounding
+     * transaction; the admin can retry via resendInvite() once email is working, same as if
+     * the original link had simply expired.
+     */
     private void issueInviteAndSendEmail(Vendor vendor) {
         vendorInviteTokenRepository.deleteUnusedByVendorId(vendor.getId());
 
@@ -115,16 +125,20 @@ public class VendorService {
         vendorInviteTokenRepository.save(new VendorInviteToken(vendor, TokenHasher.sha256Hex(rawToken), expiresAt));
 
         String setupUrl = frontendBaseUrl + "/vendor/setup-password?token=" + rawToken;
-        emailSender.send(
-                vendor.getContactEmail(),
-                "Set up your Wrapzzo vendor account",
-                """
-                <p>Hi %s,</p>
-                <p>You've been added as a vendor on Wrapzzo. Set up your password to get started:</p>
-                <p><a href="%s">Set up your password</a></p>
-                <p>This link expires in %d hours.</p>
-                """
-                        .formatted(vendor.getName(), setupUrl, inviteTokenExpiryHours));
+        try {
+            emailSender.send(
+                    vendor.getContactEmail(),
+                    "Set up your Wrapzzo vendor account",
+                    """
+                    <p>Hi %s,</p>
+                    <p>You've been added as a vendor on Wrapzzo. Set up your password to get started:</p>
+                    <p><a href="%s">Set up your password</a></p>
+                    <p>This link expires in %d hours.</p>
+                    """
+                            .formatted(vendor.getName(), setupUrl, inviteTokenExpiryHours));
+        } catch (EmailDeliveryException e) {
+            log.warn("Vendor invite email to {} failed to send -- vendor and invite token were still created", vendor.getContactEmail(), e);
+        }
     }
 
     private Vendor getEntity(UUID id) {
