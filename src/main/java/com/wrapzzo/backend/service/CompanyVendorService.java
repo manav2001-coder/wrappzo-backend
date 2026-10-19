@@ -1,5 +1,7 @@
 package com.wrapzzo.backend.service;
 
+import com.wrapzzo.backend.dto.AddCompanyVendorRequest;
+import com.wrapzzo.backend.dto.AddVendorRequest;
 import com.wrapzzo.backend.dto.CompanyVendorResponse;
 import com.wrapzzo.backend.exception.CompanyNotFoundException;
 import com.wrapzzo.backend.exception.VendorNotFoundException;
@@ -17,8 +19,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Which vendors serve a company (admin-only, company.manage) -- this roster is what scopes
- * that company's Gift Store / Quick Gift catalog (see GiftBrowseController, V31).
+ * Which vendors serve a company -- this roster is what scopes that company's Gift Store /
+ * Quick Gift catalog (see GiftBrowseController, V31). list()/assign()/unassign() are the
+ * admin-only (company.manage) path, operating on any company; createForCompany() is the
+ * narrower self-service path (company.vendor.manage) a Company Admin uses for their own.
  */
 @Service
 @RequiredArgsConstructor
@@ -27,6 +31,7 @@ public class CompanyVendorService {
     private final CompanyVendorRepository companyVendorRepository;
     private final CompanyRepository companyRepository;
     private final VendorRepository vendorRepository;
+    private final VendorService vendorService;
 
     @Transactional(readOnly = true)
     public List<CompanyVendorResponse> list(UUID companyId) {
@@ -53,6 +58,14 @@ public class CompanyVendorService {
         requireCompany(companyId);
         companyVendorRepository.deleteByCompany_IdAndVendor_Id(companyId, vendorId);
         return list(companyId);
+    }
+
+    /** Self-service: a Company Admin onboards a vendor for their own franchise -- created with no markup/commission set (platform-controlled), auto-linked to their own roster. */
+    @Transactional
+    public List<CompanyVendorResponse> createForCompany(UUID companyId, AddCompanyVendorRequest request) {
+        vendorService.add(new AddVendorRequest(request.name(), request.contactEmail(), request.contactPhone(), null, null));
+        Vendor vendor = vendorRepository.findByContactEmail(request.contactEmail()).orElseThrow();
+        return assign(companyId, vendor.getId());
     }
 
     private Company requireCompany(UUID companyId) {
