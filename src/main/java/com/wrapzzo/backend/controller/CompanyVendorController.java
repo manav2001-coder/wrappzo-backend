@@ -32,7 +32,7 @@ public class CompanyVendorController {
 
     @PostMapping
     public List<CompanyVendorResponse> assign(@PathVariable UUID companyId, @Valid @RequestBody AssignCompanyVendorRequest request) {
-        return companyVendorService.assign(companyId, request.vendorId());
+        return companyVendorService.assign(companyId, request.vendorId(), request.orgUnitId());
     }
 
     @DeleteMapping("/{vendorId}")

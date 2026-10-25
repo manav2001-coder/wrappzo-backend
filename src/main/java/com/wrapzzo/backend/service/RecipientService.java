@@ -35,11 +35,27 @@ public class RecipientService {
 
     private final RecipientRepository recipientRepository;
     private final UserRepository userRepository;
+    private final CampaignService campaignService;
 
     @Transactional(readOnly = true)
     public List<RecipientResponse> list() {
         User user = currentUser();
         return recipientRepository.findByCompanyIdOrderByNameAsc(user.getCompany().getId()).stream()
+                .map(RecipientResponse::from)
+                .toList();
+    }
+
+    private static final int SEARCH_LIMIT = 10;
+
+    /** "Pick an existing doctor" for the Quick Gift form -- an MR doesn't need full recipient.manage just to find one. */
+    @Transactional(readOnly = true)
+    public List<RecipientResponse> search(String query) {
+        User user = currentUser();
+        if (query == null || query.isBlank()) {
+            return List.of();
+        }
+        return recipientRepository.search(user.getCompany().getId(), query.trim()).stream()
+                .limit(SEARCH_LIMIT)
                 .map(RecipientResponse::from)
                 .toList();
     }
@@ -56,6 +72,12 @@ public class RecipientService {
         Recipient recipient = new Recipient(
                 company, request.name().trim(), request.phone().trim(), email, blankToNull(request.address()), request.dateOfBirth(), user);
         return RecipientResponse.from(recipientRepository.save(recipient));
+    }
+
+    /** Trusted server-side lookup for "an existing doctor was picked" flows (e.g. Quick Gift) -- never trust client-typed fields for an id the client only chose, not typed. */
+    @Transactional(readOnly = true)
+    public RecipientResponse get(UUID id) {
+        return RecipientResponse.from(getEntity(id));
     }
 
     @Transactional
@@ -102,11 +124,15 @@ public class RecipientService {
         recipientRepository.save(new Recipient(company, name.trim(), phone.trim(), cleanEmail, blankToNull(address), dateOfBirth, createdBy));
     }
 
+    /** A Company Admin sees every upcoming birthday company-wide; a Member sees only the recipients they themselves added. */
     @Transactional(readOnly = true)
     public List<UpcomingBirthdayResponse> upcomingBirthdays(int daysAhead) {
         User user = currentUser();
         LocalDate today = LocalDate.now();
-        return recipientRepository.findByCompanyIdAndDateOfBirthIsNotNull(user.getCompany().getId()).stream()
+        List<Recipient> recipients = campaignService.canManage(user)
+                ? recipientRepository.findByCompanyIdAndDateOfBirthIsNotNull(user.getCompany().getId())
+                : recipientRepository.findByCompanyIdAndCreatedByIdAndDateOfBirthIsNotNull(user.getCompany().getId(), user.getId());
+        return recipients.stream()
                 .map(r -> Map.entry(r, daysUntilNextBirthday(r.getDateOfBirth(), today)))
                 .filter(e -> e.getValue() <= daysAhead)
                 .sorted(Comparator.comparingInt(e -> e.getValue()))

@@ -27,17 +27,16 @@ public class GiftBrowseController {
 
     @GetMapping("/list")
     public List<GiftResponse> list() {
-        return giftService.listActiveForCompany(currentCompanyId());
+        return giftService.listActiveForUser(currentUser());
     }
 
     @GetMapping("/view/{id}")
     public GiftResponse view(@PathVariable UUID id) {
-        return giftService.getActiveForCompany(id, currentCompanyId());
+        return giftService.getActiveForUser(id, currentUser());
     }
 
-    private UUID currentCompanyId() {
+    private User currentUser() {
         UUID userId = CurrentUser.id();
-        User user = userRepository.findById(userId).orElseThrow(() -> new IllegalStateException("Authenticated user not found: " + userId));
-        return user.getCompany().getId();
+        return userRepository.findById(userId).orElseThrow(() -> new IllegalStateException("Authenticated user not found: " + userId));
     }
 }

@@ -3,6 +3,7 @@ package com.wrapzzo.backend.service;
 import com.wrapzzo.backend.dto.CreateQuickGiftRequest;
 import com.wrapzzo.backend.dto.PresignQuickGiftPhotoResponse;
 import com.wrapzzo.backend.dto.QuickGiftRequestResponse;
+import com.wrapzzo.backend.dto.RecipientResponse;
 import com.wrapzzo.backend.exception.GiftNotAvailableForQuickGiftException;
 import com.wrapzzo.backend.exception.GiftNotFoundException;
 import com.wrapzzo.backend.exception.PhotoOrEmailRequiredException;
@@ -25,6 +26,7 @@ import com.wrapzzo.backend.repository.UserRepository;
 import com.wrapzzo.backend.security.CurrentUser;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -65,24 +67,38 @@ public class QuickGiftService {
         Company company = requester.getCompany();
         Gift gift = resolveQuickGiftEligibleGift(request.giftId());
 
-        boolean hasEmail = request.recipientEmail() != null && !request.recipientEmail().isBlank();
+        // An existing doctor was picked (recipientId set) -- trust that record's own fields,
+        // not whatever the client happened to send alongside the id. A new doctor
+        // (recipientId null) is described entirely by the free-text fields, as before.
+        String name = request.recipientName();
+        String phone = request.recipientPhone();
+        String email = request.recipientEmail();
+        String address = request.deliveryAddress();
+        LocalDate dob = request.recipientDob();
+        if (request.recipientId() != null) {
+            RecipientResponse recipient = recipientService.get(request.recipientId());
+            name = recipient.name();
+            phone = recipient.phone();
+            email = recipient.email();
+            address = recipient.address() != null ? recipient.address() : request.deliveryAddress();
+            dob = recipient.dateOfBirth();
+        }
+
+        boolean hasEmail = email != null && !email.isBlank();
         if (gift.isPhotoRequired() && request.photo() == null && !hasEmail) {
             throw new PhotoOrEmailRequiredException();
         }
 
-        QuickGiftRequest quickGift = new QuickGiftRequest(
-                company, gift, requester, request.recipientName(), request.recipientPhone(),
-                request.recipientEmail(), request.deliveryAddress(), request.giftMessage(), request.internalNotes());
-        quickGift.setRecipientDob(request.recipientDob());
+        QuickGiftRequest quickGift =
+                new QuickGiftRequest(company, gift, requester, name, phone, email, address, request.giftMessage(), request.internalNotes());
+        quickGift.setRecipientDob(dob);
         if (request.photo() != null) {
             quickGift.setPhotoKey(request.photo().key());
             quickGift.setPhotoFileName(request.photo().fileName());
             quickGift.setPhotoContentType(request.photo().contentType());
         }
         quickGift = quickGiftRequestRepository.saveAndFlush(quickGift);
-        recipientService.upsertFromSubmission(
-                company, request.recipientName(), request.recipientPhone(), request.recipientEmail(),
-                request.deliveryAddress(), request.recipientDob(), requester);
+        recipientService.upsertFromSubmission(company, name, phone, email, address, dob, requester);
         return toResponse(quickGift);
     }
 

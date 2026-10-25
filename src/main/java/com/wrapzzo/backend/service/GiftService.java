@@ -23,6 +23,7 @@ import com.wrapzzo.backend.repository.VendorRepository;
 import com.wrapzzo.backend.security.CurrentUser;
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
@@ -85,14 +86,29 @@ public class GiftService {
         return giftRepository.findByActiveTrue().stream().map(this::toResponse).toList();
     }
 
-    /** The Gift Store / Quick Gift catalog, scoped to the caller's company's vendor roster -- see company_vendors (V31). */
+    /**
+     * The Gift Store / Quick Gift catalog, scoped to the caller's own vendor roster --
+     * company-wide mappings (company_vendors.org_unit_id null) plus anything mapped to the
+     * caller's own org unit or an ancestor of it (V33) -- a vendor scoped to "Zone North"
+     * is visible to every Region/Area under that Zone, not the rest of the company.
+     */
     @Transactional(readOnly = true)
-    public List<GiftResponse> listActiveForCompany(UUID companyId) {
-        List<UUID> vendorIds = companyVendorRepository.findVendorIdsByCompanyId(companyId);
+    public List<GiftResponse> listActiveForUser(User user) {
+        List<UUID> vendorIds = visibleVendorIds(user);
         if (vendorIds.isEmpty()) {
             return List.of();
         }
         return giftRepository.findByActiveTrueAndVendorIdIn(vendorIds).stream().map(this::toResponse).toList();
+    }
+
+    private List<UUID> visibleVendorIds(User user) {
+        UUID companyId = user.getCompany().getId();
+        if (user.getOrgUnit() == null) {
+            return companyVendorRepository.findCompanyWideVendorIds(companyId);
+        }
+        List<UUID> orgUnitAndAncestors = new ArrayList<>(user.getOrgUnit().getAncestorIds());
+        orgUnitAndAncestors.add(user.getOrgUnit().getId());
+        return companyVendorRepository.findVendorIdsVisibleToOrgUnits(companyId, orgUnitAndAncestors);
     }
 
     @Transactional(readOnly = true)
@@ -109,11 +125,11 @@ public class GiftService {
         return toResponse(gift);
     }
 
-    /** 404, not a filtered-out empty view -- a company shouldn't be able to tell "not in your roster" apart from "doesn't exist". */
+    /** 404, not a filtered-out empty view -- a user shouldn't be able to tell "not in your roster" apart from "doesn't exist". */
     @Transactional(readOnly = true)
-    public GiftResponse getActiveForCompany(UUID id, UUID companyId) {
+    public GiftResponse getActiveForUser(UUID id, User user) {
         Gift gift = getEntity(id);
-        List<UUID> vendorIds = companyVendorRepository.findVendorIdsByCompanyId(companyId);
+        List<UUID> vendorIds = visibleVendorIds(user);
         if (!gift.isActive() || gift.getVendor() == null || !vendorIds.contains(gift.getVendor().getId())) {
             throw new GiftNotFoundException(id);
         }

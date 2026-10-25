@@ -4,12 +4,15 @@ import com.wrapzzo.backend.dto.AddCompanyVendorRequest;
 import com.wrapzzo.backend.dto.AddVendorRequest;
 import com.wrapzzo.backend.dto.CompanyVendorResponse;
 import com.wrapzzo.backend.exception.CompanyNotFoundException;
+import com.wrapzzo.backend.exception.OrgUnitNotFoundException;
 import com.wrapzzo.backend.exception.VendorNotFoundException;
 import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.CompanyVendor;
+import com.wrapzzo.backend.model.OrgUnit;
 import com.wrapzzo.backend.model.Vendor;
 import com.wrapzzo.backend.repository.CompanyRepository;
 import com.wrapzzo.backend.repository.CompanyVendorRepository;
+import com.wrapzzo.backend.repository.OrgUnitRepository;
 import com.wrapzzo.backend.repository.VendorRepository;
 import java.util.List;
 import java.util.UUID;
@@ -20,9 +23,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Which vendors serve a company -- this roster is what scopes that company's Gift Store /
- * Quick Gift catalog (see GiftBrowseController, V31). list()/assign()/unassign() are the
- * admin-only (company.manage) path, operating on any company; createForCompany() is the
- * narrower self-service path (company.vendor.manage) a Company Admin uses for their own.
+ * Quick Gift catalog (see GiftService.listActiveForUser, V31/V33). A mapping is either
+ * company-wide (orgUnitId null) or scoped to one org unit and everything beneath it (e.g. a
+ * vendor that only serves "Zone North"). list()/assign()/unassign() are the admin-only
+ * (company.manage) path, operating on any company; createForCompany() is the narrower
+ * self-service path (company.vendor.manage) a Company Admin uses for their own.
  */
 @Service
 @RequiredArgsConstructor
@@ -31,6 +36,7 @@ public class CompanyVendorService {
     private final CompanyVendorRepository companyVendorRepository;
     private final CompanyRepository companyRepository;
     private final VendorRepository vendorRepository;
+    private final OrgUnitRepository orgUnitRepository;
     private final VendorService vendorService;
 
     @Transactional(readOnly = true)
@@ -42,13 +48,16 @@ public class CompanyVendorService {
     }
 
     @Transactional
-    public List<CompanyVendorResponse> assign(UUID companyId, UUID vendorId) {
+    public List<CompanyVendorResponse> assign(UUID companyId, UUID vendorId, UUID orgUnitId) {
         Company company = requireCompany(companyId);
         Vendor vendor = vendorRepository.findById(vendorId).orElseThrow(() -> new VendorNotFoundException(vendorId));
+        OrgUnit orgUnit = orgUnitId != null
+                ? orgUnitRepository.findById(orgUnitId).orElseThrow(() -> new OrgUnitNotFoundException(orgUnitId))
+                : null;
         try {
-            companyVendorRepository.save(new CompanyVendor(company, vendor));
+            companyVendorRepository.save(new CompanyVendor(company, vendor, orgUnit));
         } catch (DataIntegrityViolationException e) {
-            // Already assigned -- idempotent, not an error.
+            // Already mapped this exact way (same vendor, same org-unit scope) -- idempotent, not an error.
         }
         return list(companyId);
     }
@@ -65,7 +74,7 @@ public class CompanyVendorService {
     public List<CompanyVendorResponse> createForCompany(UUID companyId, AddCompanyVendorRequest request) {
         vendorService.add(new AddVendorRequest(request.name(), request.contactEmail(), request.contactPhone(), null, null));
         Vendor vendor = vendorRepository.findByContactEmail(request.contactEmail()).orElseThrow();
-        return assign(companyId, vendor.getId());
+        return assign(companyId, vendor.getId(), request.orgUnitId());
     }
 
     private Company requireCompany(UUID companyId) {

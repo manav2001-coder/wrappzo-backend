@@ -37,9 +37,12 @@ public record OrderResponse(
         Instant assignedAt,
         Instant createdAt,
         /** Every stage this order has actually passed through, oldest first -- same shape as the Dashboard's order timeline. */
-        List<StageEvent> history) {
+        List<StageEvent> history,
+        /** True if this order has an artwork version sitting in PENDING_REVIEW right now -- drives the Orders list's at-a-glance "needs design review" indicator. */
+        boolean hasPendingDesignReview) {
 
-    public static OrderResponse from(Order order, String recipientPhotoUrl, String giftImageUrl, List<StageEvent> history) {
+    public static OrderResponse from(
+            Order order, String recipientPhotoUrl, String giftImageUrl, List<StageEvent> history, boolean hasPendingDesignReview) {
         return new OrderResponse(
                 order.getId(),
                 "ORD-" + order.getOrderNo(),
@@ -62,6 +65,7 @@ public record OrderResponse(
                 order.getAssignmentMode(),
                 order.getAssignedAt(),
                 order.getCreatedAt(),
-                history);
+                history,
+                hasPendingDesignReview);
     }
 }

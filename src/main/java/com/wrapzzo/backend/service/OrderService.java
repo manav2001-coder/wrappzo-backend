@@ -17,7 +17,9 @@ import com.wrapzzo.backend.model.Vendor;
 import com.wrapzzo.backend.model.VendorStatus;
 import com.wrapzzo.backend.model.Gift;
 import com.wrapzzo.backend.model.GiftImage;
+import com.wrapzzo.backend.model.OrderDesignStatus;
 import com.wrapzzo.backend.repository.GiftImageRepository;
+import com.wrapzzo.backend.repository.OrderDesignRepository;
 import com.wrapzzo.backend.repository.OrderRepository;
 import com.wrapzzo.backend.repository.UserRepository;
 import com.wrapzzo.backend.repository.VendorRepository;
@@ -31,6 +33,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -61,6 +64,7 @@ public class OrderService {
     private final OrderStatusHistoryService orderStatusHistoryService;
     private final OrderPhotoService orderPhotoService;
     private final GiftImageRepository giftImageRepository;
+    private final OrderDesignRepository orderDesignRepository;
     private final FileStorageService fileStorageService;
 
     @Transactional(readOnly = true)
@@ -235,7 +239,8 @@ public class OrderService {
 
     private OrderResponse toResponse(Order order) {
         String giftImageUrl = order.getGift() != null ? firstImageUrlByGiftId(List.of(order.getGift().getId())).get(order.getGift().getId()) : null;
-        return OrderResponse.from(order, orderPhotoService.resolvePhotoUrl(order), giftImageUrl, stageEventsFor(order.getId()));
+        boolean pending = !orderDesignRepository.findByOrder_IdInAndStatus(List.of(order.getId()), OrderDesignStatus.PENDING_REVIEW).isEmpty();
+        return OrderResponse.from(order, orderPhotoService.resolvePhotoUrl(order), giftImageUrl, stageEventsFor(order.getId()), pending);
     }
 
     private List<OrderResponse> toResponseList(List<Order> orders) {
@@ -243,12 +248,18 @@ public class OrderService {
                 orderStatusHistoryService.historyByOrderId(orders.stream().map(Order::getId).toList());
         List<UUID> giftIds = orders.stream().map(Order::getGift).filter(Objects::nonNull).map(Gift::getId).toList();
         Map<UUID, String> firstImageUrlByGiftId = firstImageUrlByGiftId(giftIds);
+        Set<UUID> ordersPendingDesignReview = orderDesignRepository
+                .findByOrder_IdInAndStatus(orders.stream().map(Order::getId).toList(), OrderDesignStatus.PENDING_REVIEW)
+                .stream()
+                .map(d -> d.getOrder().getId())
+                .collect(Collectors.toSet());
         return orders.stream()
                 .map(o -> OrderResponse.from(
                         o,
                         orderPhotoService.resolvePhotoUrl(o),
                         o.getGift() != null ? firstImageUrlByGiftId.get(o.getGift().getId()) : null,
-                        toStageEvents(historyByOrderId.getOrDefault(o.getId(), List.of()))))
+                        toStageEvents(historyByOrderId.getOrDefault(o.getId(), List.of())),
+                        ordersPendingDesignReview.contains(o.getId())))
                 .toList();
     }
 

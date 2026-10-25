@@ -33,6 +33,13 @@ public class RecipientController {
         return recipientService.list();
     }
 
+    /** "Pick an existing doctor" for the Quick Gift form -- anyone who can send a gift can search, not just recipient.manage holders. */
+    @GetMapping("/search")
+    @PreAuthorize("hasAnyAuthority('recipient.manage', 'quickgift.create')")
+    public List<RecipientResponse> search(@RequestParam String q) {
+        return recipientService.search(q);
+    }
+
     @PostMapping
     @PreAuthorize("hasAuthority('recipient.manage')")
     public RecipientResponse create(@Valid @RequestBody CreateRecipientRequest request) {

@@ -12,7 +12,19 @@ public interface RecipientRepository extends JpaRepository<Recipient, UUID> {
 
     List<Recipient> findByCompanyIdOrderByNameAsc(UUID companyId);
 
+    /** Lightweight "pick an existing doctor" search for the Quick Gift form -- matches by name or phone, capped by the caller. */
+    @Query("""
+            select r from Recipient r
+            where r.company.id = :companyId
+              and (lower(r.name) like lower(concat('%', :query, '%')) or r.phone like concat('%', :query, '%'))
+            order by r.name asc
+            """)
+    List<Recipient> search(@Param("companyId") UUID companyId, @Param("query") String query);
+
     List<Recipient> findByCompanyIdAndDateOfBirthIsNotNull(UUID companyId);
+
+    /** A Member's own view of upcoming birthdays -- only the recipients they personally added/upserted. */
+    List<Recipient> findByCompanyIdAndCreatedByIdAndDateOfBirthIsNotNull(UUID companyId, UUID createdById);
 
     /**
      * Dedupe check (name+phone+email, case/whitespace-insensitive) -- null email on both

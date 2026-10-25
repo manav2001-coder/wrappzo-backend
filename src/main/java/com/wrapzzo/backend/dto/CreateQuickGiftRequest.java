@@ -6,8 +6,14 @@ import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
 import java.util.UUID;
 
+/**
+ * recipientId set = an existing doctor picked from the shared directory; recipientName/
+ * phone/etc are ignored server-side in favor of that record's own data. recipientId null =
+ * a new doctor, described entirely by the free-text fields below (same as before).
+ */
 public record CreateQuickGiftRequest(
         @NotNull UUID giftId,
+        UUID recipientId,
         @NotBlank String recipientName,
         @NotBlank String recipientPhone,
         String recipientEmail,
