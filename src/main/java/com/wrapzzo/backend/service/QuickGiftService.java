@@ -1,6 +1,7 @@
 package com.wrapzzo.backend.service;
 
 import com.wrapzzo.backend.dto.CreateQuickGiftRequest;
+import com.wrapzzo.backend.dto.DoctorDetails;
 import com.wrapzzo.backend.dto.PresignQuickGiftPhotoResponse;
 import com.wrapzzo.backend.dto.QuickGiftRequestResponse;
 import com.wrapzzo.backend.dto.RecipientResponse;
@@ -11,6 +12,7 @@ import com.wrapzzo.backend.exception.QuickGiftAlreadyReviewedException;
 import com.wrapzzo.backend.exception.QuickGiftNotApprovedException;
 import com.wrapzzo.backend.exception.QuickGiftRequestNotFoundException;
 import com.wrapzzo.backend.model.Company;
+import com.wrapzzo.backend.model.CompanyFeature;
 import com.wrapzzo.backend.model.Gift;
 import com.wrapzzo.backend.model.GiftModule;
 import com.wrapzzo.backend.model.Order;
@@ -53,6 +55,10 @@ public class QuickGiftService {
     private final QuickGiftUploadService quickGiftUploadService;
     private final RecipientService recipientService;
     private final OrderStatusHistoryService orderStatusHistoryService;
+    private final OrderService orderService;
+    private final GiftService giftService;
+    private final CompanyFeatureFlagService companyFeatureFlagService;
+    private final OrgScopeService orgScopeService;
 
     public PresignQuickGiftPhotoResponse presignPhoto(String contentType) {
         User user = currentUser();
@@ -61,11 +67,17 @@ public class QuickGiftService {
         return new PresignQuickGiftPhotoResponse(uploadUrl, key);
     }
 
+    /**
+     * With the company's DIRECT_VENDOR_ORDERING flag on (Alembic's prescription pads), there is
+     * no approval step: the request is approved by its own requester and the Order goes straight
+     * to the vendor whose gift they picked -- choosing the gift IS choosing the vendor, from the
+     * vendors that serve the requester's org unit. Off (the default), it waits for approval.
+     */
     @Transactional
     public QuickGiftRequestResponse create(CreateQuickGiftRequest request) {
         User requester = currentUser();
         Company company = requester.getCompany();
-        Gift gift = resolveQuickGiftEligibleGift(request.giftId());
+        Gift gift = resolveQuickGiftEligibleGift(request.giftId(), requester);
 
         // An existing doctor was picked (recipientId set) -- trust that record's own fields,
         // not whatever the client happened to send alongside the id. A new doctor
@@ -75,6 +87,7 @@ public class QuickGiftService {
         String email = request.recipientEmail();
         String address = request.deliveryAddress();
         LocalDate dob = request.recipientDob();
+        DoctorDetails doctor = DoctorDetails.orEmpty(request.doctor());
         if (request.recipientId() != null) {
             RecipientResponse recipient = recipientService.get(request.recipientId());
             name = recipient.name();
@@ -82,6 +95,7 @@ public class QuickGiftService {
             email = recipient.email();
             address = recipient.address() != null ? recipient.address() : request.deliveryAddress();
             dob = recipient.dateOfBirth();
+            doctor = DoctorDetails.orEmpty(recipient.doctor());
         }
 
         boolean hasEmail = email != null && !email.isBlank();
@@ -92,14 +106,44 @@ public class QuickGiftService {
         QuickGiftRequest quickGift =
                 new QuickGiftRequest(company, gift, requester, name, phone, email, address, request.giftMessage(), request.internalNotes());
         quickGift.setRecipientDob(dob);
+        quickGift.setRecipientQualification(doctor.qualification());
+        quickGift.setRecipientRegistrationNumber(doctor.registrationNumber());
+        quickGift.setRecipientSpeciality(doctor.speciality());
+        quickGift.setRecipientClinicName(doctor.clinicName());
+        quickGift.setQuantity(request.quantity() != null ? request.quantity() : 1);
+        quickGift.setOrgUnit(requester.getOrgUnit());
         if (request.photo() != null) {
             quickGift.setPhotoKey(request.photo().key());
             quickGift.setPhotoFileName(request.photo().fileName());
             quickGift.setPhotoContentType(request.photo().contentType());
         }
         quickGift = quickGiftRequestRepository.saveAndFlush(quickGift);
-        recipientService.upsertFromSubmission(company, name, phone, email, address, dob, requester);
+        recipientService.upsertFromSubmission(company, name, phone, email, address, dob, doctor, requester);
+
+        if (companyFeatureFlagService.isEnabled(company.getId(), CompanyFeature.DIRECT_VENDOR_ORDERING)) {
+            Order order = placeOrder(quickGift, requester);
+            orderService.assignOnPlacement(order, gift.getVendor());
+            String recipientUploadUrl = quickGiftUploadService.requestPhotoIfMissing(quickGift);
+            return QuickGiftRequestResponse.from(quickGift, photoUrlOf(quickGift), recipientUploadUrl);
+        }
         return toResponse(quickGift);
+    }
+
+    /** SUBMITTED -> APPROVED with its Order -- shared by an approver's approve() and direct ordering's self-approval. */
+    private Order placeOrder(QuickGiftRequest request, User actor) {
+        Order order = new Order(
+                request.getCompany(), request.getGift(), OrderSource.QUICK_GIFT, request.getRecipientName(),
+                request.getRecipientPhone(), actor);
+        order.orderQuantity(request.getQuantity());
+        order.setOrgUnit(request.getOrgUnit());
+        // saveAndFlush -- orderNo is DB-generated and only readable after the physical INSERT runs.
+        order = orderRepository.saveAndFlush(order);
+        orderStatusHistoryService.record(order, OrderStatus.PROCESSING, actor);
+        request.setOrder(order);
+        request.setStatus(QuickGiftStatus.APPROVED);
+        request.setReviewedBy(actor);
+        request.setReviewedAt(Instant.now());
+        return order;
     }
 
     @Transactional(readOnly = true)
@@ -110,12 +154,15 @@ public class QuickGiftService {
                 .toList();
     }
 
+    /** Only requests from the approver's own org subtree (or the whole company with org.scope.all). */
     @Transactional(readOnly = true)
     public List<QuickGiftRequestResponse> listPendingApproval() {
         User approver = currentUser();
+        OrgScope scope = orgScopeService.resolve(approver);
         return quickGiftRequestRepository
                 .findByCompanyIdAndStatusOrderByCreatedAtDesc(approver.getCompany().getId(), QuickGiftStatus.SUBMITTED)
                 .stream()
+                .filter(r -> scope.covers(r.getOrgUnit(), r.getRequestedBy()))
                 .map(this::toResponse)
                 .toList();
     }
@@ -127,31 +174,19 @@ public class QuickGiftService {
 
     @Transactional
     public QuickGiftRequestResponse approve(UUID id) {
-        QuickGiftRequest request = getEntity(id);
+        QuickGiftRequest request = getReviewableEntity(id);
         requireReviewable(request);
-        User approver = currentUser();
-
-        // saveAndFlush -- orderNo is DB-generated and only readable after the physical INSERT runs.
-        Order order = orderRepository.saveAndFlush(new Order(
-                request.getCompany(), request.getGift(), OrderSource.QUICK_GIFT, request.getRecipientName(),
-                request.getRecipientPhone(), approver));
-        orderStatusHistoryService.record(order, OrderStatus.PROCESSING, approver);
-        request.setOrder(order);
-        request.setStatus(QuickGiftStatus.APPROVED);
-        request.setReviewedBy(approver);
-        request.setReviewedAt(Instant.now());
+        placeOrder(request, currentUser());
 
         // Best-effort: if no photo was attached at request time, hand the recipient a
         // self-serve upload link now that there's a real Order to fulfill. Never blocks approval.
         String recipientUploadUrl = quickGiftUploadService.requestPhotoIfMissing(request);
-
-        String photoUrl = request.getPhotoKey() != null ? fileStorageService.publicUrl(request.getPhotoKey()) : null;
-        return QuickGiftRequestResponse.from(request, photoUrl, recipientUploadUrl);
+        return QuickGiftRequestResponse.from(request, photoUrlOf(request), recipientUploadUrl);
     }
 
     @Transactional
     public QuickGiftRequestResponse reject(UUID id, String reason) {
-        QuickGiftRequest request = getEntity(id);
+        QuickGiftRequest request = getReviewableEntity(id);
         requireReviewable(request);
         User approver = currentUser();
 
@@ -178,12 +213,26 @@ public class QuickGiftService {
         }
     }
 
-    private Gift resolveQuickGiftEligibleGift(UUID giftId) {
+    /** Must be a gift the requester's Gift Store actually shows them -- their org unit's vendor roster -- not just any active gift. */
+    private Gift resolveQuickGiftEligibleGift(UUID giftId, User requester) {
         Gift gift = giftRepository.findById(giftId).orElseThrow(() -> new GiftNotFoundException(giftId));
-        if (!gift.isActive() || !gift.getModules().contains(GiftModule.QUICK_GIFT)) {
+        if (!gift.getModules().contains(GiftModule.QUICK_GIFT) || !giftService.isInRoster(gift, requester)) {
             throw new GiftNotAvailableForQuickGiftException(giftId);
         }
         return gift;
+    }
+
+    /** 404 for a request outside the approver's org subtree, same as for another company's. */
+    private QuickGiftRequest getReviewableEntity(UUID id) {
+        QuickGiftRequest request = getEntity(id);
+        if (!orgScopeService.resolve(currentUser()).covers(request.getOrgUnit(), request.getRequestedBy())) {
+            throw new QuickGiftRequestNotFoundException(id);
+        }
+        return request;
+    }
+
+    private String photoUrlOf(QuickGiftRequest request) {
+        return request.getPhotoKey() != null ? fileStorageService.publicUrl(request.getPhotoKey()) : null;
     }
 
     private QuickGiftRequest getEntity(UUID id) {
@@ -209,7 +258,6 @@ public class QuickGiftService {
     }
 
     private QuickGiftRequestResponse toResponse(QuickGiftRequest request) {
-        String photoUrl = request.getPhotoKey() != null ? fileStorageService.publicUrl(request.getPhotoKey()) : null;
-        return QuickGiftRequestResponse.from(request, photoUrl);
+        return QuickGiftRequestResponse.from(request, photoUrlOf(request));
     }
 }

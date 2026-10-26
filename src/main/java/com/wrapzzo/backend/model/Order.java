@@ -74,6 +74,15 @@ public class Order {
     @Column(name = "total_price", precision = 10, scale = 2)
     private BigDecimal totalPrice;
 
+    /** Units ordered (pads, say) -- 1 for a campaign or a plain Quick Gift. totalPrice already covers all of them. */
+    @Column(nullable = false)
+    private int quantity = 1;
+
+    /** The requester's org unit when the order was raised -- what org-scoped visibility and review go by (V36). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "org_unit_id")
+    private OrgUnit orgUnit;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     private OrderSource source = OrderSource.CAMPAIGN;
@@ -122,7 +131,7 @@ public class Order {
         this.createdBy = createdBy;
     }
 
-    /** Quick Gift path -- no campaign/submission; created the moment the request is sent, no approval gate. */
+    /** Quick Gift path -- no campaign/submission; created on approval, or straight away under direct vendor ordering. */
     public Order(Company company, Gift gift, OrderSource source, String recipientName, String recipientPhone, User createdBy) {
         this.company = company;
         this.gift = gift;
@@ -131,6 +140,13 @@ public class Order {
         this.recipientPhone = recipientPhone;
         this.totalPrice = gift != null ? gift.getTotalPrice() : null;
         this.createdBy = createdBy;
+    }
+
+    /** Sets the unit count and re-snapshots totalPrice for all of them. */
+    public void orderQuantity(int quantity) {
+        this.quantity = quantity;
+        BigDecimal unitPrice = gift != null ? gift.getTotalPrice() : null;
+        this.totalPrice = unitPrice != null ? unitPrice.multiply(BigDecimal.valueOf(quantity)) : null;
     }
 
     @PrePersist

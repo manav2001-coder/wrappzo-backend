@@ -12,6 +12,7 @@ public record RecipientResponse(
         String email,
         String address,
         LocalDate dateOfBirth,
+        DoctorDetails doctor,
         String createdByName,
         Instant createdAt) {
 
@@ -23,6 +24,7 @@ public record RecipientResponse(
                 r.getEmail(),
                 r.getAddress(),
                 r.getDateOfBirth(),
+                new DoctorDetails(r.getQualification(), r.getRegistrationNumber(), r.getSpeciality(), r.getClinicName()),
                 r.getCreatedBy() != null ? r.getCreatedBy().getName() : null,
                 r.getCreatedAt());
     }

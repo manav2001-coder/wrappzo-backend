@@ -42,6 +42,7 @@ public class OrderDesignService {
     private final VendorRepository vendorRepository;
     private final UserRepository userRepository;
     private final FileStorageService fileStorageService;
+    private final OrgScopeService orgScopeService;
 
     // --- Vendor side: only orders assigned to them. ---
 
@@ -116,9 +117,15 @@ public class OrderDesignService {
         return order;
     }
 
+    /**
+     * A reviewer reviews within their own org subtree (the MR who placed it always can) -- the
+     * same OrgScope the Orders list uses, so "can see it" and "can review it" never disagree.
+     */
     private Order getOwnCompanyEntity(UUID orderId) {
         Order order = getEntity(orderId);
-        if (!order.getCompany().getId().equals(currentUser().getCompany().getId())) {
+        User user = currentUser();
+        if (!order.getCompany().getId().equals(user.getCompany().getId())
+                || !orgScopeService.resolve(user).covers(order.getOrgUnit(), order.getCreatedBy())) {
             throw new OrderNotFoundException(orderId);
         }
         return order;

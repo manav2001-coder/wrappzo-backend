@@ -1,6 +1,7 @@
 package com.wrapzzo.backend.service;
 
 import com.wrapzzo.backend.dto.CreateRecipientRequest;
+import com.wrapzzo.backend.dto.DoctorDetails;
 import com.wrapzzo.backend.dto.RecipientResponse;
 import com.wrapzzo.backend.dto.UpcomingBirthdayResponse;
 import com.wrapzzo.backend.dto.UpdateRecipientRequest;
@@ -76,12 +77,15 @@ public class RecipientService {
         User user = currentUser();
         Company company = user.getCompany();
         String email = blankToNull(request.email());
+        DoctorDetails doctor = DoctorDetails.orEmpty(request.doctor());
         recipientRepository.findMatch(company.getId(), normalizedName(request.name()), request.phone().trim(), normalizedEmail(email))
                 .ifPresent(r -> {
                     throw new RecipientAlreadyExistsException(r.getName());
                 });
+        rejectDuplicateRegistration(company.getId(), doctor, null);
         Recipient recipient = new Recipient(
                 company, request.name().trim(), request.phone().trim(), email, blankToNull(request.address()), request.dateOfBirth(), user);
+        applyDoctorDetails(recipient, doctor);
         return RecipientResponse.from(recipientRepository.save(recipient));
     }
 
@@ -105,7 +109,31 @@ public class RecipientService {
         recipient.setEmail(email);
         recipient.setAddress(blankToNull(request.address()));
         recipient.setDateOfBirth(request.dateOfBirth());
+        // Omitted means "leave the doctor details alone" -- a form that doesn't show them must not wipe them.
+        if (request.doctor() != null) {
+            DoctorDetails doctor = request.doctor().normalized();
+            rejectDuplicateRegistration(recipient.getCompany().getId(), doctor, id);
+            applyDoctorDetails(recipient, doctor);
+        }
         return RecipientResponse.from(recipient);
+    }
+
+    private void rejectDuplicateRegistration(UUID companyId, DoctorDetails doctor, UUID excludeId) {
+        if (doctor.registrationNumber() == null) {
+            return;
+        }
+        recipientRepository.findFirstByCompany_IdAndRegistrationNumberIgnoreCase(companyId, doctor.registrationNumber())
+                .filter(r -> !r.getId().equals(excludeId))
+                .ifPresent(r -> {
+                    throw new RecipientAlreadyExistsException(r.getName());
+                });
+    }
+
+    private static void applyDoctorDetails(Recipient recipient, DoctorDetails doctor) {
+        recipient.setQualification(doctor.qualification());
+        recipient.setRegistrationNumber(doctor.registrationNumber());
+        recipient.setSpeciality(doctor.speciality());
+        recipient.setClinicName(doctor.clinicName());
     }
 
     private Recipient getEntity(UUID id) {
@@ -125,6 +153,13 @@ public class RecipientService {
     @Transactional
     public void upsertFromSubmission(Company company, String name, String phone, String email, String address, LocalDate dateOfBirth,
             User createdBy) {
+        upsertFromSubmission(company, name, phone, email, address, dateOfBirth, DoctorDetails.EMPTY, createdBy);
+    }
+
+    /** Same, carrying a doctor's print details -- a known registration number counts as "already there" too. */
+    @Transactional
+    public void upsertFromSubmission(Company company, String name, String phone, String email, String address, LocalDate dateOfBirth,
+            DoctorDetails doctor, User createdBy) {
         if (name == null || name.isBlank() || phone == null || phone.isBlank()) {
             return;
         }
@@ -132,7 +167,13 @@ public class RecipientService {
         if (recipientRepository.findMatch(company.getId(), normalizedName(name), phone.trim(), normalizedEmail(cleanEmail)).isPresent()) {
             return;
         }
-        recipientRepository.save(new Recipient(company, name.trim(), phone.trim(), cleanEmail, blankToNull(address), dateOfBirth, createdBy));
+        if (doctor.registrationNumber() != null
+                && recipientRepository.findFirstByCompany_IdAndRegistrationNumberIgnoreCase(company.getId(), doctor.registrationNumber()).isPresent()) {
+            return;
+        }
+        Recipient recipient = new Recipient(company, name.trim(), phone.trim(), cleanEmail, blankToNull(address), dateOfBirth, createdBy);
+        applyDoctorDetails(recipient, doctor);
+        recipientRepository.save(recipient);
     }
 
     /** A Company Admin sees every upcoming birthday company-wide; a Member sees only the recipients they themselves added. */

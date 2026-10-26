@@ -59,7 +59,7 @@ public class UserService {
 
     /** Granted to every new company's auto-seeded "Member" role. */
     private static final List<String> DEFAULT_MEMBER_ACCESS_KEYS =
-            List.of("campaign.submit", "quickgift.create", "dashboard.view", "recipient.manage");
+            List.of("campaign.submit", "quickgift.create", "dashboard.view", "recipient.manage", "order.design.review");
 
     private final UserRepository userRepository;
     private final CompanyRepository companyRepository;

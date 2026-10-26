@@ -68,6 +68,11 @@ public class Gift {
     @Column(name = "photo_required", nullable = false)
     private boolean photoRequired = false;
 
+    /** When true (a personalised prescription pad, say), the vendor may not dispatch or deliver
+     * an order for this gift until the company has approved one of its artwork proofs. */
+    @Column(name = "artwork_required", nullable = false)
+    private boolean artworkRequired = false;
+
     /** Which commerce paths this gift can be picked from -- every gift is available in all three, unconditionally. */
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "gift_modules", joinColumns = @JoinColumn(name = "gift_id"))

@@ -4,6 +4,7 @@ import com.wrapzzo.backend.dto.BulkAssignResponse;
 import com.wrapzzo.backend.dto.DashboardResponse.StageEvent;
 import com.wrapzzo.backend.dto.OrderResponse;
 import com.wrapzzo.backend.dto.VendorOrderResponse;
+import com.wrapzzo.backend.exception.ArtworkNotApprovedException;
 import com.wrapzzo.backend.exception.InvalidOrderStatusTransitionException;
 import com.wrapzzo.backend.exception.NoAvailableVendorException;
 import com.wrapzzo.backend.exception.OrderNotFoundException;
@@ -12,6 +13,7 @@ import com.wrapzzo.backend.model.Order;
 import com.wrapzzo.backend.model.OrderAssignmentMode;
 import com.wrapzzo.backend.model.OrderStatus;
 import com.wrapzzo.backend.model.OrderStatusHistory;
+import com.wrapzzo.backend.model.QuickGiftRequest;
 import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.model.Vendor;
 import com.wrapzzo.backend.model.VendorStatus;
@@ -21,6 +23,7 @@ import com.wrapzzo.backend.model.OrderDesignStatus;
 import com.wrapzzo.backend.repository.GiftImageRepository;
 import com.wrapzzo.backend.repository.OrderDesignRepository;
 import com.wrapzzo.backend.repository.OrderRepository;
+import com.wrapzzo.backend.repository.QuickGiftRequestRepository;
 import com.wrapzzo.backend.repository.UserRepository;
 import com.wrapzzo.backend.repository.VendorRepository;
 import com.wrapzzo.backend.security.CurrentUser;
@@ -58,7 +61,12 @@ public class OrderService {
     /** Once an order leaves these (delivered, cancelled, or still unassigned/PROCESSING), it's no longer the vendor's to edit. */
     private static final Set<OrderStatus> VENDOR_EDITABLE_SOURCE_STATUSES = Set.of(OrderStatus.PRODUCTION_QUEUE, OrderStatus.DISPATCHED);
 
+    /** Statuses that mean "it has left the vendor" -- closed to an artwork-required order until a proof is approved. */
+    private static final Set<OrderStatus> ARTWORK_GATED_STATUSES = Set.of(OrderStatus.DISPATCHED, OrderStatus.DELIVERED);
+
     private final OrderRepository orderRepository;
+    private final QuickGiftRequestRepository quickGiftRequestRepository;
+    private final OrgScopeService orgScopeService;
     private final UserRepository userRepository;
     private final VendorRepository vendorRepository;
     private final OrderStatusHistoryService orderStatusHistoryService;
@@ -67,9 +75,21 @@ public class OrderService {
     private final OrderDesignRepository orderDesignRepository;
     private final FileStorageService fileStorageService;
 
+    /** The caller's own org unit and everything under it (or the whole company with org.scope.all) -- see OrgScope. */
     @Transactional(readOnly = true)
     public List<OrderResponse> list() {
-        return toResponseList(orderRepository.findByCompanyIdOrderByCreatedAtDesc(currentUser().getCompany().getId()));
+        User user = currentUser();
+        UUID companyId = user.getCompany().getId();
+        OrgScope scope = orgScopeService.resolve(user);
+        List<Order> orders;
+        if (scope.unrestricted()) {
+            orders = orderRepository.findByCompanyIdOrderByCreatedAtDesc(companyId);
+        } else if (scope.orgUnitIds().isEmpty()) {
+            orders = orderRepository.findByCompanyIdAndCreatedByIdOrderByCreatedAtDesc(companyId, user.getId());
+        } else {
+            orders = orderRepository.findVisibleInCompany(companyId, user.getId(), scope.orgUnitIds());
+        }
+        return toResponseList(orders);
     }
 
     @Transactional(readOnly = true)
@@ -83,12 +103,24 @@ public class OrderService {
         return orderPhotoService.requestPhotoLink(getOwnCompanyEntity(id));
     }
 
+    /** 404 for another company's order and for one outside the caller's org scope alike. */
     private Order getOwnCompanyEntity(UUID id) {
         Order order = getEntity(id);
-        if (!order.getCompany().getId().equals(currentUser().getCompany().getId())) {
+        User user = currentUser();
+        if (!order.getCompany().getId().equals(user.getCompany().getId())
+                || !orgScopeService.resolve(user).covers(order.getOrgUnit(), order.getCreatedBy())) {
             throw new OrderNotFoundException(id);
         }
         return order;
+    }
+
+    /**
+     * Direct vendor ordering: the requester already chose the vendor (by choosing that vendor's
+     * gift), so the order is routed on creation -- same bookkeeping as an admin's manual assign.
+     */
+    @Transactional
+    public void assignOnPlacement(Order order, Vendor vendor) {
+        applyAssignment(order, vendor, OrderAssignmentMode.MANUAL);
     }
 
     // --- Vendor self-service side: only orders routed to this vendor, and moving them through fulfillment. ---
@@ -96,14 +128,13 @@ public class OrderService {
     @Transactional(readOnly = true)
     public List<VendorOrderResponse> listForVendor(UUID vendorId) {
         return orderRepository.findByAssignedVendorIdOrderByCreatedAtDesc(vendorId).stream()
-                .map(o -> VendorOrderResponse.from(o, orderPhotoService.resolvePhotoUrl(o)))
+                .map(this::toVendorResponse)
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public VendorOrderResponse getForVendor(UUID id, UUID vendorId) {
-        Order order = getEntityForVendor(id, vendorId);
-        return VendorOrderResponse.from(order, orderPhotoService.resolvePhotoUrl(order));
+        return toVendorResponse(getEntityForVendor(id, vendorId));
     }
 
     @Transactional
@@ -112,11 +143,27 @@ public class OrderService {
         if (!VENDOR_EDITABLE_SOURCE_STATUSES.contains(order.getStatus()) || !VENDOR_SELECTABLE_STATUSES.contains(newStatus)) {
             throw new InvalidOrderStatusTransitionException(id, order.getStatus(), newStatus);
         }
+        if (ARTWORK_GATED_STATUSES.contains(newStatus) && requiresArtwork(order) && !hasApprovedArtwork(order)) {
+            throw new ArtworkNotApprovedException(id);
+        }
         order.setStatus(newStatus);
         // null changedBy -- this runs under vendor auth (CurrentVendor), not CurrentUser, and
         // OrderStatusHistory.changedBy is a User FK; there's no User row for a vendor to record here.
         orderStatusHistoryService.record(order, newStatus, null);
-        return VendorOrderResponse.from(order, orderPhotoService.resolvePhotoUrl(order));
+        return toVendorResponse(order);
+    }
+
+    private static boolean requiresArtwork(Order order) {
+        return order.getGift() != null && order.getGift().isArtworkRequired();
+    }
+
+    private boolean hasApprovedArtwork(Order order) {
+        return orderDesignRepository.existsByOrder_IdAndStatus(order.getId(), OrderDesignStatus.APPROVED);
+    }
+
+    private VendorOrderResponse toVendorResponse(Order order) {
+        QuickGiftRequest request = quickGiftRequestRepository.findByOrderId(order.getId()).orElse(null);
+        return VendorOrderResponse.from(order, orderPhotoService.resolvePhotoUrl(order), request, hasApprovedArtwork(order));
     }
 
     private Order getEntityForVendor(UUID id, UUID vendorId) {

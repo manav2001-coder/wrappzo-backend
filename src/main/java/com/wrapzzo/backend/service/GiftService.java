@@ -68,6 +68,7 @@ public class GiftService {
         toSave.setMarkupFeePercentage(feeOrZero(request.markupFeePercentage()));
         toSave.setCommissionFeePercentage(feeOrZero(request.commissionFeePercentage()));
         toSave.setPhotoRequired(request.photoRequired());
+        toSave.setArtworkRequired(request.artworkRequired());
         // saveAndFlush -- giftNo is DB-generated and only readable after the physical
         // INSERT runs, which plain save() would otherwise defer until transaction commit.
         Gift gift = giftRepository.saveAndFlush(toSave);
@@ -129,11 +130,16 @@ public class GiftService {
     @Transactional(readOnly = true)
     public GiftResponse getActiveForUser(UUID id, User user) {
         Gift gift = getEntity(id);
-        List<UUID> vendorIds = visibleVendorIds(user);
-        if (!gift.isActive() || gift.getVendor() == null || !vendorIds.contains(gift.getVendor().getId())) {
+        if (!isInRoster(gift, user)) {
             throw new GiftNotFoundException(id);
         }
         return toResponse(gift);
+    }
+
+    /** The Gift Store's own rule, for a write path (placing an order) that already holds the gift. */
+    @Transactional(readOnly = true)
+    public boolean isInRoster(Gift gift, User user) {
+        return gift.isActive() && gift.getVendor() != null && visibleVendorIds(user).contains(gift.getVendor().getId());
     }
 
     @Transactional
@@ -152,6 +158,7 @@ public class GiftService {
         gift.setMarkupFeePercentage(feeOrZero(request.markupFeePercentage()));
         gift.setCommissionFeePercentage(feeOrZero(request.commissionFeePercentage()));
         gift.setPhotoRequired(request.photoRequired());
+        gift.setArtworkRequired(request.artworkRequired());
         gift.setUpdatedBy(currentUser());
         return toResponse(gift);
     }
@@ -208,6 +215,7 @@ public class GiftService {
         toSave.setMarkupFeePercentage(feeOrZero(request.markupFeePercentage()));
         toSave.setCommissionFeePercentage(feeOrZero(request.commissionFeePercentage()));
         toSave.setPhotoRequired(request.photoRequired());
+        toSave.setArtworkRequired(request.artworkRequired());
         // saveAndFlush -- giftNo is DB-generated and only readable after the physical
         // INSERT runs, which plain save() would otherwise defer until transaction commit.
         Gift gift = giftRepository.saveAndFlush(toSave);
@@ -239,6 +247,7 @@ public class GiftService {
         gift.setMarkupFeePercentage(feeOrZero(request.markupFeePercentage()));
         gift.setCommissionFeePercentage(feeOrZero(request.commissionFeePercentage()));
         gift.setPhotoRequired(request.photoRequired());
+        gift.setArtworkRequired(request.artworkRequired());
         return toResponse(gift);
     }
 
