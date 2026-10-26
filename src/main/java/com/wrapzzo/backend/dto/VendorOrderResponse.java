@@ -3,6 +3,7 @@ package com.wrapzzo.backend.dto;
 import com.wrapzzo.backend.model.Order;
 import com.wrapzzo.backend.model.OrderSource;
 import com.wrapzzo.backend.model.OrderStatus;
+import com.wrapzzo.backend.model.QuickGiftRequest;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
@@ -25,12 +26,21 @@ public record VendorOrderResponse(
         String recipientPhotoUrl,
         /** The gift's raw price -- no markup, no commission. Null if the gift has no price set. */
         BigDecimal price,
+        int quantity,
+        /** What to print and where to ship -- a Quick Gift order's own request; null for a campaign order. */
+        String deliveryAddress,
+        String giftMessage,
+        DoctorDetails doctor,
+        /** True when this order may not be dispatched until a proof is approved (Gift.artworkRequired). */
+        boolean artworkRequired,
+        boolean artworkApproved,
         OrderSource source,
         OrderStatus status,
         Instant assignedAt,
         Instant createdAt) {
 
-    public static VendorOrderResponse from(Order order, String recipientPhotoUrl) {
+    /** {@code request} is the Quick Gift request the order came from, or null (a campaign order). */
+    public static VendorOrderResponse from(Order order, String recipientPhotoUrl, QuickGiftRequest request, boolean artworkApproved) {
         return new VendorOrderResponse(
                 order.getId(),
                 "ORD-" + order.getOrderNo(),
@@ -41,6 +51,15 @@ public record VendorOrderResponse(
                 order.getRecipientPhone(),
                 recipientPhotoUrl,
                 order.getGift() != null ? order.getGift().getPrice() : null,
+                order.getQuantity(),
+                request != null ? request.getDeliveryAddress() : null,
+                request != null ? request.getGiftMessage() : null,
+                request != null
+                        ? new DoctorDetails(request.getRecipientQualification(), request.getRecipientRegistrationNumber(),
+                                request.getRecipientSpeciality(), request.getRecipientClinicName())
+                        : null,
+                order.getGift() != null && order.getGift().isArtworkRequired(),
+                artworkApproved,
                 order.getSource(),
                 order.getStatus(),
                 order.getAssignedAt(),

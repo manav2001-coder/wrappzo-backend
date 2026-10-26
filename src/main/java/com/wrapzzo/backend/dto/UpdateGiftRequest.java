@@ -15,5 +15,6 @@ public record UpdateGiftRequest(
         @NotNull @PositiveOrZero BigDecimal price,
         @PositiveOrZero BigDecimal markupFeePercentage,
         @PositiveOrZero BigDecimal commissionFeePercentage,
-        boolean photoRequired) {
+        boolean photoRequired,
+        boolean artworkRequired) {
 }

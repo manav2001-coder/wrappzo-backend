@@ -29,6 +29,11 @@ public record OrderResponse(
         String recipientPhotoUrl,
         /** Snapshotted off the gift's total price at approval time -- see Order.totalPrice. */
         BigDecimal totalPrice,
+        int quantity,
+        /** The org unit the order was raised from -- null for one raised by someone with no unit. */
+        String orgUnitName,
+        /** The gift may not be dispatched until a proof is approved (Gift.artworkRequired). */
+        boolean artworkRequired,
         OrderSource source,
         OrderStatus status,
         UUID assignedVendorId,
@@ -58,6 +63,9 @@ public record OrderResponse(
                 order.getRecipientPhone(),
                 recipientPhotoUrl,
                 order.getTotalPrice(),
+                order.getQuantity(),
+                order.getOrgUnit() != null ? order.getOrgUnit().getName() : null,
+                order.getGift() != null && order.getGift().isArtworkRequired(),
                 order.getSource(),
                 order.getStatus(),
                 order.getAssignedVendor() != null ? order.getAssignedVendor().getId() : null,

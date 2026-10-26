@@ -16,6 +16,8 @@ public interface OrderDesignRepository extends JpaRepository<OrderDesign, UUID> 
 
     int countByOrder_Id(UUID orderId);
 
+    boolean existsByOrder_IdAndStatus(UUID orderId, OrderDesignStatus status);
+
     /** Batch "which of these orders has a design awaiting review" -- for the Orders list's at-a-glance indicator, not N+1 per order. */
     List<OrderDesign> findByOrder_IdInAndStatus(Collection<UUID> orderIds, OrderDesignStatus status);
 }

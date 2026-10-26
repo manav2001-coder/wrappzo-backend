@@ -191,6 +191,11 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
     }
 
+    @ExceptionHandler(ArtworkNotApprovedException.class)
+    public ResponseEntity<Map<String, String>> handleArtworkNotApproved(ArtworkNotApprovedException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+    }
+
     @ExceptionHandler(CampaignAudienceRequiredException.class)
     public ResponseEntity<Map<String, String>> handleCampaignAudienceRequired(CampaignAudienceRequiredException e) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));

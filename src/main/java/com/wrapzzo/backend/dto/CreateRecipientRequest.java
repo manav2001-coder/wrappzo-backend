@@ -1,5 +1,6 @@
 package com.wrapzzo.backend.dto;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.time.LocalDate;
 
@@ -8,5 +9,6 @@ public record CreateRecipientRequest(
         @NotBlank String phone,
         String email,
         String address,
-        LocalDate dateOfBirth) {
+        LocalDate dateOfBirth,
+        @Valid DoctorDetails doctor) {
 }

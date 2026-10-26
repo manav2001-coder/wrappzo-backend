@@ -53,6 +53,20 @@ public class Recipient {
     @Column(name = "date_of_birth")
     private LocalDate dateOfBirth;
 
+    // Doctor details a prescription pad is printed with -- null for any non-doctor recipient.
+    @Column
+    private String qualification;
+
+    /** Medical-council registration number -- unique per company when set (V36), the doctor's natural key. */
+    @Column(name = "registration_number")
+    private String registrationNumber;
+
+    @Column
+    private String speciality;
+
+    @Column(name = "clinic_name")
+    private String clinicName;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by")
     private User createdBy;

@@ -76,6 +76,27 @@ public class QuickGiftRequest {
     @Column(name = "recipient_dob")
     private LocalDate recipientDob;
 
+    // The doctor details the gift (a prescription pad) is printed with, as sent -- see Recipient for the directory copy.
+    @Column(name = "recipient_qualification")
+    private String recipientQualification;
+
+    @Column(name = "recipient_registration_number")
+    private String recipientRegistrationNumber;
+
+    @Column(name = "recipient_speciality")
+    private String recipientSpeciality;
+
+    @Column(name = "recipient_clinic_name")
+    private String recipientClinicName;
+
+    @Column(nullable = false)
+    private int quantity = 1;
+
+    /** The requester's org unit when they raised it -- routes approval and visibility through the org tree (V36). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "org_unit_id")
+    private OrgUnit orgUnit;
+
     @Column(name = "gift_message")
     private String giftMessage;
 

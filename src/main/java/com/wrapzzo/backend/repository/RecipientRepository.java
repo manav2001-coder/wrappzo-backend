@@ -12,11 +12,12 @@ public interface RecipientRepository extends JpaRepository<Recipient, UUID> {
 
     List<Recipient> findByCompanyIdOrderByNameAsc(UUID companyId);
 
-    /** Lightweight "pick an existing doctor" search for the Quick Gift form -- matches by name or phone, capped by the caller. */
+    /** Lightweight "pick an existing doctor" search for the Quick Gift form -- matches by name, phone or registration number, capped by the caller. */
     @Query("""
             select r from Recipient r
             where r.company.id = :companyId
-              and (lower(r.name) like lower(concat('%', :query, '%')) or r.phone like concat('%', :query, '%'))
+              and (lower(r.name) like lower(concat('%', :query, '%')) or r.phone like concat('%', :query, '%')
+                   or lower(r.registrationNumber) like lower(concat('%', :query, '%')))
             order by r.name asc
             """)
     List<Recipient> search(@Param("companyId") UUID companyId, @Param("query") String query);
@@ -55,4 +56,7 @@ public interface RecipientRepository extends JpaRepository<Recipient, UUID> {
             """)
     Optional<Recipient> findMatchExcluding(@Param("companyId") UUID companyId, @Param("excludeId") UUID excludeId,
             @Param("name") String name, @Param("phone") String phone, @Param("email") String email);
+
+    /** The doctor-directory dedupe: the same registration number in a company is the same doctor, whatever the name/phone say. */
+    Optional<Recipient> findFirstByCompany_IdAndRegistrationNumberIgnoreCase(UUID companyId, String registrationNumber);
 }

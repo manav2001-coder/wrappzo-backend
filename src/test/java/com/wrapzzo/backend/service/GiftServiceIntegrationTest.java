@@ -75,7 +75,7 @@ class GiftServiceIntegrationTest {
 
     @Test
     void createAndGetRoundTrip() {
-        GiftResponse created = giftService.create(new CreateGiftRequest("Steel Water Bottle", "Drinkware", "750ml", 50, 10, BigDecimal.valueOf(100), null, null, false));
+        GiftResponse created = giftService.create(new CreateGiftRequest("Steel Water Bottle", "Drinkware", "750ml", 50, 10, BigDecimal.valueOf(100), null, null, false, false));
 
         assertThat(created.active()).isTrue();
         assertThat(created.images()).isEmpty();
@@ -90,9 +90,9 @@ class GiftServiceIntegrationTest {
 
     @Test
     void updateChangesFields() {
-        GiftResponse created = giftService.create(new CreateGiftRequest("Mug", "Drinkware", null, null, null, BigDecimal.valueOf(100), null, null, false));
+        GiftResponse created = giftService.create(new CreateGiftRequest("Mug", "Drinkware", null, null, null, BigDecimal.valueOf(100), null, null, false, false));
 
-        GiftResponse updated = giftService.update(created.id(), new UpdateGiftRequest("Ceramic Mug", "Drinkware", "350ml", 25, 7, BigDecimal.valueOf(100), null, null, false));
+        GiftResponse updated = giftService.update(created.id(), new UpdateGiftRequest("Ceramic Mug", "Drinkware", "350ml", 25, 7, BigDecimal.valueOf(100), null, null, false, false));
 
         assertThat(updated.name()).isEqualTo("Ceramic Mug");
         assertThat(updated.moq()).isEqualTo(25);
@@ -100,7 +100,7 @@ class GiftServiceIntegrationTest {
 
     @Test
     void deactivatedGiftsAreHiddenFromTheBrowseViewButVisibleToAdmin() {
-        GiftResponse created = giftService.create(new CreateGiftRequest("Notebook", "Stationery", null, null, null, BigDecimal.valueOf(100), null, null, false));
+        GiftResponse created = giftService.create(new CreateGiftRequest("Notebook", "Stationery", null, null, null, BigDecimal.valueOf(100), null, null, false, false));
         assertThat(giftService.listActive()).extracting(GiftResponse::id).contains(created.id());
 
         giftService.setActive(created.id(), false);
@@ -112,7 +112,7 @@ class GiftServiceIntegrationTest {
 
     @Test
     void imageUploadRoundTripsThroughStorage() {
-        GiftResponse created = giftService.create(new CreateGiftRequest("Pen Set", "Stationery", null, null, null, BigDecimal.valueOf(100), null, null, false));
+        GiftResponse created = giftService.create(new CreateGiftRequest("Pen Set", "Stationery", null, null, null, BigDecimal.valueOf(100), null, null, false, false));
 
         PresignGiftImageUploadResponse presigned = giftService.presignImageUpload(created.id(), "image/png");
         assertThat(presigned.key()).startsWith("gifts/" + created.id() + "/image-").endsWith(".png");
@@ -130,7 +130,7 @@ class GiftServiceIntegrationTest {
         Vendor vendor = saveVendor("Acme Printing");
 
         GiftResponse created = giftService.createForVendor(
-                new CreateGiftRequest("Vendor Tote Bag", "Bags", null, 20, 5, BigDecimal.valueOf(100), null, null, false), vendor.getId());
+                new CreateGiftRequest("Vendor Tote Bag", "Bags", null, 20, 5, BigDecimal.valueOf(100), null, null, false, false), vendor.getId());
 
         assertThat(created.vendorId()).isEqualTo(vendor.getId());
         assertThat(created.vendorName()).isEqualTo("Acme Printing");
@@ -146,21 +146,21 @@ class GiftServiceIntegrationTest {
     void aVendorCannotSeeOrEditAnotherVendorsGift() {
         Vendor owner = saveVendor("Owner Vendor");
         Vendor other = saveVendor("Other Vendor");
-        GiftResponse created = giftService.createForVendor(new CreateGiftRequest("Owner's Mug", "Drinkware", null, null, null, BigDecimal.valueOf(100), null, null, false), owner.getId());
+        GiftResponse created = giftService.createForVendor(new CreateGiftRequest("Owner's Mug", "Drinkware", null, null, null, BigDecimal.valueOf(100), null, null, false, false), owner.getId());
 
         assertThatThrownBy(() -> giftService.getForVendor(created.id(), other.getId())).isInstanceOf(GiftNotFoundException.class);
         assertThatThrownBy(() ->
-                        giftService.updateForVendor(created.id(), new UpdateGiftRequest("Hijacked", "Drinkware", null, null, null, BigDecimal.valueOf(100), null, null, false), other.getId()))
+                        giftService.updateForVendor(created.id(), new UpdateGiftRequest("Hijacked", "Drinkware", null, null, null, BigDecimal.valueOf(100), null, null, false, false), other.getId()))
                 .isInstanceOf(GiftNotFoundException.class);
     }
 
     @Test
     void adminCanDelistButNotEditAVendorGift() {
         Vendor vendor = saveVendor("Delist Test Vendor");
-        GiftResponse created = giftService.createForVendor(new CreateGiftRequest("Delistable Gift", "Misc", null, null, null, BigDecimal.valueOf(100), null, null, false), vendor.getId());
+        GiftResponse created = giftService.createForVendor(new CreateGiftRequest("Delistable Gift", "Misc", null, null, null, BigDecimal.valueOf(100), null, null, false, false), vendor.getId());
 
         assertThatThrownBy(() ->
-                        giftService.update(created.id(), new UpdateGiftRequest("Renamed", "Misc", null, null, null, BigDecimal.valueOf(100), null, null, false)))
+                        giftService.update(created.id(), new UpdateGiftRequest("Renamed", "Misc", null, null, null, BigDecimal.valueOf(100), null, null, false, false)))
                 .isInstanceOf(VendorGiftEditNotAllowedException.class);
 
         GiftResponse delisted = giftService.setActive(created.id(), false);
@@ -171,10 +171,10 @@ class GiftServiceIntegrationTest {
     @Test
     void vendorCanUpdateAndUploadImagesForTheirOwnGift() {
         Vendor vendor = saveVendor("Image Test Vendor");
-        GiftResponse created = giftService.createForVendor(new CreateGiftRequest("Image Test Gift", "Misc", null, null, null, BigDecimal.valueOf(100), null, null, false), vendor.getId());
+        GiftResponse created = giftService.createForVendor(new CreateGiftRequest("Image Test Gift", "Misc", null, null, null, BigDecimal.valueOf(100), null, null, false, false), vendor.getId());
 
         GiftResponse updated = giftService.updateForVendor(
-                created.id(), new UpdateGiftRequest("Renamed Gift", "Misc", "desc", 10, 5, BigDecimal.valueOf(100), null, null, false), vendor.getId());
+                created.id(), new UpdateGiftRequest("Renamed Gift", "Misc", "desc", 10, 5, BigDecimal.valueOf(100), null, null, false, false), vendor.getId());
         assertThat(updated.name()).isEqualTo("Renamed Gift");
 
         PresignGiftImageUploadResponse presigned = giftService.presignImageUploadForVendor(created.id(), vendor.getId(), "image/png");

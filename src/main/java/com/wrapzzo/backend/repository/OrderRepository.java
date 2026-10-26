@@ -14,6 +14,19 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
 
     List<Order> findByCompanyIdOrderByCreatedAtDesc(UUID companyId);
 
+    /** A company's orders narrowed to an OrgScope's units, plus whatever the caller raised themselves. orgUnitIds must be non-empty. */
+    @Query("""
+            select o from Order o
+            where o.company.id = :companyId
+              and (o.createdBy.id = :userId or o.orgUnit.id in :orgUnitIds)
+            order by o.createdAt desc
+            """)
+    List<Order> findVisibleInCompany(@Param("companyId") UUID companyId, @Param("userId") UUID userId,
+            @Param("orgUnitIds") Collection<UUID> orgUnitIds);
+
+    /** The empty-scope case of findVisibleInCompany: no org unit on the profile, so only one's own. */
+    List<Order> findByCompanyIdAndCreatedByIdOrderByCreatedAtDesc(UUID companyId, UUID createdById);
+
     List<Order> findByCampaignIdOrderByCreatedAtDesc(UUID campaignId);
 
     /** A company's Quick Gift orders -- no campaign to key off, so this is the bulk-assign source for that pseudo-group. */
