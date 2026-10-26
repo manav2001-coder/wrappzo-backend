@@ -19,6 +19,7 @@ import com.wrapzzo.backend.model.Vendor;
 import com.wrapzzo.backend.model.VendorStatus;
 import com.wrapzzo.backend.model.Gift;
 import com.wrapzzo.backend.model.GiftImage;
+import com.wrapzzo.backend.model.OrderDesign;
 import com.wrapzzo.backend.model.OrderDesignStatus;
 import com.wrapzzo.backend.repository.GiftImageRepository;
 import com.wrapzzo.backend.repository.OrderDesignRepository;
@@ -125,10 +126,18 @@ public class OrderService {
 
     // --- Vendor self-service side: only orders routed to this vendor, and moving them through fulfillment. ---
 
+    /** Each order's originating request and its proofs are fetched in one query apiece, not one per order. */
     @Transactional(readOnly = true)
     public List<VendorOrderResponse> listForVendor(UUID vendorId) {
-        return orderRepository.findByAssignedVendorIdOrderByCreatedAtDesc(vendorId).stream()
-                .map(this::toVendorResponse)
+        List<Order> orders = orderRepository.findByAssignedVendorIdOrderByCreatedAtDesc(vendorId);
+        List<UUID> orderIds = orders.stream().map(Order::getId).toList();
+        Map<UUID, QuickGiftRequest> requestByOrderId = quickGiftRequestRepository.findByOrder_IdIn(orderIds).stream()
+                .collect(Collectors.toMap(r -> r.getOrder().getId(), r -> r));
+        Map<UUID, List<OrderDesign>> designsByOrderId = orderDesignRepository.findByOrder_IdInOrderByVersionNoDesc(orderIds).stream()
+                .collect(Collectors.groupingBy(d -> d.getOrder().getId()));
+        return orders.stream()
+                .map(o -> VendorOrderResponse.from(
+                        o, orderPhotoService.resolvePhotoUrl(o), requestByOrderId.get(o.getId()), designsByOrderId.getOrDefault(o.getId(), List.of())))
                 .toList();
     }
 
@@ -163,7 +172,8 @@ public class OrderService {
 
     private VendorOrderResponse toVendorResponse(Order order) {
         QuickGiftRequest request = quickGiftRequestRepository.findByOrderId(order.getId()).orElse(null);
-        return VendorOrderResponse.from(order, orderPhotoService.resolvePhotoUrl(order), request, hasApprovedArtwork(order));
+        List<OrderDesign> designs = orderDesignRepository.findByOrder_IdOrderByVersionNoDesc(order.getId());
+        return VendorOrderResponse.from(order, orderPhotoService.resolvePhotoUrl(order), request, designs);
     }
 
     private Order getEntityForVendor(UUID id, UUID vendorId) {

@@ -2,6 +2,7 @@ package com.wrapzzo.backend.repository;
 
 import com.wrapzzo.backend.model.QuickGiftRequest;
 import com.wrapzzo.backend.model.QuickGiftStatus;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -17,4 +18,7 @@ public interface QuickGiftRequestRepository extends JpaRepository<QuickGiftReque
 
     /** The reverse of QuickGiftRequest.order (a @OneToOne with the FK on this side) -- lets Order-facing code find its originating request. */
     Optional<QuickGiftRequest> findByOrderId(UUID orderId);
+
+    /** findByOrderId for a whole list of orders in one query -- the vendor's order queue. */
+    List<QuickGiftRequest> findByOrder_IdIn(Collection<UUID> orderIds);
 }

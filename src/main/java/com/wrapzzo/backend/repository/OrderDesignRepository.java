@@ -18,6 +18,9 @@ public interface OrderDesignRepository extends JpaRepository<OrderDesign, UUID> 
 
     boolean existsByOrder_IdAndStatus(UUID orderId, OrderDesignStatus status);
 
+    /** Every proof of several orders, newest version first within each -- one query for the vendor's order queue. */
+    List<OrderDesign> findByOrder_IdInOrderByVersionNoDesc(Collection<UUID> orderIds);
+
     /** Batch "which of these orders has a design awaiting review" -- for the Orders list's at-a-glance indicator, not N+1 per order. */
     List<OrderDesign> findByOrder_IdInAndStatus(Collection<UUID> orderIds, OrderDesignStatus status);
 }

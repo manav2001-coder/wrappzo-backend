@@ -1,11 +1,14 @@
 package com.wrapzzo.backend.dto;
 
 import com.wrapzzo.backend.model.Order;
+import com.wrapzzo.backend.model.OrderDesign;
+import com.wrapzzo.backend.model.OrderDesignStatus;
 import com.wrapzzo.backend.model.OrderSource;
 import com.wrapzzo.backend.model.OrderStatus;
 import com.wrapzzo.backend.model.QuickGiftRequest;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -34,13 +37,22 @@ public record VendorOrderResponse(
         /** True when this order may not be dispatched until a proof is approved (Gift.artworkRequired). */
         boolean artworkRequired,
         boolean artworkApproved,
+        /** The newest proof's status and review comment -- null before the first upload. */
+        OrderDesignStatus latestDesignStatus,
+        String latestDesignComment,
+        int designVersions,
         OrderSource source,
         OrderStatus status,
         Instant assignedAt,
         Instant createdAt) {
 
-    /** {@code request} is the Quick Gift request the order came from, or null (a campaign order). */
-    public static VendorOrderResponse from(Order order, String recipientPhotoUrl, QuickGiftRequest request, boolean artworkApproved) {
+    /**
+     * {@code request} is the Quick Gift request the order came from, or null (a campaign order);
+     * {@code designs} are the order's proofs, newest version first.
+     */
+    public static VendorOrderResponse from(Order order, String recipientPhotoUrl, QuickGiftRequest request, List<OrderDesign> designs) {
+        OrderDesign latest = designs.isEmpty() ? null : designs.get(0);
+        boolean artworkApproved = designs.stream().anyMatch(d -> d.getStatus() == OrderDesignStatus.APPROVED);
         return new VendorOrderResponse(
                 order.getId(),
                 "ORD-" + order.getOrderNo(),
@@ -60,6 +72,9 @@ public record VendorOrderResponse(
                         : null,
                 order.getGift() != null && order.getGift().isArtworkRequired(),
                 artworkApproved,
+                latest != null ? latest.getStatus() : null,
+                latest != null ? latest.getReviewComment() : null,
+                designs.size(),
                 order.getSource(),
                 order.getStatus(),
                 order.getAssignedAt(),

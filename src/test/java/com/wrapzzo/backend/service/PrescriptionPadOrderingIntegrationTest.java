@@ -219,6 +219,35 @@ class PrescriptionPadOrderingIntegrationTest {
     }
 
     @Test
+    void theVendorQueueCarriesEachOrdersLatestProofAndItsReviewComment() {
+        enableDirectOrdering();
+        actAs(mrNorth);
+        UUID orderId = quickGiftService.create(padOrder(pad, 2)).orderId();
+        Order order = orderRepository.findById(orderId).orElseThrow();
+
+        actAsVendor(printer);
+        VendorOrderResponse before = orderService.listForVendor(printer.getId()).stream().filter(o -> o.id().equals(orderId)).findFirst().orElseThrow();
+        assertThat(before.latestDesignStatus()).isNull();
+        assertThat(before.designVersions()).isZero();
+
+        OrderDesign rejected = new OrderDesign(order, 1, "designs/v1.pdf", "v1.pdf", printer);
+        rejected.setStatus(OrderDesignStatus.REJECTED);
+        rejected.setReviewComment("Registration number is cut off");
+        orderDesignRepository.save(rejected);
+        orderDesignRepository.save(new OrderDesign(order, 2, "designs/v2.pdf", "v2.pdf", printer));
+
+        VendorOrderResponse after = orderService.listForVendor(printer.getId()).stream().filter(o -> o.id().equals(orderId)).findFirst().orElseThrow();
+        assertThat(after.designVersions()).isEqualTo(2);
+        assertThat(after.latestDesignStatus()).isEqualTo(OrderDesignStatus.PENDING_REVIEW);
+        assertThat(after.artworkApproved()).isFalse();
+        assertThat(after.doctor().registrationNumber()).isEqualTo("MH-12345");
+
+        VendorOrderResponse single = orderService.getForVendor(orderId, printer.getId());
+        assertThat(single.designVersions()).isEqualTo(2);
+        assertThat(single.latestDesignStatus()).isEqualTo(OrderDesignStatus.PENDING_REVIEW);
+    }
+
+    @Test
     void ordersAreVisibleUpTheOrgTreeButNotAcrossIt() {
         enableDirectOrdering();
         actAs(mrNorth);
