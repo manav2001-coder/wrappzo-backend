@@ -40,6 +40,13 @@ public class RecipientController {
         return recipientService.search(q);
     }
 
+    /** An MR's own working list (recipient_assignments) -- not the full shared directory. */
+    @GetMapping("/mine")
+    @PreAuthorize("hasAnyAuthority('recipient.manage', 'quickgift.create')")
+    public List<RecipientResponse> mine() {
+        return recipientService.listMine();
+    }
+
     @PostMapping
     @PreAuthorize("hasAuthority('recipient.manage')")
     public RecipientResponse create(@Valid @RequestBody CreateRecipientRequest request) {

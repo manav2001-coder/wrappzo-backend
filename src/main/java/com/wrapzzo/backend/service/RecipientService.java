@@ -9,6 +9,7 @@ import com.wrapzzo.backend.exception.RecipientNotFoundException;
 import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.Recipient;
 import com.wrapzzo.backend.model.User;
+import com.wrapzzo.backend.repository.RecipientAssignmentRepository;
 import com.wrapzzo.backend.repository.RecipientRepository;
 import com.wrapzzo.backend.repository.UserRepository;
 import com.wrapzzo.backend.security.CurrentUser;
@@ -34,6 +35,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class RecipientService {
 
     private final RecipientRepository recipientRepository;
+    private final RecipientAssignmentRepository recipientAssignmentRepository;
     private final UserRepository userRepository;
     private final CampaignService campaignService;
 
@@ -42,6 +44,15 @@ public class RecipientService {
         User user = currentUser();
         return recipientRepository.findByCompanyIdOrderByNameAsc(user.getCompany().getId()).stream()
                 .map(RecipientResponse::from)
+                .toList();
+    }
+
+    /** An MR's own working list (recipient_assignments) -- not the full shared directory. */
+    @Transactional(readOnly = true)
+    public List<RecipientResponse> listMine() {
+        User user = currentUser();
+        return recipientAssignmentRepository.findByMrUser_IdOrderByAssignedAtDesc(user.getId()).stream()
+                .map(a -> RecipientResponse.from(a.getRecipient()))
                 .toList();
     }
 

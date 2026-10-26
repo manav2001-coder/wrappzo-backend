@@ -251,6 +251,16 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
     }
 
+    @ExceptionHandler(DoctorChangeRequestNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleDoctorChangeRequestNotFound(DoctorChangeRequestNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
+    }
+
+    @ExceptionHandler(DoctorChangeRequestAlreadyReviewedException.class)
+    public ResponseEntity<Map<String, String>> handleDoctorChangeRequestAlreadyReviewed(DoctorChangeRequestAlreadyReviewedException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+    }
+
     /**
      * Safety net for any unique/foreign-key violation that reaches the database without an
      * explicit pre-check above -- without this, it bubbles up uncaught and Spring's
