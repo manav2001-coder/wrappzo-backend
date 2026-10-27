@@ -227,4 +227,18 @@ class DesignationAccessServiceIntegrationTest {
             assertThat(role.accessControlIds()).containsExactly(quickGiftId);
         });
     }
+
+    @Test
+    void aGrantMadeStraightInTheDatabaseShowsOnceTheCacheIsClearedAtStartup() {
+        Role memberRole = roleRepository.save(new Role(companyRepository.getReferenceById(companyId), "Member"));
+        User user = userRepository.save(new User(companyRepository.getReferenceById(companyId), memberRole, "MR", "mr@cache-test.com", "n/a"));
+        assertThat(accessControlCacheService.resolveEffectiveKeys(user)).doesNotContain("menu.manage");
+
+        // What a deploy's migration does: insert the grant directly, bypassing every invalidation.
+        roleAccessControlRepository.save(new RoleAccessControl(memberRole, accessControlRepository.findByKey("menu.manage").orElseThrow()));
+        assertThat(accessControlCacheService.resolveEffectiveKeys(user)).doesNotContain("menu.manage");
+
+        assertThat(accessControlCacheService.clearAll()).isPositive();
+        assertThat(accessControlCacheService.resolveEffectiveKeys(user)).contains("menu.manage");
+    }
 }
