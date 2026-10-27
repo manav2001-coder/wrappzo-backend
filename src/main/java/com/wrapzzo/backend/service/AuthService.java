@@ -34,6 +34,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AccessControlCacheService accessControlCacheService;
+    private final CompanyMenuLabelService companyMenuLabelService;
     private final long refreshTokenExpiryDays;
     private final int maxFailedLoginAttempts;
     private final long lockoutDurationMinutes;
@@ -45,6 +46,7 @@ public class AuthService {
             PasswordEncoder passwordEncoder,
             JwtService jwtService,
             AccessControlCacheService accessControlCacheService,
+            CompanyMenuLabelService companyMenuLabelService,
             @Value("${auth.refresh-token-expiry-days}") long refreshTokenExpiryDays,
             @Value("${auth.max-failed-login-attempts}") int maxFailedLoginAttempts,
             @Value("${auth.lockout-duration-minutes}") long lockoutDurationMinutes) {
@@ -54,6 +56,7 @@ public class AuthService {
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.accessControlCacheService = accessControlCacheService;
+        this.companyMenuLabelService = companyMenuLabelService;
         this.refreshTokenExpiryDays = refreshTokenExpiryDays;
         this.maxFailedLoginAttempts = maxFailedLoginAttempts;
         this.lockoutDurationMinutes = lockoutDurationMinutes;
@@ -68,7 +71,8 @@ public class AuthService {
                 accessControlCacheService.resolveEffectiveKeys(user),
                 user.getCompany() != null ? user.getCompany().getId() : null,
                 user.getCompany() != null ? user.getCompany().getName() : null,
-                userRepository.existsByReportsToId(userId));
+                userRepository.existsByReportsToId(userId),
+                companyMenuLabelService.labelsFor(user.getCompany() != null ? user.getCompany().getId() : null));
     }
 
     @Transactional
