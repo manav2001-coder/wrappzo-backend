@@ -66,6 +66,7 @@ class OrgScopeAndDoctorChangeIntegrationTest {
     @Autowired private DashboardService dashboardService;
     @Autowired private UserService userService;
     @Autowired private DoctorChangeRequestService doctorChangeRequestService;
+    @Autowired private AuthService authService;
     @Autowired private CompanyFeatureFlagService companyFeatureFlagService;
     @Autowired private CompanyRepository companyRepository;
     @Autowired private RoleRepository roleRepository;
@@ -253,5 +254,13 @@ class OrgScopeAndDoctorChangeIntegrationTest {
         assertThat(quickGiftService.create(new CreateQuickGiftRequest(
                 pad.getId(), null, "Dr. Enough", "9800000056", null, "Somewhere", null, null, null, null, null, 50)).orderId())
                 .isNotNull();
+    }
+
+    @Test
+    void aManagerWithReportsIsFlaggedAsManagingATeam() {
+        actAs(manager);
+        assertThat(authService.getCurrentUser().managesTeam()).isTrue();
+        actAs(mrNorth);
+        assertThat(authService.getCurrentUser().managesTeam()).isFalse();
     }
 }

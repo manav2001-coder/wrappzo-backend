@@ -67,7 +67,8 @@ public class AuthService {
         return new CurrentUserResponse(
                 accessControlCacheService.resolveEffectiveKeys(user),
                 user.getCompany() != null ? user.getCompany().getId() : null,
-                user.getCompany() != null ? user.getCompany().getName() : null);
+                user.getCompany() != null ? user.getCompany().getName() : null,
+                userRepository.existsByReportsToId(userId));
     }
 
     @Transactional

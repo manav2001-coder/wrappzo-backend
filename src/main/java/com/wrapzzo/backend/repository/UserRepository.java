@@ -24,6 +24,8 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     /** Direct reports of a manager -- the building block for walking a whole reporting tree. */
     List<User> findByReportsToId(UUID managerId);
 
+    boolean existsByReportsToId(UUID managerId);
+
     /** Everyone assigned to any of these org units -- paired with OrgUnitRepository.findSelfAndDescendants. */
     List<User> findByOrgUnitIdIn(Collection<UUID> orgUnitIds);
 
