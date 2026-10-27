@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
  * gift (quickgift.create) or full directory access (recipient.manage) -- not a new,
  * separate key just to propose a change. The review endpoints have no key requirement of
  * their own: DoctorChangeRequestService enforces that the caller is either the requester's
- * direct manager or a recipient.manage holder, and simply returns nothing for anyone else.
+ * direct manager or a recipient.approve holder, and simply returns nothing for anyone else.
  */
 @RestController
 @RequestMapping("/api/doctor-requests")
