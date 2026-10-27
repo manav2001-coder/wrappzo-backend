@@ -205,4 +205,26 @@ class DesignationAccessServiceIntegrationTest {
 
         assertThat(designationAccessService.getAccessControls(companyId, "Area Manager").accessControlIds()).isNotEmpty();
     }
+
+    @Test
+    void aDesignationsAccessCarriesWhatItsUsersGetFromTheirRole() {
+        Role memberRole = roleRepository.save(new Role(companyRepository.getReferenceById(companyId), "Member"));
+        UUID quickGiftId = accessControlRepository.findByKey("quickgift.create").orElseThrow().getId();
+        roleAccessControlRepository.save(new RoleAccessControl(memberRole, accessControlRepository.findByKey("quickgift.create").orElseThrow()));
+        for (String email : List.of("mr1@designation-test.com", "mr2@designation-test.com")) {
+            User mr = new User(companyRepository.getReferenceById(companyId), memberRole, "MR", email, "n/a");
+            mr.setDesignation("Medical Representative");
+            userRepository.save(mr);
+        }
+
+        DesignationAccessResponse access = designationAccessService.getAccessControls(companyId, "Medical Representative");
+
+        // Nothing granted to the designation itself, but its users' role still shows.
+        assertThat(access.accessControlIds()).isEmpty();
+        assertThat(access.roles()).singleElement().satisfies(role -> {
+            assertThat(role.roleName()).isEqualTo("Member");
+            assertThat(role.userCount()).isEqualTo(2);
+            assertThat(role.accessControlIds()).containsExactly(quickGiftId);
+        });
+    }
 }

@@ -1,19 +1,26 @@
 package com.wrapzzo.backend.service;
 
 import com.wrapzzo.backend.dto.DesignationAccessResponse;
+import com.wrapzzo.backend.dto.DesignationAccessResponse.RoleGrant;
 import com.wrapzzo.backend.exception.CompanyNotFoundException;
 import com.wrapzzo.backend.exception.InvalidAccessControlSelectionException;
 import com.wrapzzo.backend.model.AccessControl;
 import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.DesignationAccessControl;
+import com.wrapzzo.backend.model.Role;
+import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.repository.AccessControlRepository;
 import com.wrapzzo.backend.repository.CompanyRepository;
 import com.wrapzzo.backend.repository.DesignationAccessControlRepository;
+import com.wrapzzo.backend.repository.RoleAccessControlRepository;
 import com.wrapzzo.backend.repository.UserRepository;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +40,7 @@ public class DesignationAccessService {
     private final AccessControlRepository accessControlRepository;
     private final CompanyAccessGuard companyAccessGuard;
     private final AccessControlCacheService accessControlCacheService;
+    private final RoleAccessControlRepository roleAccessControlRepository;
 
     @Transactional(readOnly = true)
     public List<String> listDesignations(UUID companyId) {
@@ -45,7 +53,23 @@ public class DesignationAccessService {
         companyAccessGuard.requireOwnCompanyOrPlatformStaff(companyId);
         Set<UUID> accessControlIds =
                 new HashSet<>(designationAccessControlRepository.findAccessControlIdsByCompanyIdAndDesignation(companyId, designation));
-        return new DesignationAccessResponse(designation, accessControlIds);
+        return new DesignationAccessResponse(designation, accessControlIds, roleGrants(companyId, designation));
+    }
+
+    /** The roles held by this designation's users, each with its own keys -- most of what they can do comes from here. */
+    private List<RoleGrant> roleGrants(UUID companyId, String designation) {
+        Map<Role, Long> usersByRole = userRepository.findByCompanyIdAndDesignation(companyId, designation).stream()
+                .filter(user -> user.getRole() != null)
+                .collect(Collectors.groupingBy(User::getRole, Collectors.counting()));
+        return usersByRole.entrySet().stream()
+                .map(entry -> new RoleGrant(
+                        entry.getKey().getName(),
+                        entry.getValue().intValue(),
+                        roleAccessControlRepository.findByRoleId(entry.getKey().getId()).stream()
+                                .map(grant -> grant.getAccessControl().getId())
+                                .collect(Collectors.toSet())))
+                .sorted(Comparator.comparing(RoleGrant::userCount).reversed().thenComparing(RoleGrant::roleName))
+                .toList();
     }
 
     @Transactional
@@ -69,7 +93,7 @@ public class DesignationAccessService {
             designationAccessControlRepository.save(new DesignationAccessControl(company, designation, accessControl));
         }
         accessControlCacheService.invalidateDesignationPermissions(companyId, designation);
-        return new DesignationAccessResponse(designation, accessControlIds);
+        return new DesignationAccessResponse(designation, accessControlIds, roleGrants(companyId, designation));
     }
 
     /**
