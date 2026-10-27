@@ -2,11 +2,13 @@ package com.wrapzzo.backend.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 import com.wrapzzo.backend.dto.CreateQuickGiftRequest;
 import com.wrapzzo.backend.dto.CreateRecipientRequest;
 import com.wrapzzo.backend.dto.DoctorDetails;
 import com.wrapzzo.backend.dto.OrderResponse;
+import com.wrapzzo.backend.dto.PendingArtworkApprovalResponse;
 import com.wrapzzo.backend.dto.QuickGiftRequestResponse;
 import com.wrapzzo.backend.dto.VendorOrderResponse;
 import com.wrapzzo.backend.exception.ArtworkNotApprovedException;
@@ -49,6 +51,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
@@ -79,6 +82,7 @@ class PrescriptionPadOrderingIntegrationTest {
     @Autowired private GiftRepository giftRepository;
     @Autowired private OrderRepository orderRepository;
     @Autowired private OrderDesignRepository orderDesignRepository;
+    @Autowired private OrderDesignService orderDesignService;
 
     private Company company;
     private Role memberRole;
@@ -299,5 +303,67 @@ class PrescriptionPadOrderingIntegrationTest {
         assertThatThrownBy(() -> recipientService.create(new CreateRecipientRequest("Asha Shah", "9800000002", null, null, null,
                 new DoctorDetails(null, "mh-777", null, null))))
                 .isInstanceOf(RecipientAlreadyExistsException.class);
+    }
+
+    /** Senior artwork approval on, the MR reporting to the North zonal manager, and one proof uploaded. */
+    private OrderDesign orderWithProofNeedingSeniorApproval() {
+        enableDirectOrdering();
+        companyFeatureFlagService.setEnabled(company.getId(), CompanyFeature.MARKETING_DESIGN_APPROVAL, true);
+        mrNorth.setReportsTo(zonalManagerNorth);
+        userRepository.save(mrNorth);
+        actAs(mrNorth);
+        Order order = orderRepository.findById(quickGiftService.create(padOrder(pad, 1)).orderId()).orElseThrow();
+        return orderDesignRepository.save(new OrderDesign(order, 1, "designs/v1.pdf", "v1.pdf", printer));
+    }
+
+    @Test
+    void withSeniorApprovalOnTheMrsApprovalWaitsForTheirManagerBeforePrint() {
+        OrderDesign proof = orderWithProofNeedingSeniorApproval();
+        UUID orderId = proof.getOrder().getId();
+
+        actAs(mrNorth);
+        assertThat(orderDesignService.approve(orderId, proof.getId()).status()).isEqualTo(OrderDesignStatus.PENDING_FINAL_APPROVAL);
+        actAsVendor(printer);
+        assertThatThrownBy(() -> orderService.updateStatusForVendor(orderId, printer.getId(), OrderStatus.DISPATCHED))
+                .isInstanceOf(ArtworkNotApprovedException.class);
+
+        // Neither the MR who approved it nor a peer MR can give the final approval.
+        actAs(mrNorth);
+        assertThatThrownBy(() -> orderDesignService.approve(orderId, proof.getId())).isInstanceOf(AccessDeniedException.class);
+        actAs(mrSouth);
+        assertThat(orderDesignService.listPendingFinalApproval()).isEmpty();
+        assertThatThrownBy(() -> orderDesignService.approve(orderId, proof.getId())).isInstanceOf(AccessDeniedException.class);
+
+        actAs(zonalManagerNorth);
+        assertThat(orderDesignService.listPendingFinalApproval())
+                .extracting(PendingArtworkApprovalResponse::designId, PendingArtworkApprovalResponse::mrApprovedByName)
+                .containsExactly(tuple(proof.getId(), "MR North"));
+        assertThat(orderDesignService.approve(orderId, proof.getId()).status()).isEqualTo(OrderDesignStatus.APPROVED);
+
+        actAsVendor(printer);
+        assertThat(orderService.updateStatusForVendor(orderId, printer.getId(), OrderStatus.DISPATCHED).status())
+                .isEqualTo(OrderStatus.DISPATCHED);
+    }
+
+    @Test
+    void theSeniorCanSendAnMrApprovedProofBackToTheVendor() {
+        OrderDesign proof = orderWithProofNeedingSeniorApproval();
+        UUID orderId = proof.getOrder().getId();
+        actAs(mrNorth);
+        orderDesignService.approve(orderId, proof.getId());
+
+        actAs(zonalManagerNorth);
+        assertThat(orderDesignService.reject(orderId, proof.getId(), "Use the clinic's new address").status())
+                .isEqualTo(OrderDesignStatus.REJECTED);
+        assertThat(orderDesignService.listPendingFinalApproval()).isEmpty();
+    }
+
+    @Test
+    void withoutSeniorApprovalTheMrsApprovalStillUnlocksPrintStraightAway() {
+        enableDirectOrdering();
+        actAs(mrNorth);
+        Order order = orderRepository.findById(quickGiftService.create(padOrder(pad, 1)).orderId()).orElseThrow();
+        OrderDesign proof = orderDesignRepository.save(new OrderDesign(order, 1, "designs/v1.pdf", "v1.pdf", printer));
+        assertThat(orderDesignService.approve(order.getId(), proof.getId()).status()).isEqualTo(OrderDesignStatus.APPROVED);
     }
 }
