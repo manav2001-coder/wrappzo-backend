@@ -13,11 +13,14 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** A company's own org-unit tree, self-service -- e.g. for picking which org unit a self-onboarded vendor should serve. Always scoped to the caller's own company. */
+/**
+ * A company's own org-unit tree, self-service -- for picking which org unit a self-onboarded vendor
+ * or a warehouse serves. Always scoped to the caller's own company.
+ */
 @RestController
 @RequestMapping("/api/company/org-units")
 @RequiredArgsConstructor
-@PreAuthorize("hasAuthority('company.vendor.manage')")
+@PreAuthorize("hasAnyAuthority('company.vendor.manage', 'warehouse.manage')")
 public class CompanyOrgUnitController {
 
     private final OrgUnitService orgUnitService;

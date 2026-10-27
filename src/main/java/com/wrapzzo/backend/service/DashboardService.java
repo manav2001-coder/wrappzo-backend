@@ -69,6 +69,9 @@ public class DashboardService {
     private static final int TREND_WEEKS = 12;
     private static final int DRILLDOWN_LIMIT = 50;
     private static final Set<OrderStatus> IN_PROGRESS_STATUSES = Set.of(OrderStatus.PROCESSING, OrderStatus.PRODUCTION_QUEUE);
+    /** Left the vendor, not yet delivered -- a warehouse-routed order's two warehouse stages count as on the way too. */
+    private static final Set<OrderStatus> IN_TRANSIT_STATUSES =
+            Set.of(OrderStatus.DISPATCHED, OrderStatus.RECEIVED_AT_WAREHOUSE, OrderStatus.OUT_FOR_DELIVERY);
 
     private final CampaignRepository campaignRepository;
     private final CampaignFormRepository campaignFormRepository;
@@ -105,7 +108,7 @@ public class DashboardService {
 
         long campaignsRunning = campaigns.stream().filter(c -> c.getStatus() == CampaignStatus.ACTIVE).count();
         long giftsInProgress = orders.stream().filter(o -> IN_PROGRESS_STATUSES.contains(o.getStatus())).count();
-        long dispatched = orders.stream().filter(o -> o.getStatus() == OrderStatus.DISPATCHED).count();
+        long dispatched = orders.stream().filter(o -> IN_TRANSIT_STATUSES.contains(o.getStatus())).count();
         long delivered = orders.stream().filter(o -> o.getStatus() == OrderStatus.DELIVERED).count();
 
         long submissionsPending = submissions.stream()
@@ -250,7 +253,7 @@ public class DashboardService {
     private boolean pipelineStageMatches(OrderStatus status, String stage) {
         return switch (stage) {
             case "inProgress" -> IN_PROGRESS_STATUSES.contains(status);
-            case "dispatched" -> status == OrderStatus.DISPATCHED;
+            case "dispatched" -> IN_TRANSIT_STATUSES.contains(status);
             case "delivered" -> status == OrderStatus.DELIVERED;
             default -> false;
         };
@@ -575,8 +578,14 @@ public class DashboardService {
             }
         }
         for (Order o : orders) {
-            if (o.getStatus() == OrderStatus.DISPATCHED || o.getStatus() == OrderStatus.DELIVERED) {
-                String verb = o.getStatus() == OrderStatus.DISPATCHED ? "dispatched order" : "delivered order";
+            String verb = switch (o.getStatus()) {
+                case DISPATCHED -> "dispatched order";
+                case RECEIVED_AT_WAREHOUSE -> "received at warehouse order";
+                case OUT_FOR_DELIVERY -> "sent out for delivery order";
+                case DELIVERED -> "delivered order";
+                default -> null;
+            };
+            if (verb != null) {
                 String actor = o.getCreatedBy() != null ? o.getCreatedBy().getName() : "Wrapzzo";
                 UUID campaignId = o.getCampaign() != null ? o.getCampaign().getId() : null;
                 activity.add(new ActivityItem(actor, verb, "ORD-" + o.getOrderNo(), o.getUpdatedAt(), campaignId, null));

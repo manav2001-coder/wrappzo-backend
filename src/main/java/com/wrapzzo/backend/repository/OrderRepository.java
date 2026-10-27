@@ -29,6 +29,9 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
 
     List<Order> findByCampaignIdOrderByCreatedAtDesc(UUID campaignId);
 
+    /** A company's warehouse-routed orders in the given stages -- the warehouse's work queue. */
+    List<Order> findByCompanyIdAndWarehouseIsNotNullAndStatusInOrderByUpdatedAtDesc(UUID companyId, Collection<OrderStatus> statuses);
+
     /** A company's Quick Gift orders -- no campaign to key off, so this is the bulk-assign source for that pseudo-group. */
     List<Order> findByCompanyIdAndCampaignIdIsNullOrderByCreatedAtDesc(UUID companyId);
 

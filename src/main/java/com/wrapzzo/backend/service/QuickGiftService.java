@@ -59,6 +59,7 @@ public class QuickGiftService {
     private final GiftService giftService;
     private final CompanyFeatureFlagService companyFeatureFlagService;
     private final OrgScopeService orgScopeService;
+    private final WarehouseService warehouseService;
 
     public PresignQuickGiftPhotoResponse presignPhoto(String contentType) {
         User user = currentUser();
@@ -136,6 +137,7 @@ public class QuickGiftService {
                 request.getRecipientPhone(), actor);
         order.orderQuantity(request.getQuantity());
         order.setOrgUnit(request.getOrgUnit());
+        warehouseService.routeOnPlacement(order);
         // saveAndFlush -- orderNo is DB-generated and only readable after the physical INSERT runs.
         order = orderRepository.saveAndFlush(order);
         orderStatusHistoryService.record(order, OrderStatus.PROCESSING, actor);

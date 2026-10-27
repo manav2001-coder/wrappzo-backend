@@ -34,6 +34,8 @@ public record OrderResponse(
         String orgUnitName,
         /** The gift may not be dispatched until a proof is approved (Gift.artworkRequired). */
         boolean artworkRequired,
+        /** The company warehouse this order goes through (WAREHOUSE_LOGISTICS); null = shipped straight to the recipient. */
+        String warehouseName,
         OrderSource source,
         OrderStatus status,
         UUID assignedVendorId,
@@ -66,6 +68,7 @@ public record OrderResponse(
                 order.getQuantity(),
                 order.getOrgUnit() != null ? order.getOrgUnit().getName() : null,
                 order.getGift() != null && order.getGift().isArtworkRequired(),
+                order.getWarehouse() != null ? order.getWarehouse().getName() : null,
                 order.getSource(),
                 order.getStatus(),
                 order.getAssignedVendor() != null ? order.getAssignedVendor().getId() : null,

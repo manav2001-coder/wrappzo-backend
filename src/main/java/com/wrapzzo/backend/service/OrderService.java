@@ -149,7 +149,11 @@ public class OrderService {
     @Transactional
     public VendorOrderResponse updateStatusForVendor(UUID id, UUID vendorId, OrderStatus newStatus) {
         Order order = getEntityForVendor(id, vendorId);
-        if (!VENDOR_EDITABLE_SOURCE_STATUSES.contains(order.getStatus()) || !VENDOR_SELECTABLE_STATUSES.contains(newStatus)) {
+        // A warehouse-routed order is delivered by the warehouse (WarehouseService), not the vendor.
+        boolean viaWarehouse = order.getWarehouse() != null;
+        if (!VENDOR_EDITABLE_SOURCE_STATUSES.contains(order.getStatus())
+                || !VENDOR_SELECTABLE_STATUSES.contains(newStatus)
+                || (viaWarehouse && newStatus == OrderStatus.DELIVERED)) {
             throw new InvalidOrderStatusTransitionException(id, order.getStatus(), newStatus);
         }
         if (ARTWORK_GATED_STATUSES.contains(newStatus) && requiresArtwork(order) && !hasApprovedArtwork(order)) {

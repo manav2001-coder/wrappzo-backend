@@ -62,6 +62,7 @@ public class SubmissionService {
     private final RecipientUploadService recipientUploadService;
     private final RecipientService recipientService;
     private final OrderStatusHistoryService orderStatusHistoryService;
+    private final WarehouseService warehouseService;
 
     public PresignSubmissionAttachmentResponse presignAttachment(UUID campaignId, String contentType) {
         Campaign campaign = campaignService.getEntity(campaignId);
@@ -98,6 +99,7 @@ public class SubmissionService {
         String recipientPhone = valueText(submission.getId(), "recipientPhone");
         Order order = new Order(submission.getCompany(), submission.getCampaign(), submission, submission.getGift(), recipientName, recipientPhone, submitter);
         order.setOrgUnit(submitter.getOrgUnit());
+        warehouseService.routeOnPlacement(order);
         orderRepository.save(order);
         orderStatusHistoryService.record(order, OrderStatus.PROCESSING, submitter);
 

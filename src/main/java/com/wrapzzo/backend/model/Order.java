@@ -83,6 +83,11 @@ public class Order {
     @JoinColumn(name = "org_unit_id")
     private OrgUnit orgUnit;
 
+    /** Set at placement when the company runs warehouses (WAREHOUSE_LOGISTICS): the vendor ships here, not to the recipient. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "warehouse_id")
+    private Warehouse warehouse;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     private OrderSource source = OrderSource.CAMPAIGN;

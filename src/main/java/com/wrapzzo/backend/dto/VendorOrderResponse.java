@@ -30,8 +30,11 @@ public record VendorOrderResponse(
         /** The gift's raw price -- no markup, no commission. Null if the gift has no price set. */
         BigDecimal price,
         int quantity,
-        /** What to print and where to ship -- a Quick Gift order's own request; null for a campaign order. */
+        /** The final recipient's address -- a Quick Gift order's own request; null for a campaign order. */
         String deliveryAddress,
+        /** Set when the order goes through the company's warehouse: ship here, not to deliveryAddress, and the warehouse delivers it. */
+        String shipToWarehouseName,
+        String shipToWarehouseAddress,
         String giftMessage,
         DoctorDetails doctor,
         /** True when this order may not be dispatched until a proof is approved (Gift.artworkRequired). */
@@ -65,6 +68,8 @@ public record VendorOrderResponse(
                 order.getGift() != null ? order.getGift().getPrice() : null,
                 order.getQuantity(),
                 request != null ? request.getDeliveryAddress() : null,
+                order.getWarehouse() != null ? order.getWarehouse().getName() : null,
+                order.getWarehouse() != null ? order.getWarehouse().getAddress() : null,
                 request != null ? request.getGiftMessage() : null,
                 request != null
                         ? new DoctorDetails(request.getRecipientQualification(), request.getRecipientRegistrationNumber(),
