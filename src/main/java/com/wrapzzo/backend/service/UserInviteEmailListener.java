@@ -24,10 +24,10 @@ public class UserInviteEmailListener {
         for (PendingInvite invite : event.invites()) {
             emailSender.send(
                     invite.email(),
-                    "Set up your Wrapzzo account",
+                    "Set up your Wrappzo account",
                     """
                     <p>Hi %s,</p>
-                    <p>You've been added on Wrapzzo. Set up your password to get started:</p>
+                    <p>You've been added on Wrappzo. Set up your password to get started:</p>
                     <p><a href="%s">Set up your password</a></p>
                     <p>This link expires in %d hours.</p>
                     """

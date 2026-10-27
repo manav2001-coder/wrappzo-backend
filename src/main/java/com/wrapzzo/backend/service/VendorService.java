@@ -128,10 +128,10 @@ public class VendorService {
         try {
             emailSender.send(
                     vendor.getContactEmail(),
-                    "Set up your Wrapzzo vendor account",
+                    "Set up your Wrappzo vendor account",
                     """
                     <p>Hi %s,</p>
-                    <p>You've been added as a vendor on Wrapzzo. Set up your password to get started:</p>
+                    <p>You've been added as a vendor on Wrappzo. Set up your password to get started:</p>
                     <p><a href="%s">Set up your password</a></p>
                     <p>This link expires in %d hours.</p>
                     """

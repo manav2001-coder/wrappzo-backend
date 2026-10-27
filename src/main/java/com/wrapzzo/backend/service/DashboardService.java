@@ -586,7 +586,7 @@ public class DashboardService {
                 default -> null;
             };
             if (verb != null) {
-                String actor = o.getCreatedBy() != null ? o.getCreatedBy().getName() : "Wrapzzo";
+                String actor = o.getCreatedBy() != null ? o.getCreatedBy().getName() : "Wrappzo";
                 UUID campaignId = o.getCampaign() != null ? o.getCampaign().getId() : null;
                 activity.add(new ActivityItem(actor, verb, "ORD-" + o.getOrderNo(), o.getUpdatedAt(), campaignId, null));
             }
