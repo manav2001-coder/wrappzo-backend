@@ -28,7 +28,7 @@ public class CompanyService {
     private static final List<String> DEFAULT_COMPANY_ADMIN_ACCESS_KEYS = List.of(
             "user.manage", "role.manage", "campaign.manage", "campaign.submit", "campaign.approve",
             "quickgift.create", "dashboard.view", "recipient.manage", "order.design.review", OrgScopeService.ALL_UNITS_KEY,
-            "warehouse.manage", DoctorChangeRequestService.APPROVE_ANY_KEY);
+            "warehouse.manage", DoctorChangeRequestService.APPROVE_ANY_KEY, OrderDesignService.FINAL_APPROVAL_KEY);
 
     private static final Duration LOGO_UPLOAD_URL_EXPIRY = Duration.ofMinutes(5);
 

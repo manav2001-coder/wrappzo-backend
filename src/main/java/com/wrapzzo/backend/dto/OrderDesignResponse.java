@@ -14,6 +14,9 @@ public record OrderDesignResponse(
         OrderDesignStatus status,
         String uploadedByVendorName,
         String reviewedByUserName,
+        /** The MR's approval, when the proof then went to a senior for the final one. */
+        String firstApprovedByUserName,
+        Instant firstApprovedAt,
         String reviewComment,
         Instant reviewedAt,
         Instant createdAt) {
@@ -28,6 +31,8 @@ public record OrderDesignResponse(
                 design.getStatus(),
                 design.getUploadedBy().getName(),
                 design.getReviewedBy() != null ? design.getReviewedBy().getName() : null,
+                design.getFirstApprovedBy() != null ? design.getFirstApprovedBy().getName() : null,
+                design.getFirstApprovedAt(),
                 design.getReviewComment(),
                 design.getReviewedAt(),
                 design.getCreatedAt());

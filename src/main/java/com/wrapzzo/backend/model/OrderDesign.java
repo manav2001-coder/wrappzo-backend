@@ -50,7 +50,7 @@ public class OrderDesign {
     private String fileName;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 16)
+    @Column(nullable = false, length = 32)
     private OrderDesignStatus status = OrderDesignStatus.PENDING_REVIEW;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -60,6 +60,14 @@ public class OrderDesign {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reviewed_by")
     private User reviewedBy;
+
+    /** The MR's approval, when a senior's final approval followed it (MARKETING_DESIGN_APPROVAL). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "first_approved_by")
+    private User firstApprovedBy;
+
+    @Column(name = "first_approved_at")
+    private Instant firstApprovedAt;
 
     @Column(name = "review_comment")
     private String reviewComment;

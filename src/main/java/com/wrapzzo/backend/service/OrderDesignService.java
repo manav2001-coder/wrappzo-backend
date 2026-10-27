@@ -1,17 +1,21 @@
 package com.wrapzzo.backend.service;
 
 import com.wrapzzo.backend.dto.OrderDesignResponse;
+import com.wrapzzo.backend.dto.PendingArtworkApprovalResponse;
 import com.wrapzzo.backend.dto.PresignOrderDesignResponse;
 import com.wrapzzo.backend.exception.OrderDesignAlreadyReviewedException;
 import com.wrapzzo.backend.exception.OrderDesignNotFoundException;
 import com.wrapzzo.backend.exception.OrderNotFoundException;
+import com.wrapzzo.backend.model.CompanyFeature;
 import com.wrapzzo.backend.model.Order;
 import com.wrapzzo.backend.model.OrderDesign;
 import com.wrapzzo.backend.model.OrderDesignStatus;
+import com.wrapzzo.backend.model.QuickGiftRequest;
 import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.model.Vendor;
 import com.wrapzzo.backend.repository.OrderDesignRepository;
 import com.wrapzzo.backend.repository.OrderRepository;
+import com.wrapzzo.backend.repository.QuickGiftRequestRepository;
 import com.wrapzzo.backend.repository.UserRepository;
 import com.wrapzzo.backend.repository.VendorRepository;
 import com.wrapzzo.backend.security.CurrentUser;
@@ -20,6 +24,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,6 +40,9 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class OrderDesignService {
 
+    /** Granted to Company Admin by default (V42): final artwork approval for any MR, not just direct reports. */
+    public static final String FINAL_APPROVAL_KEY = "order.design.final";
+
     private static final Duration UPLOAD_URL_EXPIRY = Duration.ofMinutes(5);
 
     private final OrderDesignRepository orderDesignRepository;
@@ -43,6 +51,9 @@ public class OrderDesignService {
     private final UserRepository userRepository;
     private final FileStorageService fileStorageService;
     private final OrgScopeService orgScopeService;
+    private final CompanyFeatureFlagService companyFeatureFlagService;
+    private final QuickGiftRequestRepository quickGiftRequestRepository;
+    private final AccessControlCacheService accessControlCacheService;
 
     // --- Vendor side: only orders assigned to them. ---
 
@@ -76,16 +87,30 @@ public class OrderDesignService {
         return toResponseList(orderDesignRepository.findByOrder_IdOrderByVersionNoDesc(order.getId()));
     }
 
+    /**
+     * The MR's approval, or the senior's final one. With the company's MARKETING_DESIGN_APPROVAL
+     * flag on, an MR-approved proof waits (PENDING_FINAL_APPROVAL) for the MR's manager or an
+     * order.design.final holder; only APPROVED unlocks dispatch (OrderService's artwork gate).
+     */
     @Transactional
     public OrderDesignResponse approve(UUID orderId, UUID designId) {
         OrderDesign design = reviewableDesign(orderId, designId);
         User reviewer = currentUser();
-        design.setStatus(OrderDesignStatus.APPROVED);
-        design.setReviewedBy(reviewer);
-        design.setReviewedAt(Instant.now());
+        Instant now = Instant.now();
+        if (design.getStatus() == OrderDesignStatus.PENDING_REVIEW
+                && companyFeatureFlagService.isEnabled(design.getOrder().getCompany().getId(), CompanyFeature.MARKETING_DESIGN_APPROVAL)) {
+            design.setStatus(OrderDesignStatus.PENDING_FINAL_APPROVAL);
+            design.setFirstApprovedBy(reviewer);
+            design.setFirstApprovedAt(now);
+        } else {
+            design.setStatus(OrderDesignStatus.APPROVED);
+            design.setReviewedBy(reviewer);
+            design.setReviewedAt(now);
+        }
         return toResponse(design);
     }
 
+    /** Sends the proof back to the vendor -- from the MR's review or from the senior's. */
     @Transactional
     public OrderDesignResponse reject(UUID orderId, UUID designId, String comment) {
         OrderDesign design = reviewableDesign(orderId, designId);
@@ -97,16 +122,61 @@ public class OrderDesignService {
         return toResponse(design);
     }
 
+    /** A senior's queue: MR-approved proofs from their direct reports, or company-wide with order.design.final. */
+    @Transactional(readOnly = true)
+    public List<PendingArtworkApprovalResponse> listPendingFinalApproval() {
+        User reviewer = currentUser();
+        if (reviewer.getCompany() == null) {
+            return List.of();
+        }
+        return orderDesignRepository
+                .findByStatusAndOrder_Company_IdOrderByUpdatedAtAsc(OrderDesignStatus.PENDING_FINAL_APPROVAL, reviewer.getCompany().getId())
+                .stream()
+                .filter(design -> canGiveFinalApproval(design, reviewer))
+                .map(design -> PendingArtworkApprovalResponse.from(
+                        design, fileStorageService.publicUrl(design.getFileKey()), requesterOf(design.getOrder())))
+                .toList();
+    }
+
     private OrderDesign reviewableDesign(UUID orderId, UUID designId) {
-        getOwnCompanyEntity(orderId);
         OrderDesign design = orderDesignRepository.findById(designId).orElseThrow(() -> new OrderDesignNotFoundException(designId));
         if (!design.getOrder().getId().equals(orderId)) {
             throw new OrderDesignNotFoundException(designId);
         }
-        if (design.getStatus() != OrderDesignStatus.PENDING_REVIEW) {
-            throw new OrderDesignAlreadyReviewedException(designId);
+        switch (design.getStatus()) {
+            case PENDING_REVIEW -> getOwnCompanyEntity(orderId);
+            case PENDING_FINAL_APPROVAL -> {
+                // The senior may sit outside the MR's org subtree checks (a manager over another
+                // branch), so this is authorised by the reporting line, not OrgScope.
+                User reviewer = currentUser();
+                if (reviewer.getCompany() == null || !design.getOrder().getCompany().getId().equals(reviewer.getCompany().getId())) {
+                    throw new OrderNotFoundException(orderId);
+                }
+                if (design.getFirstApprovedBy() != null && design.getFirstApprovedBy().getId().equals(reviewer.getId())) {
+                    throw new AccessDeniedException("The final approval has to come from someone other than the MR who approved it");
+                }
+                if (!canGiveFinalApproval(design, reviewer)) {
+                    throw new AccessDeniedException("Only the MR's manager can give the final approval on this artwork");
+                }
+            }
+            default -> throw new OrderDesignAlreadyReviewedException(designId);
         }
         return design;
+    }
+
+    private boolean canGiveFinalApproval(OrderDesign design, User reviewer) {
+        if (design.getFirstApprovedBy() != null && design.getFirstApprovedBy().getId().equals(reviewer.getId())) {
+            return false;
+        }
+        User requester = requesterOf(design.getOrder());
+        boolean isDirectManager = requester != null && requester.getReportsTo() != null
+                && requester.getReportsTo().getId().equals(reviewer.getId());
+        return isDirectManager || accessControlCacheService.resolveEffectiveKeys(reviewer).contains(FINAL_APPROVAL_KEY);
+    }
+
+    /** The MR behind an order: a Quick Gift's requester (an approved one's createdBy is its approver), else whoever created it. */
+    private User requesterOf(Order order) {
+        return quickGiftRequestRepository.findByOrderId(order.getId()).map(QuickGiftRequest::getRequestedBy).orElse(order.getCreatedBy());
     }
 
     private Order getEntityForVendor(UUID orderId, UUID vendorId) {
