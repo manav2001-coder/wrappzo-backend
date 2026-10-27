@@ -102,7 +102,10 @@ public class GiftService {
         return giftRepository.findByActiveTrueAndVendorIdIn(vendorIds).stream().map(this::toResponse).toList();
     }
 
-    private List<UUID> visibleVendorIds(User user) {
+    private List<UUID> visibleVendorIds(User caller) {
+        // Re-read inside this transaction: GiftBrowseController loads the caller outside one
+        // (open-in-view is off), so their lazy orgUnit can't be initialized from that copy.
+        User user = userRepository.findById(caller.getId()).orElseThrow(() -> new IllegalStateException("User not found: " + caller.getId()));
         UUID companyId = user.getCompany().getId();
         if (user.getOrgUnit() == null) {
             return companyVendorRepository.findCompanyWideVendorIds(companyId);
