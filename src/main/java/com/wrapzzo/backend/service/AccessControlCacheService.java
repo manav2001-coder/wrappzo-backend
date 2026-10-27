@@ -12,6 +12,7 @@ import com.wrapzzo.backend.repository.RoleRepository;
 import com.wrapzzo.backend.repository.UserAccessControlRepository;
 import com.wrapzzo.backend.repository.UserAccessKeyEffect;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -21,6 +22,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -125,6 +128,26 @@ public class AccessControlCacheService {
     }
 
     /** Call whenever a role's granted access-control keys change. */
+    /**
+     * Drops every cached grant. Run at startup (PermissionCacheStartupReset): a deploy's
+     * migrations change grants straight in Postgres, bypassing the invalidations here, so
+     * without this a newly granted key reached users only when the TTL ran out.
+     */
+    public long clearAll() {
+        long cleared = 0;
+        for (String prefix : List.of(ROLE_KEY_PREFIX, USER_OVERRIDE_KEY_PREFIX, DESIGNATION_KEY_PREFIX)) {
+            List<String> keys = new ArrayList<>();
+            try (Cursor<String> cursor = redisTemplate.scan(ScanOptions.scanOptions().match(prefix + "*").count(500).build())) {
+                cursor.forEachRemaining(keys::add);
+            }
+            if (!keys.isEmpty()) {
+                Long deleted = redisTemplate.delete(keys);
+                cleared += deleted != null ? deleted : 0;
+            }
+        }
+        return cleared;
+    }
+
     public void invalidateRolePermissions(UUID roleId) {
         redisTemplate.delete(ROLE_KEY_PREFIX + roleId);
     }
