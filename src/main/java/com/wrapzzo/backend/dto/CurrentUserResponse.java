@@ -1,5 +1,6 @@
 package com.wrapzzo.backend.dto;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -9,7 +10,8 @@ import java.util.UUID;
  * for platform staff; a company user's own company, so self-service pages (e.g. Users) can
  * resolve "my company" without a companyId in the URL. managesTeam is true when anyone reports
  * to the caller (users.reports_to_id) -- what makes them an approver of their team's doctor
- * requests, which no access-control key expresses.
+ * requests, which no access-control key expresses. menuLabels: the company's own names for its
+ * navigation menus (menu id -> name), empty when it renamed none.
  */
-public record CurrentUserResponse(Set<String> permissions, UUID companyId, String companyName, boolean managesTeam) {
+public record CurrentUserResponse(Set<String> permissions, UUID companyId, String companyName, boolean managesTeam, Map<String, String> menuLabels) {
 }
