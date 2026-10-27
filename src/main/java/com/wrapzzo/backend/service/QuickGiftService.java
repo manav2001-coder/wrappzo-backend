@@ -8,6 +8,7 @@ import com.wrapzzo.backend.dto.RecipientResponse;
 import com.wrapzzo.backend.exception.GiftNotAvailableForQuickGiftException;
 import com.wrapzzo.backend.exception.GiftNotFoundException;
 import com.wrapzzo.backend.exception.PhotoOrEmailRequiredException;
+import com.wrapzzo.backend.exception.QuantityBelowMinimumException;
 import com.wrapzzo.backend.exception.QuickGiftAlreadyReviewedException;
 import com.wrapzzo.backend.exception.QuickGiftNotApprovedException;
 import com.wrapzzo.backend.exception.QuickGiftRequestNotFoundException;
@@ -79,6 +80,11 @@ public class QuickGiftService {
         User requester = currentUser();
         Company company = requester.getCompany();
         Gift gift = resolveQuickGiftEligibleGift(request.giftId(), requester);
+        int quantity = request.quantity() != null ? request.quantity() : 1;
+        // The vendor's minimum order -- a monthly plan's runs come through here too, so they're held to it as well.
+        if (gift.getMoq() != null && quantity < gift.getMoq()) {
+            throw new QuantityBelowMinimumException(gift.getName(), gift.getMoq(), quantity);
+        }
 
         // An existing doctor was picked (recipientId set) -- trust that record's own fields,
         // not whatever the client happened to send alongside the id. A new doctor
@@ -111,7 +117,7 @@ public class QuickGiftService {
         quickGift.setRecipientRegistrationNumber(doctor.registrationNumber());
         quickGift.setRecipientSpeciality(doctor.speciality());
         quickGift.setRecipientClinicName(doctor.clinicName());
-        quickGift.setQuantity(request.quantity() != null ? request.quantity() : 1);
+        quickGift.setQuantity(quantity);
         quickGift.setOrgUnit(requester.getOrgUnit());
         if (request.photo() != null) {
             quickGift.setPhotoKey(request.photo().key());

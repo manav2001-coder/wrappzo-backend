@@ -1,6 +1,7 @@
 package com.wrapzzo.backend.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.wrapzzo.backend.dto.CreateDoctorChangeRequest;
 import com.wrapzzo.backend.dto.CreateQuickGiftRequest;
@@ -13,6 +14,8 @@ import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.CompanyFeature;
 import com.wrapzzo.backend.model.CompanyVendor;
 import com.wrapzzo.backend.model.DoctorChangeAction;
+import com.wrapzzo.backend.model.DoctorChangeStatus;
+import com.wrapzzo.backend.exception.QuantityBelowMinimumException;
 import com.wrapzzo.backend.model.Gift;
 import com.wrapzzo.backend.model.GiftModule;
 import com.wrapzzo.backend.model.OrgUnit;
@@ -41,6 +44,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
@@ -203,5 +207,51 @@ class OrgScopeAndDoctorChangeIntegrationTest {
         assertThat(approved.recipientId()).isEqualTo(existing.getId());
         assertThat(recipientRepository.findByCompanyIdOrderByNameAsc(company.getId())).hasSize(1);
         assertThat(recipientAssignmentRepository.existsByRecipient_IdAndMrUser_Id(existing.getId(), mrNorth.getId())).isTrue();
+    }
+
+    private DoctorChangeRequestResponse requestNewDoctor(User mr, String registration) {
+        actAs(mr);
+        return doctorChangeRequestService.create(new CreateDoctorChangeRequest(
+                DoctorChangeAction.ADD, null, "Dr. New", "9800000077", null, "Clinic Road", null,
+                new DoctorDetails(null, registration, null, null)));
+    }
+
+    @Test
+    void aPeerMrCannotReviewAnotherMrsDoctorRequest() {
+        // Every real Member holds recipient.manage (V27) -- it must not make them a reviewer.
+        grant(mrSouth.getRole(), "recipient.manage");
+        DoctorChangeRequestResponse request = requestNewDoctor(mrNorth, "PEER-1");
+
+        actAs(mrSouth);
+        assertThat(doctorChangeRequestService.listPendingForReviewer()).isEmpty();
+        assertThatThrownBy(() -> doctorChangeRequestService.approve(request.id())).isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    void recipientApproveReviewsCompanyWideButNeverYourOwnRequest() {
+        grant(platformAdmin.getRole(), DoctorChangeRequestService.APPROVE_ANY_KEY);
+        DoctorChangeRequestResponse fromMr = requestNewDoctor(mrSouth, "ANY-1");
+        DoctorChangeRequestResponse ownRequest = requestNewDoctor(platformAdmin, "ANY-2");
+
+        actAs(platformAdmin);
+        assertThat(doctorChangeRequestService.listPendingForReviewer()).extracting(DoctorChangeRequestResponse::id)
+                .contains(fromMr.id())
+                .doesNotContain(ownRequest.id());
+        assertThatThrownBy(() -> doctorChangeRequestService.approve(ownRequest.id())).isInstanceOf(AccessDeniedException.class);
+        assertThat(doctorChangeRequestService.approve(fromMr.id()).status()).isEqualTo(DoctorChangeStatus.APPROVED);
+    }
+
+    @Test
+    void anOrderBelowTheGiftsMinimumIsRefused() {
+        pad.setMoq(50);
+        pad = giftRepository.save(pad);
+
+        actAs(mrNorth);
+        assertThatThrownBy(() -> quickGiftService.create(new CreateQuickGiftRequest(
+                pad.getId(), null, "Dr. Few", "9800000055", null, "Somewhere", null, null, null, null, null, 5)))
+                .isInstanceOf(QuantityBelowMinimumException.class);
+        assertThat(quickGiftService.create(new CreateQuickGiftRequest(
+                pad.getId(), null, "Dr. Enough", "9800000056", null, "Somewhere", null, null, null, null, null, 50)).orderId())
+                .isNotNull();
     }
 }

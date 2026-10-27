@@ -31,13 +31,17 @@ import org.springframework.transaction.annotation.Transactional;
  * MR doctor-change requests (PRD: add/edit/remove, routed to the MR's own manager for
  * approval before taking effect). Approval authority is the requester's direct manager
  * (User.reportsTo) -- a reporting-chain check, not a flat access-control key -- plus
- * recipient.manage as a company-wide escalation path for when a manager isn't available.
+ * recipient.approve as a company-wide escalation path for when a manager isn't available.
+ * Not recipient.manage: every Member holds that one (V27). Nobody reviews their own request.
  * REMOVE only ever deletes the requester's own RecipientAssignment row; the shared
  * Recipient directory row is untouched.
  */
 @Service
 @RequiredArgsConstructor
 public class DoctorChangeRequestService {
+
+    /** Granted to Company Admin by default (V39): review any MR's request in the company. */
+    public static final String APPROVE_ANY_KEY = "recipient.approve";
 
     private final DoctorChangeRequestRepository doctorChangeRequestRepository;
     private final RecipientRepository recipientRepository;
@@ -77,14 +81,20 @@ public class DoctorChangeRequestService {
                 .toList();
     }
 
-    /** A manager's own approval queue: their direct reports' pending requests, or every pending request company-wide if they hold recipient.manage. */
+    /** A manager's own approval queue: their direct reports' pending requests, or every other pending request company-wide if they hold recipient.approve. */
     @Transactional(readOnly = true)
     public List<DoctorChangeRequestResponse> listPendingForReviewer() {
         User reviewer = currentUser();
+        if (reviewer.getCompany() == null) {
+            return List.of();
+        }
         List<DoctorChangeRequest> pending = canReviewCompanyWide(reviewer)
                 ? doctorChangeRequestRepository.findByCompany_IdAndStatusOrderByCreatedAtAsc(reviewer.getCompany().getId(), DoctorChangeStatus.PENDING)
                 : doctorChangeRequestRepository.findByRequestedBy_ReportsTo_IdAndStatusOrderByCreatedAtAsc(reviewer.getId(), DoctorChangeStatus.PENDING);
-        return pending.stream().map(DoctorChangeRequestResponse::from).toList();
+        return pending.stream()
+                .filter(r -> !r.getRequestedBy().getId().equals(reviewer.getId()))
+                .map(DoctorChangeRequestResponse::from)
+                .toList();
     }
 
     @Transactional
@@ -177,6 +187,13 @@ public class DoctorChangeRequestService {
     private DoctorChangeRequest reviewableEntity(UUID id) {
         DoctorChangeRequest entity = doctorChangeRequestRepository.findById(id).orElseThrow(() -> new DoctorChangeRequestNotFoundException(id));
         User reviewer = currentUser();
+        // Another company's request is a 404, the same as one that doesn't exist.
+        if (reviewer.getCompany() == null || !entity.getCompany().getId().equals(reviewer.getCompany().getId())) {
+            throw new DoctorChangeRequestNotFoundException(id);
+        }
+        if (entity.getRequestedBy().getId().equals(reviewer.getId())) {
+            throw new AccessDeniedException("You can't review your own request");
+        }
         boolean isDirectManager = entity.getRequestedBy().getReportsTo() != null
                 && entity.getRequestedBy().getReportsTo().getId().equals(reviewer.getId());
         if (!isDirectManager && !canReviewCompanyWide(reviewer)) {
@@ -189,7 +206,7 @@ public class DoctorChangeRequestService {
     }
 
     private boolean canReviewCompanyWide(User user) {
-        return accessControlCacheService.resolveEffectiveKeys(user).contains("recipient.manage");
+        return accessControlCacheService.resolveEffectiveKeys(user).contains(APPROVE_ANY_KEY);
     }
 
     private Recipient getOwnCompanyRecipient(UUID recipientId, UUID companyId) {

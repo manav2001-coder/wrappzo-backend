@@ -83,6 +83,11 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
     }
 
+    @ExceptionHandler(QuantityBelowMinimumException.class)
+    public ResponseEntity<Map<String, String>> handleQuantityBelowMinimum(QuantityBelowMinimumException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+    }
+
     @ExceptionHandler(GiftNotFoundException.class)
     public ResponseEntity<Map<String, String>> handleGiftNotFound(GiftNotFoundException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
