@@ -9,15 +9,20 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.BatchSize;
 
 /**
  * A Wrapzzo user. A null company means Wrapzzo's own platform staff.
@@ -47,6 +52,15 @@ public class User {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "org_unit_id")
     private OrgUnit orgUnit;
+
+    /**
+     * Units this user also covers (V37) -- e.g. a zonal manager looking after a second zone.
+     * They widen what the user sees (OrgScope); orgUnit stays the one their own orders carry.
+     */
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(name = "user_extra_org_units", joinColumns = @JoinColumn(name = "user_id"), inverseJoinColumns = @JoinColumn(name = "org_unit_id"))
+    @BatchSize(size = 100)
+    private Set<OrgUnit> extraOrgUnits = new HashSet<>();
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reports_to_id")

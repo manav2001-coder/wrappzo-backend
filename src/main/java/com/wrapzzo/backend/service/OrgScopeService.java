@@ -3,6 +3,7 @@ package com.wrapzzo.backend.service;
 import com.wrapzzo.backend.model.OrgUnit;
 import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.repository.OrgUnitRepository;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -31,10 +32,14 @@ public class OrgScopeService {
         if (accessControlCacheService.resolveEffectiveKeys(user).contains(ALL_UNITS_KEY)) {
             return new OrgScope(user.getId(), null);
         }
-        if (user.getOrgUnit() == null) {
-            return new OrgScope(user.getId(), Set.of());
+        // Their own unit plus any extra units they cover (V37), each with everything beneath it.
+        Set<UUID> roots = new HashSet<>();
+        if (user.getOrgUnit() != null) {
+            roots.add(user.getOrgUnit().getId());
         }
-        Set<UUID> subtree = orgUnitRepository.findSelfAndDescendants(user.getOrgUnit().getId()).stream()
+        user.getExtraOrgUnits().forEach(unit -> roots.add(unit.getId()));
+        Set<UUID> subtree = roots.stream()
+                .flatMap(root -> orgUnitRepository.findSelfAndDescendants(root).stream())
                 .map(OrgUnit::getId)
                 .collect(Collectors.toUnmodifiableSet());
         return new OrgScope(user.getId(), subtree);

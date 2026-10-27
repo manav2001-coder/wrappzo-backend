@@ -82,6 +82,7 @@ public class DashboardService {
     private final GiftImageRepository giftImageRepository;
     private final FileStorageService fileStorageService;
     private final AccessControlCacheService accessControlCacheService;
+    private final OrgScopeService orgScopeService;
 
     /** Everything the dashboard reads, already scoped to company-wide or just-this-viewer. */
     private record ScopedData(
@@ -221,14 +222,22 @@ public class DashboardService {
                 : allCampaigns.stream()
                         .filter(c -> c.getStatus() != CampaignStatus.DRAFT && campaignService.isInAudience(c, user.getId()))
                         .toList();
+        // A team view still stops at the viewer's org scope -- the same rule as the Orders list
+        // and the approval queue -- so a zonal manager's dashboard is their zone, not the company.
+        OrgScope scope = orgScopeService.resolve(user);
         List<Order> orders = companyWide
-                ? allOrders
+                ? allOrders.stream()
+                        .filter(o -> scope.covers(o.getOrgUnit(), null) || belongsToUser(o, user.getId(), quickGiftRequesterByOrderId))
+                        .toList()
                 : allOrders.stream().filter(o -> belongsToUser(o, user.getId(), quickGiftRequesterByOrderId)).toList();
         List<QuickGiftRequest> quickGifts = companyWide
-                ? allQuickGifts
+                ? allQuickGifts.stream().filter(q -> scope.covers(q.getOrgUnit(), q.getRequestedBy())).toList()
                 : allQuickGifts.stream().filter(q -> q.getRequestedBy().getId().equals(user.getId())).toList();
+        List<Submission> submissions = companyWide
+                ? allSubmissions.stream().filter(s -> scope.covers(s.getSubmittedBy().getOrgUnit(), s.getSubmittedBy())).toList()
+                : allSubmissions;
 
-        return new ScopedData(company, companyWide, campaigns, orders, quickGifts, allSubmissions, quickGiftRequesterByOrderId);
+        return new ScopedData(company, companyWide, campaigns, orders, quickGifts, submissions, quickGiftRequesterByOrderId);
     }
 
     private String submissionBucket(Submission s) {
@@ -481,9 +490,12 @@ public class DashboardService {
                 .toList();
     }
 
+    /** The unit the order was raised from (stamped since V36); older orders fall back to their requester's current unit. */
     private String departmentOf(Order order, Map<UUID, User> quickGiftRequesterByOrderId) {
         OrgUnit unit;
-        if (order.getSource() == OrderSource.CAMPAIGN && order.getSubmission() != null) {
+        if (order.getOrgUnit() != null) {
+            unit = order.getOrgUnit();
+        } else if (order.getSource() == OrderSource.CAMPAIGN && order.getSubmission() != null) {
             unit = order.getSubmission().getSubmittedBy().getOrgUnit();
         } else {
             User requester = quickGiftRequesterByOrderId.get(order.getId());

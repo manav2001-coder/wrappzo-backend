@@ -1,6 +1,7 @@
 package com.wrapzzo.backend.dto;
 
 import com.wrapzzo.backend.model.DoctorChangeAction;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -18,5 +19,7 @@ public record CreateDoctorChangeRequest(
         String proposedPhone,
         String proposedEmail,
         String proposedAddress,
-        LocalDate proposedDob) {
+        LocalDate proposedDob,
+        /** Print details; for EDIT, a blank field keeps the doctor's current value, like the fields above. */
+        @Valid DoctorDetails proposedDoctor) {
 }
