@@ -58,6 +58,11 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
     }
 
+    @ExceptionHandler(OrgUnitNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleOrgUnitNotFound(OrgUnitNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
+    }
+
     @ExceptionHandler(LastCompanyAdminException.class)
     public ResponseEntity<Map<String, String>> handleLastCompanyAdmin(LastCompanyAdminException e) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));

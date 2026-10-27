@@ -2,8 +2,10 @@ package com.wrapzzo.backend.service;
 
 import com.wrapzzo.backend.dto.CreateDoctorChangeRequest;
 import com.wrapzzo.backend.dto.DoctorChangeRequestResponse;
+import com.wrapzzo.backend.dto.DoctorDetails;
 import com.wrapzzo.backend.exception.DoctorChangeRequestAlreadyReviewedException;
 import com.wrapzzo.backend.exception.DoctorChangeRequestNotFoundException;
+import com.wrapzzo.backend.exception.RecipientAlreadyExistsException;
 import com.wrapzzo.backend.exception.RecipientNotFoundException;
 import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.DoctorChangeAction;
@@ -59,6 +61,11 @@ public class DoctorChangeRequestService {
         entity.setProposedEmail(request.proposedEmail());
         entity.setProposedAddress(request.proposedAddress());
         entity.setProposedDob(request.proposedDob());
+        DoctorDetails doctor = DoctorDetails.orEmpty(request.proposedDoctor());
+        entity.setProposedQualification(doctor.qualification());
+        entity.setProposedRegistrationNumber(doctor.registrationNumber());
+        entity.setProposedSpeciality(doctor.speciality());
+        entity.setProposedClinicName(doctor.clinicName());
         return DoctorChangeRequestResponse.from(doctorChangeRequestRepository.save(entity));
     }
 
@@ -108,18 +115,36 @@ public class DoctorChangeRequestService {
         return DoctorChangeRequestResponse.from(entity);
     }
 
+    /**
+     * A doctor already in the directory under the same registration number is the same doctor:
+     * they join the MR's list rather than becoming a duplicate (which the V36 unique index would
+     * also refuse).
+     */
     private void applyAdd(DoctorChangeRequest entity) {
-        Recipient recipient = new Recipient(
-                entity.getCompany(),
-                entity.getProposedName(),
-                entity.getProposedPhone(),
-                entity.getProposedEmail(),
-                entity.getProposedAddress(),
-                entity.getProposedDob(),
-                entity.getRequestedBy());
-        recipient = recipientRepository.save(recipient);
+        Recipient recipient = entity.getProposedRegistrationNumber() == null
+                ? null
+                : recipientRepository
+                        .findFirstByCompany_IdAndRegistrationNumberIgnoreCase(entity.getCompany().getId(), entity.getProposedRegistrationNumber())
+                        .orElse(null);
+        if (recipient == null) {
+            recipient = new Recipient(
+                    entity.getCompany(),
+                    entity.getProposedName(),
+                    entity.getProposedPhone(),
+                    entity.getProposedEmail(),
+                    entity.getProposedAddress(),
+                    entity.getProposedDob(),
+                    entity.getRequestedBy());
+            recipient.setQualification(entity.getProposedQualification());
+            recipient.setRegistrationNumber(entity.getProposedRegistrationNumber());
+            recipient.setSpeciality(entity.getProposedSpeciality());
+            recipient.setClinicName(entity.getProposedClinicName());
+            recipient = recipientRepository.save(recipient);
+        }
         entity.setRecipient(recipient);
-        recipientAssignmentRepository.save(new RecipientAssignment(recipient, entity.getRequestedBy()));
+        if (!recipientAssignmentRepository.existsByRecipient_IdAndMrUser_Id(recipient.getId(), entity.getRequestedBy().getId())) {
+            recipientAssignmentRepository.save(new RecipientAssignment(recipient, entity.getRequestedBy()));
+        }
     }
 
     private void applyEdit(DoctorChangeRequest entity) {
@@ -129,6 +154,18 @@ public class DoctorChangeRequestService {
         if (entity.getProposedEmail() != null) recipient.setEmail(entity.getProposedEmail());
         if (entity.getProposedAddress() != null) recipient.setAddress(entity.getProposedAddress());
         if (entity.getProposedDob() != null) recipient.setDateOfBirth(entity.getProposedDob());
+        if (entity.getProposedQualification() != null) recipient.setQualification(entity.getProposedQualification());
+        if (entity.getProposedSpeciality() != null) recipient.setSpeciality(entity.getProposedSpeciality());
+        if (entity.getProposedClinicName() != null) recipient.setClinicName(entity.getProposedClinicName());
+        String registration = entity.getProposedRegistrationNumber();
+        if (registration != null) {
+            recipientRepository.findFirstByCompany_IdAndRegistrationNumberIgnoreCase(recipient.getCompany().getId(), registration)
+                    .filter(other -> !other.getId().equals(recipient.getId()))
+                    .ifPresent(other -> {
+                        throw new RecipientAlreadyExistsException(other.getName());
+                    });
+            recipient.setRegistrationNumber(registration);
+        }
     }
 
     private void applyRemove(DoctorChangeRequest entity) {

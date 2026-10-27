@@ -6,6 +6,7 @@ import com.wrapzzo.backend.dto.UserResponse;
 import com.wrapzzo.backend.exception.CannotDeleteSelfException;
 import com.wrapzzo.backend.exception.CompanyNotFoundException;
 import com.wrapzzo.backend.exception.LastCompanyAdminException;
+import com.wrapzzo.backend.exception.OrgUnitNotFoundException;
 import com.wrapzzo.backend.exception.UserHasActivityException;
 import com.wrapzzo.backend.exception.UserImportValidationException;
 import com.wrapzzo.backend.exception.UserNotFoundException;
@@ -197,6 +198,33 @@ public class UserService {
     public List<UserResponse> listByCompany(UUID companyId) {
         companyAccessGuard.requireOwnCompanyOrPlatformStaff(companyId);
         return userRepository.findByCompanyId(companyId).stream().map(UserResponse::from).toList();
+    }
+
+    /**
+     * Replace-all of the units a user covers beyond their own. Every unit must be this company's.
+     * The user's own unit is dropped from the set -- it is already covered. Visibility is
+     * resolved per request (OrgScopeService), so this takes effect on the user's next request.
+     */
+    @Transactional
+    public UserResponse setExtraOrgUnits(UUID companyId, UUID userId, List<UUID> orgUnitIds) {
+        companyAccessGuard.requireOwnCompanyOrPlatformStaff(companyId);
+        User user = userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException(userId));
+        if (user.getCompany() == null || !user.getCompany().getId().equals(companyId)) {
+            throw new UserNotFoundException(userId);
+        }
+        Set<OrgUnit> units = new HashSet<>();
+        for (UUID id : new HashSet<>(orgUnitIds)) {
+            OrgUnit unit = orgUnitRepository.findById(id).orElseThrow(() -> new OrgUnitNotFoundException(id));
+            if (!unit.getCompany().getId().equals(companyId)) {
+                throw new OrgUnitNotFoundException(id);
+            }
+            if (user.getOrgUnit() == null || !user.getOrgUnit().getId().equals(id)) {
+                units.add(unit);
+            }
+        }
+        user.getExtraOrgUnits().clear();
+        user.getExtraOrgUnits().addAll(units);
+        return UserResponse.from(userRepository.save(user));
     }
 
     /**

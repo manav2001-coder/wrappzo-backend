@@ -69,6 +69,19 @@ public class DoctorChangeRequest {
     @Column(name = "proposed_dob")
     private LocalDate proposedDob;
 
+    // The prescription-pad print details proposed for the doctor (V37) -- see Recipient.
+    @Column(name = "proposed_qualification")
+    private String proposedQualification;
+
+    @Column(name = "proposed_registration_number")
+    private String proposedRegistrationNumber;
+
+    @Column(name = "proposed_speciality")
+    private String proposedSpeciality;
+
+    @Column(name = "proposed_clinic_name")
+    private String proposedClinicName;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     private DoctorChangeStatus status = DoctorChangeStatus.PENDING;
