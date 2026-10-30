@@ -8,9 +8,8 @@ package com.wrapzzo.backend.model;
 public enum CompanyFeature {
     /** Vendor -> company warehouse -> doctor/MR, two tracked legs instead of one. */
     WAREHOUSE_LOGISTICS("Warehouse Logistics", "Route orders through your own warehouse before final delivery, with both legs tracked."),
-    /** An extra artwork sign-off by the company's Marketing/Operations Admin, in front of printing. */
-    /** After the MR approves a proof, their manager gives the final approval before it goes to print. */
-    MARKETING_DESIGN_APPROVAL("Senior Artwork Approval", "After the MR approves artwork, their manager gives the final approval before it goes to print."),
+    /** After the MR approves a proof, it climbs their reporting line (artwork_approval_levels managers) before it goes to print. */
+    MARKETING_DESIGN_APPROVAL("Senior Artwork Approval", "After the MR approves artwork, it goes up their reporting line (1-5 levels) for approval before it goes to print."),
     /** Quick Gift without the approval queue: the order goes straight to the vendor of the gift the requester picked. */
     DIRECT_VENDOR_ORDERING("Direct Vendor Ordering", "Requests skip approval and go straight to the vendor whose product was chosen, as an order.");
 

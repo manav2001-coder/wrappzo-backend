@@ -9,9 +9,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * A senior's queue of MR-approved artwork awaiting the final approval. No key requirement of its
- * own: OrderDesignService returns only proofs from the caller's direct reports (or every one, for
- * an order.design.final holder). Approving and rejecting go through OrderDesignController.
+ * A manager's queue of MR-approved artwork waiting on their level of approval. No key requirement
+ * of its own: OrderDesignService returns only proofs whose current level waits on the caller (or
+ * every one, for an order.design.final holder covering). Approving and rejecting go through
+ * OrderDesignController.
  */
 @RestController
 @RequestMapping("/api/artwork-approvals")

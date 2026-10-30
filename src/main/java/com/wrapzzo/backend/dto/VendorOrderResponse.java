@@ -43,6 +43,9 @@ public record VendorOrderResponse(
         /** The newest proof's status and review comment -- null before the first upload. */
         OrderDesignStatus latestDesignStatus,
         String latestDesignComment,
+        /** While the newest proof is PENDING_FINAL_APPROVAL: the management level it waits on, of how many. */
+        Integer latestDesignApprovalLevel,
+        Integer latestDesignApprovalLevels,
         int designVersions,
         OrderSource source,
         OrderStatus status,
@@ -79,6 +82,8 @@ public record VendorOrderResponse(
                 artworkApproved,
                 latest != null ? latest.getStatus() : null,
                 latest != null ? latest.getReviewComment() : null,
+                latest != null ? latest.getApprovalLevel() : null,
+                latest != null ? latest.getApprovalLevels() : null,
                 designs.size(),
                 order.getSource(),
                 order.getStatus(),

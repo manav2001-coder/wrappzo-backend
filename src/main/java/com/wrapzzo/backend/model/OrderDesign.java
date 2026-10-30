@@ -69,6 +69,13 @@ public class OrderDesign {
     @Column(name = "first_approved_at")
     private Instant firstApprovedAt;
 
+    /** While PENDING_FINAL_APPROVAL: the level (1 = the MR's manager) it waits on, of approvalLevels in its chain. */
+    @Column(name = "approval_level")
+    private Integer approvalLevel;
+
+    @Column(name = "approval_levels")
+    private Integer approvalLevels;
+
     @Column(name = "review_comment")
     private String reviewComment;
 
