@@ -66,8 +66,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private Set<GrantedAuthority> userAuthorities(UserPrincipalClaims claims) {
-        Set<String> keys =
-                accessControlCacheService.resolveEffectiveKeys(claims.userId(), claims.roleId(), claims.companyId(), claims.designation());
+        Set<String> keys = accessControlCacheService.resolveEffectiveKeys(claims.userId());
         Set<GrantedAuthority> authorities = keys.stream().map(SimpleGrantedAuthority::new).collect(Collectors.toCollection(HashSet::new));
         authorities.add(new SimpleGrantedAuthority(USER_AUTHORITY));
         return authorities;

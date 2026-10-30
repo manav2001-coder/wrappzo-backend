@@ -17,6 +17,7 @@ public record BulkImportUserRow(
         @NotBlank @Email String email,
         @NotBlank String mobile,
         @NotBlank String designation,
+        @NotBlank String role,
         @NotBlank String employeeCode,
         String reportsToEmail,
         @NotEmpty List<@NotBlank String> orgUnitPath) {

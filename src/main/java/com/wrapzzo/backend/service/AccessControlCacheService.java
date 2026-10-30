@@ -2,15 +2,10 @@ package com.wrapzzo.backend.service;
 
 import com.wrapzzo.backend.model.AccessControl;
 import com.wrapzzo.backend.model.AccessControlType;
-import com.wrapzzo.backend.model.AccessEffect;
-import com.wrapzzo.backend.model.Role;
 import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.repository.AccessControlRepository;
-import com.wrapzzo.backend.repository.DesignationAccessControlRepository;
-import com.wrapzzo.backend.repository.RoleAccessControlRepository;
-import com.wrapzzo.backend.repository.RoleRepository;
-import com.wrapzzo.backend.repository.UserAccessControlRepository;
-import com.wrapzzo.backend.repository.UserAccessKeyEffect;
+import com.wrapzzo.backend.repository.TemplateRepository;
+import com.wrapzzo.backend.repository.UserRepository;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -20,174 +15,151 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
- * Caches resolved access-control data in Redis, split by role and by user so
- * that editing a role invalidates exactly one key regardless of how many
- * users hold it, and editing a user's overrides invalidates exactly one key
- * for that user. Postgres remains the source of truth; a cache miss (empty
- * cache, or after an invalidation) falls back to a DB read and repopulates.
+ * Resolves a user's effective access-control keys: the templates mapped to their role plus the
+ * templates mapped to them directly, each followed through the templates it includes (see
+ * {@link TemplateGraph}). The platform Super Admin role instead holds every FUNCTIONAL key.
+ *
+ * <p>Cached in Redis per user. Invalidation is generational, like VisibilityService: the
+ * generation is part of every cache key and {@link #invalidateAfterCommit()} bumps it, so any change to a
+ * template, a mapping or a user's role refreshes everyone without tracking who it touches. Old
+ * generations expire on their own. If Redis is unavailable the keys are computed directly.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AccessControlCacheService {
 
-    /** Safety net in case an invalidation is ever missed — not the primary invalidation mechanism. */
+    /** Safety net in case an invalidation is ever missed -- not the primary invalidation mechanism. */
     private static final Duration CACHE_TTL = Duration.ofHours(1);
-    private static final String ROLE_KEY_PREFIX = "role-permissions:";
-    private static final String USER_OVERRIDE_KEY_PREFIX = "user-overrides:";
-    private static final String DESIGNATION_KEY_PREFIX = "designation-permissions:";
+    private static final String GENERATION_KEY = "permission-generation";
+    private static final String KEY_PREFIX = "permissions:";
 
-    private final RoleAccessControlRepository roleAccessControlRepository;
-    private final UserAccessControlRepository userAccessControlRepository;
-    private final DesignationAccessControlRepository designationAccessControlRepository;
-    private final RoleRepository roleRepository;
+    private final UserRepository userRepository;
+    private final TemplateRepository templateRepository;
     private final AccessControlRepository accessControlRepository;
     private final StringRedisTemplate redisTemplate;
 
-    /** Convenience for call sites that already have the User loaded -- see the 4-arg overload. */
-    public Set<String> resolveEffectiveKeys(User user) {
-        UUID companyId = user.getCompany() != null ? user.getCompany().getId() : null;
-        return resolveEffectiveKeys(user.getId(), user.getRole().getId(), companyId, user.getDesignation());
-    }
-
-    /**
-     * Role's granted keys, UNION their designation's granted keys (additive, independent
-     * layer -- see DesignationAccessControl's doc comment), plus this user's GRANT overrides,
-     * minus their REVOKE overrides.
-     */
-    public Set<String> resolveEffectiveKeys(UUID userId, UUID roleId, UUID companyId, String designation) {
-        Set<String> effective = new HashSet<>(getRolePermissionKeys(roleId));
-        if (companyId != null && designation != null) {
-            effective.addAll(getDesignationPermissionKeys(companyId, designation));
+    /** Effective keys of a user whose id is all the caller has (the JWT filter). */
+    @Transactional(readOnly = true)
+    public Set<String> resolveEffectiveKeys(UUID userId) {
+        String cacheKey = null;
+        try {
+            cacheKey = KEY_PREFIX + generation() + ":" + userId;
+            String cached = redisTemplate.opsForValue().get(cacheKey);
+            if (cached != null) {
+                return decode(cached);
+            }
+        } catch (RuntimeException e) {
+            log.warn("Permission cache unavailable, computing directly: {}", e.getMessage());
+            cacheKey = null;
         }
-        for (Map.Entry<String, AccessEffect> override : getUserOverrides(userId).entrySet()) {
-            if (override.getValue() == AccessEffect.GRANT) {
-                effective.add(override.getKey());
-            } else {
-                effective.remove(override.getKey());
+        User user = userRepository.findById(userId).orElse(null);
+        Set<String> keys = user == null ? Set.of() : compute(user);
+        if (cacheKey != null) {
+            try {
+                redisTemplate.opsForValue().set(cacheKey, String.join(",", keys), CACHE_TTL);
+            } catch (RuntimeException e) {
+                log.warn("Could not cache permissions: {}", e.getMessage());
             }
         }
-        return effective;
-    }
-
-    @Transactional(readOnly = true)
-    public Set<String> getRolePermissionKeys(UUID roleId) {
-        String redisKey = ROLE_KEY_PREFIX + roleId;
-        String cached = redisTemplate.opsForValue().get(redisKey);
-        if (cached != null) {
-            return decodeKeySet(cached);
-        }
-        Set<String> keys = new HashSet<>(isPlatformSuperAdmin(roleId)
-                ? accessControlRepository.findByType(AccessControlType.FUNCTIONAL).stream().map(AccessControl::getKey).toList()
-                : roleAccessControlRepository.findAccessControlKeysByRoleId(roleId));
-        redisTemplate.opsForValue().set(redisKey, encodeKeySet(keys), CACHE_TTL);
         return keys;
     }
 
-    /**
-     * Super Admin gets every FUNCTIONAL key dynamically rather than an explicit grant list
-     * that has to be remembered and updated every time a new module ships a new key.
-     */
-    private boolean isPlatformSuperAdmin(UUID roleId) {
-        return roleRepository.findById(roleId).map(Role::isPlatformSuperAdmin).orElse(false);
+    /** For call sites that already hold the user. */
+    @Transactional(readOnly = true)
+    public Set<String> resolveEffectiveKeys(User user) {
+        return resolveEffectiveKeys(user.getId());
     }
 
-    @Transactional(readOnly = true)
-    public Set<String> getDesignationPermissionKeys(UUID companyId, String designation) {
-        String redisKey = DESIGNATION_KEY_PREFIX + companyId + ":" + designation;
-        String cached = redisTemplate.opsForValue().get(redisKey);
-        if (cached != null) {
-            return decodeKeySet(cached);
+    private Set<String> compute(User user) {
+        if (user.getRole().isPlatformSuperAdmin()) {
+            return new HashSet<>(accessControlRepository.findByType(AccessControlType.FUNCTIONAL).stream().map(AccessControl::getKey).toList());
         }
-        Set<String> keys =
-                new HashSet<>(designationAccessControlRepository.findAccessControlKeysByCompanyIdAndDesignation(companyId, designation));
-        redisTemplate.opsForValue().set(redisKey, encodeKeySet(keys), CACHE_TTL);
+        Set<UUID> roots = new HashSet<>(templateRepository.findTemplateIdsByRoleId(user.getRole().getId()));
+        roots.addAll(templateRepository.findTemplateIdsByUserId(user.getId()));
+        Set<String> keys = roots.isEmpty() ? new HashSet<>() : loadGraph().resolve(roots);
+        if (user.getCompany() != null) {
+            // A system template may carry platform-only keys for platform staff; a company's people never get them.
+            keys.retainAll(accessControlRepository.findByCompanyAssignableTrue().stream().map(AccessControl::getKey).collect(java.util.stream.Collectors.toSet()));
+        }
         return keys;
     }
 
+    /** Every inclusion edge plus the direct keys of every template reachable by one -- read whole, the tables are small. */
     @Transactional(readOnly = true)
-    public Map<String, AccessEffect> getUserOverrides(UUID userId) {
-        String redisKey = USER_OVERRIDE_KEY_PREFIX + userId;
-        String cached = redisTemplate.opsForValue().get(redisKey);
-        if (cached != null) {
-            return decodeOverrides(cached);
+    public TemplateGraph loadGraph() {
+        Map<UUID, Set<UUID>> edges = new HashMap<>();
+        for (Object[] row : templateRepository.findAllReferenceEdges()) {
+            edges.computeIfAbsent((UUID) row[0], k -> new HashSet<>()).add((UUID) row[1]);
         }
-        List<UserAccessKeyEffect> overrides = userAccessControlRepository.findKeyEffectsByUserId(userId);
-        Map<String, AccessEffect> overrideMap =
-                overrides.stream().collect(Collectors.toMap(UserAccessKeyEffect::getKey, UserAccessKeyEffect::getEffect));
-        redisTemplate.opsForValue().set(redisKey, encodeOverrides(overrideMap), CACHE_TTL);
-        return overrideMap;
+        Set<UUID> ids = new HashSet<>(edges.keySet());
+        edges.values().forEach(ids::addAll);
+        ids.addAll(templateRepository.findAll().stream().map(t -> t.getId()).toList());
+        Map<UUID, Set<String>> directKeys = new HashMap<>();
+        if (!ids.isEmpty()) {
+            for (Object[] row : templateRepository.findDirectKeys(ids)) {
+                directKeys.computeIfAbsent((UUID) row[0], k -> new HashSet<>()).add((String) row[1]);
+            }
+        }
+        return new TemplateGraph(edges, directKeys);
     }
 
-    /** Call whenever a role's granted access-control keys change. */
+    /** Refreshes everyone's keys once the surrounding transaction commits (at once when there is none). */
+    public void invalidateAfterCommit() {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    invalidateAll();
+                }
+            });
+        } else {
+            invalidateAll();
+        }
+    }
+
+    public void invalidateAll() {
+        try {
+            redisTemplate.opsForValue().increment(GENERATION_KEY);
+        } catch (RuntimeException e) {
+            log.warn("Could not invalidate cached permissions: {}", e.getMessage());
+        }
+    }
+
     /**
      * Drops every cached grant. Run at startup (PermissionCacheStartupReset): a deploy's
-     * migrations change grants straight in Postgres, bypassing the invalidations here, so
-     * without this a newly granted key reached users only when the TTL ran out.
+     * migrations change grants straight in Postgres, bypassing the invalidation above.
      */
     public long clearAll() {
-        long cleared = 0;
-        for (String prefix : List.of(ROLE_KEY_PREFIX, USER_OVERRIDE_KEY_PREFIX, DESIGNATION_KEY_PREFIX)) {
-            List<String> keys = new ArrayList<>();
-            try (Cursor<String> cursor = redisTemplate.scan(ScanOptions.scanOptions().match(prefix + "*").count(500).build())) {
-                cursor.forEachRemaining(keys::add);
-            }
-            if (!keys.isEmpty()) {
-                Long deleted = redisTemplate.delete(keys);
-                cleared += deleted != null ? deleted : 0;
-            }
+        invalidateAll();
+        List<String> keys = new ArrayList<>();
+        try (Cursor<String> cursor = redisTemplate.scan(ScanOptions.scanOptions().match(KEY_PREFIX + "*").count(500).build())) {
+            cursor.forEachRemaining(keys::add);
         }
-        return cleared;
-    }
-
-    public void invalidateRolePermissions(UUID roleId) {
-        redisTemplate.delete(ROLE_KEY_PREFIX + roleId);
-    }
-
-    /** Call whenever a specific user's access-control overrides change. */
-    public void invalidateUserOverrides(UUID userId) {
-        redisTemplate.delete(USER_OVERRIDE_KEY_PREFIX + userId);
-    }
-
-    /** Call whenever a designation's granted access-control keys change. */
-    public void invalidateDesignationPermissions(UUID companyId, String designation) {
-        redisTemplate.delete(DESIGNATION_KEY_PREFIX + companyId + ":" + designation);
-    }
-
-    private static String encodeKeySet(Set<String> keys) {
-        return String.join(",", keys);
-    }
-
-    private static Set<String> decodeKeySet(String encoded) {
-        if (encoded.isEmpty()) {
-            return new HashSet<>();
+        if (keys.isEmpty()) {
+            return 0;
         }
-        return new HashSet<>(Arrays.asList(encoded.split(",")));
+        Long deleted = redisTemplate.delete(keys);
+        return deleted != null ? deleted : 0;
     }
 
-    private static String encodeOverrides(Map<String, AccessEffect> overrides) {
-        return overrides.entrySet().stream()
-                .map(entry -> entry.getKey() + "=" + entry.getValue())
-                .collect(Collectors.joining(","));
+    private String generation() {
+        String generation = redisTemplate.opsForValue().get(GENERATION_KEY);
+        return generation != null ? generation : "0";
     }
 
-    private static Map<String, AccessEffect> decodeOverrides(String encoded) {
-        Map<String, AccessEffect> map = new HashMap<>();
-        if (encoded.isEmpty()) {
-            return map;
-        }
-        for (String pair : encoded.split(",")) {
-            String[] parts = pair.split("=", 2);
-            map.put(parts[0], AccessEffect.valueOf(parts[1]));
-        }
-        return map;
+    private static Set<String> decode(String encoded) {
+        return encoded.isEmpty() ? new HashSet<>() : new HashSet<>(Arrays.asList(encoded.split(",")));
     }
 }

@@ -54,6 +54,7 @@ class OrgUnitServiceIntegrationTest {
     @BeforeEach
     void seedCompany() {
         company = companyRepository.save(new Company("Org Unit Test Co"));
+        roleRepository.save(new Role(company, "Member"));
 
         Role platformRole = roleRepository.save(new Role(null, "Test Platform Staff " + UUID.randomUUID()));
         User platformStaff = userRepository.save(new User(
@@ -72,8 +73,8 @@ class OrgUnitServiceIntegrationTest {
         userService.bulkImport(
                 company.getId(),
                 List.of(
-                        new BulkImportUserRow("Zonal Head", "zonal@orgunit-test.com", null, "ZBM", null, null, List.of("HOSPIAID", "EAST")),
-                        new BulkImportUserRow("Other Zone", "other@orgunit-test.com", null, "ZBM", null, null, List.of("HOSPIAID", "WEST"))));
+                        new BulkImportUserRow("Zonal Head", "zonal@orgunit-test.com", null, "ZBM", "Member", null, null, List.of("HOSPIAID", "EAST")),
+                        new BulkImportUserRow("Other Zone", "other@orgunit-test.com", null, "ZBM", "Member", null, null, List.of("HOSPIAID", "WEST"))));
 
         List<OrgUnitResponse> units = orgUnitService.listByCompany(company.getId());
 
@@ -91,7 +92,7 @@ class OrgUnitServiceIntegrationTest {
 
     @Test
     void listByCompanyIsEmptyWhenNoImportHasEverUsedOrgLevels() {
-        userService.bulkImport(company.getId(), List.of(new BulkImportUserRow("No Org", "noorg@orgunit-test.com", null, "KAM", null, null, null)));
+        userService.bulkImport(company.getId(), List.of(new BulkImportUserRow("No Org", "noorg@orgunit-test.com", null, "KAM", "Member", null, null, null)));
 
         assertThat(orgUnitService.listByCompany(company.getId())).isEmpty();
     }

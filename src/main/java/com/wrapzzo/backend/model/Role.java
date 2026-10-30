@@ -7,11 +7,15 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -49,6 +53,11 @@ public class Role {
     /** The one platform Super Admin role -- gets every FUNCTIONAL access-control key dynamically (see AccessControlCacheService), not an explicit grant list that has to be kept in sync with every new module. */
     @Column(name = "is_platform_super_admin", nullable = false)
     private boolean platformSuperAdmin = false;
+
+    /** The templates this role carries -- the only source of what its holders may do. */
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(name = "role_templates", joinColumns = @JoinColumn(name = "role_id"), inverseJoinColumns = @JoinColumn(name = "template_id"))
+    private Set<Template> templates = new HashSet<>();
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

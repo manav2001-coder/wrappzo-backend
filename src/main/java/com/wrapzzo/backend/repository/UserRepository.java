@@ -15,7 +15,6 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     List<User> findByCompanyId(UUID companyId);
 
-    List<User> findByCompanyIdAndDesignation(UUID companyId, String designation);
 
     /** One round-trip for a whole bulk-import batch instead of a findByEmail per row. */
     List<User> findByEmailIn(Collection<String> emails);
@@ -30,10 +29,6 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     /** Guards against removing the last Company Admin a company has left. */
     long countByCompanyIdAndRoleId(UUID companyId, UUID roleId);
-
-    /** Populates the designation picker for a company's Access Control page -- see DesignationAccessService. */
-    @Query("select distinct u.designation from User u where u.company.id = :companyId and u.designation is not null order by u.designation")
-    List<String> findDistinctDesignationsByCompanyId(@Param("companyId") UUID companyId);
 
     /**
      * Everyone below the manager in the reporting line, at any depth (not the manager). UNION,

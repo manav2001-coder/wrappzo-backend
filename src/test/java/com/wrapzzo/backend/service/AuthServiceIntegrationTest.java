@@ -13,16 +13,14 @@ import com.wrapzzo.backend.model.AccessControlType;
 import com.wrapzzo.backend.model.AccessEffect;
 import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.Role;
-import com.wrapzzo.backend.model.RoleAccessControl;
+import com.wrapzzo.backend.model.Template;
 import com.wrapzzo.backend.model.User;
-import com.wrapzzo.backend.model.UserAccessControl;
 import com.wrapzzo.backend.model.UserInviteToken;
 import com.wrapzzo.backend.model.UserStatus;
 import com.wrapzzo.backend.repository.AccessControlRepository;
 import com.wrapzzo.backend.repository.CompanyRepository;
-import com.wrapzzo.backend.repository.RoleAccessControlRepository;
+import com.wrapzzo.backend.repository.TemplateRepository;
 import com.wrapzzo.backend.repository.RoleRepository;
-import com.wrapzzo.backend.repository.UserAccessControlRepository;
 import com.wrapzzo.backend.repository.UserInviteTokenRepository;
 import com.wrapzzo.backend.repository.UserRepository;
 import com.wrapzzo.backend.security.TokenHasher;
@@ -73,10 +71,7 @@ class AuthServiceIntegrationTest {
     private AccessControlRepository accessControlRepository;
 
     @Autowired
-    private RoleAccessControlRepository roleAccessControlRepository;
-
-    @Autowired
-    private UserAccessControlRepository userAccessControlRepository;
+    private TemplateRepository templateRepository;
 
     @Autowired
     private UserRepository userRepository;
@@ -98,7 +93,10 @@ class AuthServiceIntegrationTest {
         billingView = accessControlRepository.save(
                 new AccessControl("billing.view", "View Billing", "Billing", AccessControlType.FUNCTIONAL));
 
-        roleAccessControlRepository.save(new RoleAccessControl(role, campaignCreate));
+        Template roleTemplate = new Template(company, "Campaign Manager access", null);
+        roleTemplate.getAccessControls().add(campaignCreate);
+        role.getTemplates().add(templateRepository.save(roleTemplate));
+        roleRepository.save(role);
 
         user = userRepository.save(
                 new User(company, role, "Priya", "priya@alembic.com", passwordEncoder.encode(RAW_PASSWORD)));
@@ -195,21 +193,23 @@ class AuthServiceIntegrationTest {
     }
 
     @Test
-    void effectivePermissionsCombineRoleGrantsWithUserOverridesAndInvalidateCorrectly() {
+    void effectivePermissionsCombineRoleTemplatesWithUserTemplatesAndFollowInclusions() {
+        accessControlCacheService.invalidateAll();
         Set<String> initial = accessControlCacheService.resolveEffectiveKeys(user);
         assertThat(initial).containsExactly("test_reports.create");
 
-        userAccessControlRepository.save(
-                new UserAccessControl(user, billingView, AccessEffect.GRANT, null));
-        accessControlCacheService.invalidateUserOverrides(user.getId());
+        Template billing = new Template(user.getCompany(), "Billing access", null);
+        billing.getAccessControls().add(billingView);
+        user.getTemplates().add(templateRepository.save(billing));
+        userRepository.save(user);
+        accessControlCacheService.invalidateAll();
 
-        Set<String> afterGrant = accessControlCacheService.resolveEffectiveKeys(user);
-        assertThat(afterGrant).containsExactlyInAnyOrder("test_reports.create", "billing.view");
+        assertThat(accessControlCacheService.resolveEffectiveKeys(user)).containsExactlyInAnyOrder("test_reports.create", "billing.view");
 
-        roleAccessControlRepository.deleteAll(roleAccessControlRepository.findByRoleId(user.getRole().getId()));
-        accessControlCacheService.invalidateRolePermissions(user.getRole().getId());
+        user.getRole().getTemplates().clear();
+        roleRepository.save(user.getRole());
+        accessControlCacheService.invalidateAll();
 
-        Set<String> afterRoleChange = accessControlCacheService.resolveEffectiveKeys(user);
-        assertThat(afterRoleChange).containsExactly("billing.view");
+        assertThat(accessControlCacheService.resolveEffectiveKeys(user)).containsExactly("billing.view");
     }
 }

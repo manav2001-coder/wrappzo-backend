@@ -83,6 +83,21 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
     }
 
+    @ExceptionHandler({RoleNotFoundException.class, TemplateNotFoundException.class})
+    public ResponseEntity<Map<String, String>> handleRoleOrTemplateNotFound(RuntimeException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
+    }
+
+    @ExceptionHandler(InvalidTemplateException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidTemplate(InvalidTemplateException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+    }
+
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<Map<String, String>> handleConflict(ConflictException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
+    }
+
     @ExceptionHandler(InvalidMenuLabelException.class)
     public ResponseEntity<Map<String, String>> handleInvalidMenuLabel(InvalidMenuLabelException e) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));

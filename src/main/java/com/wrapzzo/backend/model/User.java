@@ -62,6 +62,12 @@ public class User {
     @BatchSize(size = 100)
     private Set<OrgUnit> extraOrgUnits = new HashSet<>();
 
+    /** Templates granted to this user on top of their role's -- an exception, not the norm. */
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(name = "user_templates", joinColumns = @JoinColumn(name = "user_id"), inverseJoinColumns = @JoinColumn(name = "template_id"))
+    @BatchSize(size = 100)
+    private Set<Template> templates = new HashSet<>();
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reports_to_id")
     private User reportsTo;

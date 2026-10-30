@@ -2,6 +2,7 @@ package com.wrapzzo.backend.controller;
 
 import com.wrapzzo.backend.dto.BulkImportUsersRequest;
 import com.wrapzzo.backend.dto.BulkImportUsersResponse;
+import com.wrapzzo.backend.dto.ChangeUserRoleRequest;
 import com.wrapzzo.backend.dto.SetExtraOrgUnitsRequest;
 import com.wrapzzo.backend.dto.SetCompanyWideRequest;
 import com.wrapzzo.backend.dto.UserResponse;
@@ -45,6 +46,12 @@ public class UserController {
     @RequiresPermission(Keys.USER_EDIT)
     public UserResponse makeCompanyAdmin(@PathVariable UUID companyId, @PathVariable UUID userId) {
         return userService.makeCompanyAdmin(companyId, userId);
+    }
+
+    @PutMapping("/{userId}/role")
+    @RequiresPermission(Keys.USER_EDIT)
+    public UserResponse changeRole(@PathVariable UUID companyId, @PathVariable UUID userId, @Valid @RequestBody ChangeUserRoleRequest request) {
+        return userService.changeRole(companyId, userId, request.roleId());
     }
 
     @PostMapping("/{userId}/removeCompanyAdmin")
