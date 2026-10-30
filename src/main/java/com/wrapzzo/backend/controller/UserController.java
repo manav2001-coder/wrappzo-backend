@@ -56,8 +56,8 @@ public class UserController {
 
     @PostMapping("/{userId}/removeCompanyAdmin")
     @RequiresPermission(Keys.USER_EDIT)
-    public UserResponse removeCompanyAdmin(@PathVariable UUID companyId, @PathVariable UUID userId) {
-        return userService.removeCompanyAdmin(companyId, userId);
+    public UserResponse removeCompanyAdmin(@PathVariable UUID companyId, @PathVariable UUID userId, @Valid @RequestBody ChangeUserRoleRequest request) {
+        return userService.removeCompanyAdmin(companyId, userId, request.roleId());
     }
 
     /** The org units a user covers beyond their own (replace-all) -- a manager over several zones. */

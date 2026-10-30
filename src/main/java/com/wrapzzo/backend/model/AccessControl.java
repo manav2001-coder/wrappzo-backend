@@ -67,10 +67,6 @@ public class AccessControl {
     @Column(name = "company_assignable", nullable = false)
     private boolean companyAssignable = true;
 
-    /** Feature master switch: an inactive key grants nothing, wherever a template carries it. */
-    @Column(name = "is_active", nullable = false)
-    private boolean active = true;
-
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

@@ -70,6 +70,7 @@ class OrgScopeAndDoctorChangeIntegrationTest {
     @Autowired private CompanyFeatureFlagService companyFeatureFlagService;
     @Autowired private CompanyRepository companyRepository;
     @Autowired private RoleRepository roleRepository;
+    @Autowired private FeatureService featureService;
     @Autowired private TemplateRepository templateRepository;
     @Autowired private AccessControlRepository accessControlRepository;
     @Autowired private UserRepository userRepository;
@@ -93,6 +94,7 @@ class OrgScopeAndDoctorChangeIntegrationTest {
     @BeforeEach
     void setUp() {
         company = companyRepository.save(new Company("Scope Test Pharma " + UUID.randomUUID()));
+        featureService.registerAll(company);
         Role member = roleRepository.save(new Role(company, "Member"));
         managerRole = roleRepository.save(new Role(company, "Zonal Manager"));
         grant(managerRole, "order.view");

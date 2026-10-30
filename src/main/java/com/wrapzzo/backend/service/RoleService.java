@@ -21,14 +21,14 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * The roles master: a company's roles are created here first, then users are given one, then the
  * role is mapped to templates (TemplateService) -- the role itself grants nothing. Company Admin
- * and Member exist from the start and are protected, since the app finds them by name.
+ * exists from the start and is protected, since the app finds it by name; every other role is
+ * the company's own.
  */
 @Service
 @RequiredArgsConstructor
 public class RoleService {
 
     public static final String COMPANY_ADMIN_ROLE_NAME = "Company Admin";
-    public static final String MEMBER_ROLE_NAME = "Member";
 
     private final RoleRepository roleRepository;
     private final UserRepository userRepository;
@@ -120,7 +120,7 @@ public class RoleService {
     }
 
     private static boolean isProtected(Role role) {
-        return COMPANY_ADMIN_ROLE_NAME.equals(role.getName()) || MEMBER_ROLE_NAME.equals(role.getName());
+        return COMPANY_ADMIN_ROLE_NAME.equals(role.getName());
     }
 
     private RoleResponse toResponse(Role role) {

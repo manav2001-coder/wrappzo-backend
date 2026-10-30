@@ -33,6 +33,7 @@ public class CompanyService {
     private final CompanyRepository companyRepository;
     private final RoleRepository roleRepository;
     private final TemplateRepository templateRepository;
+    private final FeatureService featureService;
     private final FileStorageService fileStorageService;
 
     @Transactional
@@ -42,6 +43,7 @@ public class CompanyService {
         // plain save() defers until transaction commit, after the response below is built.
         Company company = companyRepository.saveAndFlush(new Company(name));
         seedDefaultRoles(company);
+        featureService.registerAll(company);
         return toResponse(company);
     }
 
@@ -95,12 +97,10 @@ public class CompanyService {
         return CompanyResponse.from(company, logoUrl);
     }
 
-    /** A new company starts with its two protected roles, each carrying the matching system master template. */
+    /** A new company starts with one role, Company Admin, carrying the system master template of that name. */
     private void seedDefaultRoles(Company company) {
-        for (String roleName : List.of(RoleService.COMPANY_ADMIN_ROLE_NAME, RoleService.MEMBER_ROLE_NAME)) {
-            Role role = new Role(company, roleName);
-            templateRepository.findSystemByName(roleName).ifPresent(role.getTemplates()::add);
-            roleRepository.save(role);
-        }
+        Role role = new Role(company, RoleService.COMPANY_ADMIN_ROLE_NAME);
+        templateRepository.findSystemByName(RoleService.COMPANY_ADMIN_ROLE_NAME).ifPresent(role.getTemplates()::add);
+        roleRepository.save(role);
     }
 }

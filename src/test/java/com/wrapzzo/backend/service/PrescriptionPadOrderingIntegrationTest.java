@@ -71,6 +71,7 @@ class PrescriptionPadOrderingIntegrationTest {
     @Autowired private CompanyFeatureFlagService companyFeatureFlagService;
     @Autowired private CompanyRepository companyRepository;
     @Autowired private RoleRepository roleRepository;
+    @Autowired private FeatureService featureService;
     @Autowired private AccessControlRepository accessControlRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private OrgUnitRepository orgUnitRepository;
@@ -93,6 +94,7 @@ class PrescriptionPadOrderingIntegrationTest {
     @BeforeEach
     void setUp() {
         company = companyRepository.save(new Company("Pad Test Pharma " + UUID.randomUUID()));
+        featureService.registerAll(company);
         memberRole = roleRepository.save(new Role(company, "Member"));
 
         OrgUnit division = orgUnitRepository.save(new OrgUnit(company, null, "Division", "Division"));
