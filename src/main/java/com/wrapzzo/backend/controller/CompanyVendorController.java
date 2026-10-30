@@ -36,8 +36,9 @@ public class CompanyVendorController {
         return companyVendorService.assign(companyId, request.vendorId(), request.orgUnitId());
     }
 
-    @DeleteMapping("/{vendorId}")
-    public List<CompanyVendorResponse> unassign(@PathVariable UUID companyId, @PathVariable UUID vendorId) {
-        return companyVendorService.unassign(companyId, vendorId);
+    /** Removes one mapping (by its id), not every mapping of the vendor: it may serve other org units of the company. */
+    @DeleteMapping("/mappings/{mappingId}")
+    public List<CompanyVendorResponse> unassign(@PathVariable UUID companyId, @PathVariable UUID mappingId) {
+        return companyVendorService.unassign(companyId, mappingId);
     }
 }

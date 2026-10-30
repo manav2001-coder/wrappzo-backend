@@ -21,6 +21,4 @@ public interface CompanyVendorRepository extends JpaRepository<CompanyVendor, UU
 
     @Query("select cv.vendor.id from CompanyVendor cv where cv.company.id = :companyId and cv.orgUnit is null")
     List<UUID> findCompanyWideVendorIds(@Param("companyId") UUID companyId);
-
-    void deleteByCompany_IdAndVendor_Id(UUID companyId, UUID vendorId);
 }

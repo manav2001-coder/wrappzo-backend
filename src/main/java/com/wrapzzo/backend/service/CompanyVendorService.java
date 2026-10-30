@@ -4,6 +4,7 @@ import com.wrapzzo.backend.dto.AddCompanyVendorRequest;
 import com.wrapzzo.backend.dto.AddVendorRequest;
 import com.wrapzzo.backend.dto.CompanyVendorResponse;
 import com.wrapzzo.backend.exception.CompanyNotFoundException;
+import com.wrapzzo.backend.exception.CompanyVendorNotFoundException;
 import com.wrapzzo.backend.exception.OrgUnitNotFoundException;
 import com.wrapzzo.backend.exception.VendorNotFoundException;
 import com.wrapzzo.backend.model.Company;
@@ -51,8 +52,12 @@ public class CompanyVendorService {
     public List<CompanyVendorResponse> assign(UUID companyId, UUID vendorId, UUID orgUnitId) {
         Company company = requireCompany(companyId);
         Vendor vendor = vendorRepository.findById(vendorId).orElseThrow(() -> new VendorNotFoundException(vendorId));
+        // The org unit must belong to THIS company: a vendor scoped to another company's unit would be
+        // invisible here and would leak this company's roster into theirs.
         OrgUnit orgUnit = orgUnitId != null
-                ? orgUnitRepository.findById(orgUnitId).orElseThrow(() -> new OrgUnitNotFoundException(orgUnitId))
+                ? orgUnitRepository.findById(orgUnitId)
+                        .filter(unit -> unit.getCompany().getId().equals(companyId))
+                        .orElseThrow(() -> new OrgUnitNotFoundException(orgUnitId))
                 : null;
         try {
             companyVendorRepository.save(new CompanyVendor(company, vendor, orgUnit));
@@ -62,10 +67,14 @@ public class CompanyVendorService {
         return list(companyId);
     }
 
+    /** Removes one mapping -- a vendor serving the whole company, or one org unit -- leaving its other mappings. */
     @Transactional
-    public List<CompanyVendorResponse> unassign(UUID companyId, UUID vendorId) {
+    public List<CompanyVendorResponse> unassign(UUID companyId, UUID mappingId) {
         requireCompany(companyId);
-        companyVendorRepository.deleteByCompany_IdAndVendor_Id(companyId, vendorId);
+        CompanyVendor mapping = companyVendorRepository.findById(mappingId)
+                .filter(candidate -> candidate.getCompany().getId().equals(companyId))
+                .orElseThrow(() -> new CompanyVendorNotFoundException(mappingId));
+        companyVendorRepository.delete(mapping);
         return list(companyId);
     }
 
