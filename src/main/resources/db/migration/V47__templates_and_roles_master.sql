@@ -126,10 +126,19 @@ WHERE r.name = 'Company Admin' AND t.company_id IS NOT NULL
   AND ac.key IN ('role.view', 'role.edit', 'template.view', 'template.edit')
 ON CONFLICT DO NOTHING;
 
--- The system master template a new company's Company Admin role starts from.
-INSERT INTO templates (company_id, name, description) VALUES (NULL, 'Company Admin', 'Everything a company can hold');
+-- System master templates: what a new company's Company Admin and Member roles start from.
+INSERT INTO templates (company_id, name, description) VALUES
+    (NULL, 'Company Admin', 'Everything a company can hold'),
+    (NULL, 'Member', 'Submit entries, place requests and keep a recipient list');
 
 INSERT INTO template_access_controls (template_id, access_control_id)
 SELECT t.id, ac.id
 FROM templates t CROSS JOIN access_controls ac
 WHERE t.company_id IS NULL AND t.name = 'Company Admin' AND ac.company_assignable;
+
+INSERT INTO template_access_controls (template_id, access_control_id)
+SELECT t.id, ac.id
+FROM templates t CROSS JOIN access_controls ac
+WHERE t.company_id IS NULL AND t.name = 'Member'
+  AND ac.key IN ('dashboard.view', 'campaign_entry.submit', 'request.create', 'product.view', 'order.view',
+                 'order.artwork_review', 'recipient.view', 'recipient.create', 'recipient.edit', 'recipient_list.manage');
