@@ -1,3 +1,20 @@
+-- Per-company feature master, replacing V48's global switch.
+--
+-- V47 and V48 had already been applied to shared databases when the design changed, so they stay
+-- exactly as they ran (editing an applied migration makes Flyway refuse to start); this one moves
+-- the schema to where it should be.
+
+-- V48's single global is_active flag is superseded by the per-company switch below.
+ALTER TABLE access_controls DROP COLUMN is_active;
+
+-- V47 seeded a system "Member" template for a default Member role. There is no default role any
+-- more -- a company's roles are its own -- so remove it, unless something already uses it.
+DELETE FROM templates t
+WHERE t.company_id IS NULL AND t.name = 'Member'
+  AND NOT EXISTS (SELECT 1 FROM role_templates rt WHERE rt.template_id = t.id)
+  AND NOT EXISTS (SELECT 1 FROM user_templates ut WHERE ut.template_id = t.id)
+  AND NOT EXISTS (SELECT 1 FROM template_references tr WHERE tr.referenced_template_id = t.id);
+
 -- Feature master, per company: which permission keys a company has registered, and whether each is
 -- switched on. A company's people can hold only its active features, whatever a template carries
 -- (see AccessControlCacheService), and a company template may carry only those. New keys reach
