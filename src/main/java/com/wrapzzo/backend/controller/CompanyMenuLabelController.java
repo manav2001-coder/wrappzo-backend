@@ -1,11 +1,12 @@
 package com.wrapzzo.backend.controller;
 
 import com.wrapzzo.backend.dto.MenuLabelsRequest;
+import com.wrapzzo.backend.security.Permission.Keys;
+import com.wrapzzo.backend.security.RequiresPermission;
 import com.wrapzzo.backend.service.CompanyMenuLabelService;
 import jakarta.validation.Valid;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -16,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/company/menu-labels")
 @RequiredArgsConstructor
-@PreAuthorize("hasAuthority('menu.manage')")
+@RequiresPermission(Keys.MENU_EDIT)
 public class CompanyMenuLabelController {
 
     private final CompanyMenuLabelService companyMenuLabelService;

@@ -95,8 +95,8 @@ class OrgScopeAndDoctorChangeIntegrationTest {
         company = companyRepository.save(new Company("Scope Test Pharma " + UUID.randomUUID()));
         Role member = roleRepository.save(new Role(company, "Member"));
         managerRole = roleRepository.save(new Role(company, "Zonal Manager"));
-        grant(managerRole, "order.track");
-        grant(managerRole, "recipient.manage");
+        grant(managerRole, "order.view");
+        grant(managerRole, "recipient.view");
 
         OrgUnit division = orgUnitRepository.save(new OrgUnit(company, null, "Division", "Division"));
         north = orgUnitRepository.save(new OrgUnit(company, division, "North", "Zone"));
@@ -109,9 +109,11 @@ class OrgScopeAndDoctorChangeIntegrationTest {
         userRepository.save(mrNorth);
 
         Role platformRole = roleRepository.save(new Role(company, "Admin for test"));
-        grant(platformRole, "user.manage");
-        grant(platformRole, OrgScopeService.ALL_UNITS_KEY);
+        grant(platformRole, "user.view");
+        grant(platformRole, "user.edit");
         platformAdmin = saveUser("Head Office", platformRole, null);
+        platformAdmin.setCompanyWide(true);
+        userRepository.save(platformAdmin);
 
         Vendor printer = vendorRepository.save(new Vendor("Pad Printers", "pads-" + UUID.randomUUID() + "@test.com", null, "n/a", manager));
         companyVendorRepository.save(new CompanyVendor(company, printer, null));
@@ -219,8 +221,8 @@ class OrgScopeAndDoctorChangeIntegrationTest {
 
     @Test
     void aPeerMrCannotReviewAnotherMrsDoctorRequest() {
-        // Every real Member holds recipient.manage (V27) -- it must not make them a reviewer.
-        grant(mrSouth.getRole(), "recipient.manage");
+        // Every real Member manages their own list -- it must not make them a reviewer.
+        grant(mrSouth.getRole(), "recipient_list.manage");
         DoctorChangeRequestResponse request = requestNewDoctor(mrNorth, "PEER-1");
 
         actAs(mrSouth);

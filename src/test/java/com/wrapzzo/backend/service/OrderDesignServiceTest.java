@@ -23,7 +23,6 @@ import com.wrapzzo.backend.model.Vendor;
 import com.wrapzzo.backend.repository.OrderDesignApprovalRepository;
 import com.wrapzzo.backend.repository.OrderDesignRepository;
 import com.wrapzzo.backend.repository.OrderRepository;
-import com.wrapzzo.backend.repository.QuickGiftRequestRepository;
 import com.wrapzzo.backend.repository.UserRepository;
 import com.wrapzzo.backend.repository.VendorRepository;
 import java.util.ArrayList;
@@ -51,12 +50,11 @@ class OrderDesignServiceTest {
     private final UserRepository users = mock(UserRepository.class);
     private final CompanyFeatureFlagService flags = mock(CompanyFeatureFlagService.class);
     private final AccessControlCacheService keys = mock(AccessControlCacheService.class);
-    private final OrgScopeService orgScopes = mock(OrgScopeService.class);
-    private final QuickGiftRequestRepository quickGifts = mock(QuickGiftRequestRepository.class);
+    private final VisibilityService visibility = mock(VisibilityService.class);
     private final FileStorageService files = mock(FileStorageService.class);
 
     private final OrderDesignService service = new OrderDesignService(designs, approvals, orders,
-            mock(VendorRepository.class), users, files, orgScopes, flags, quickGifts, keys);
+            mock(VendorRepository.class), users, files, visibility, flags, keys);
 
     private final List<OrderDesignApproval> trail = new ArrayList<>();
     private final Company company = new Company();
@@ -78,12 +76,13 @@ class OrderDesignServiceTest {
             u.setCompany(company);
             when(users.findById(u.getId())).thenReturn(Optional.of(u));
             when(keys.resolveEffectiveKeys(u)).thenReturn(u == neha ? Set.of(OrderDesignService.FINAL_APPROVAL_KEY) : Set.of());
-            when(orgScopes.resolve(u)).thenReturn(new OrgScope(u.getId(), null));
+            when(visibility.resolve(u)).thenReturn(Visibility.everything(u.getId()));
         }
         order = new Order();
         order.setId(UUID.randomUUID());
         order.setCompany(company);
         order.setCreatedBy(aditi);
+        order.setOwner(aditi);
         Vendor vendor = new Vendor();
         vendor.setName("PrintCo");
         design = new OrderDesign(order, 1, "key", "proof.pdf", vendor);
@@ -91,7 +90,6 @@ class OrderDesignServiceTest {
 
         when(designs.findById(design.getId())).thenReturn(Optional.of(design));
         when(orders.findById(order.getId())).thenReturn(Optional.of(order));
-        when(quickGifts.findByOrderId(any())).thenReturn(Optional.empty());
         when(flags.isEnabled(company.getId(), CompanyFeature.MARKETING_DESIGN_APPROVAL)).thenReturn(true);
         when(files.publicUrl(anyString())).thenReturn("https://files/proof.pdf");
         when(approvals.save(any(OrderDesignApproval.class))).thenAnswer(inv -> {

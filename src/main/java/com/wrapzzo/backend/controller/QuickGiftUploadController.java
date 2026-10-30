@@ -4,6 +4,7 @@ import com.wrapzzo.backend.dto.PresignSubmissionAttachmentRequest;
 import com.wrapzzo.backend.dto.PresignSubmissionAttachmentResponse;
 import com.wrapzzo.backend.dto.RecipientUploadDetailsResponse;
 import com.wrapzzo.backend.dto.SubmitRecipientPhotoRequest;
+import com.wrapzzo.backend.security.PublicEndpoint;
 import com.wrapzzo.backend.service.QuickGiftUploadService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/public/quick-gift-upload/{token}")
 @RequiredArgsConstructor
+@PublicEndpoint
 public class QuickGiftUploadController {
 
     private final QuickGiftUploadService quickGiftUploadService;

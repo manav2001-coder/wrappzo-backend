@@ -2,6 +2,7 @@ package com.wrapzzo.backend.controller;
 
 import com.wrapzzo.backend.dto.VendorResponse;
 import com.wrapzzo.backend.security.CurrentVendor;
+import com.wrapzzo.backend.security.VendorEndpoint;
 import com.wrapzzo.backend.service.VendorService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/vendor")
 @RequiredArgsConstructor
+@VendorEndpoint
 public class VendorSelfController {
 
     private final VendorService vendorService;

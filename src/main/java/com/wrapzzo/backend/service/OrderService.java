@@ -67,7 +67,7 @@ public class OrderService {
 
     private final OrderRepository orderRepository;
     private final QuickGiftRequestRepository quickGiftRequestRepository;
-    private final OrgScopeService orgScopeService;
+    private final VisibilityService visibilityService;
     private final UserRepository userRepository;
     private final VendorRepository vendorRepository;
     private final OrderStatusHistoryService orderStatusHistoryService;
@@ -76,21 +76,13 @@ public class OrderService {
     private final OrderDesignRepository orderDesignRepository;
     private final FileStorageService fileStorageService;
 
-    /** The caller's own org unit and everything under it (or the whole company with org.scope.all) -- see OrgScope. */
+    /** The orders the caller can see (see Visibility), newest first. */
     @Transactional(readOnly = true)
     public List<OrderResponse> list() {
         User user = currentUser();
-        UUID companyId = user.getCompany().getId();
-        OrgScope scope = orgScopeService.resolve(user);
-        List<Order> orders;
-        if (scope.unrestricted()) {
-            orders = orderRepository.findByCompanyIdOrderByCreatedAtDesc(companyId);
-        } else if (scope.orgUnitIds().isEmpty()) {
-            orders = orderRepository.findByCompanyIdAndCreatedByIdOrderByCreatedAtDesc(companyId, user.getId());
-        } else {
-            orders = orderRepository.findVisibleInCompany(companyId, user.getId(), scope.orgUnitIds());
-        }
-        return toResponseList(orders);
+        Visibility visibility = visibilityService.resolve(user);
+        return toResponseList(orderRepository.findVisibleInCompany(
+                user.getCompany().getId(), visibility.companyWide(), visibility.peopleForQuery(), visibility.orgUnitsForQuery()));
     }
 
     @Transactional(readOnly = true)
@@ -104,12 +96,12 @@ public class OrderService {
         return orderPhotoService.requestPhotoLink(getOwnCompanyEntity(id));
     }
 
-    /** 404 for another company's order and for one outside the caller's org scope alike. */
+    /** 404 for another company's order and for one the caller can't see alike. */
     private Order getOwnCompanyEntity(UUID id) {
         Order order = getEntity(id);
         User user = currentUser();
         if (!order.getCompany().getId().equals(user.getCompany().getId())
-                || !orgScopeService.resolve(user).covers(order.getOrgUnit(), order.getCreatedBy())) {
+                || !visibilityService.resolve(user).canSee(order.getOwner(), order.getOrgUnit())) {
             throw new OrderNotFoundException(id);
         }
         return order;

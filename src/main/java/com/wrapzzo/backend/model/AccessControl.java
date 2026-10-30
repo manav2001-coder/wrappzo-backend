@@ -32,26 +32,38 @@ public class AccessControl {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    /** Machine-readable, e.g. "campaign.create" or "nav.billing". */
+    /** module.action, e.g. "campaign.create" -- one of security.Permission's keys. */
     @Column(nullable = false, unique = true)
     private String key;
 
-    /** Human-readable label shown in the assignment UI, e.g. "Create Campaign". */
+    /** The part of the app it belongs to, e.g. "campaign" -- a row of the access grid. */
+    @Column(nullable = false, length = 64)
+    private String module;
+
+    /** What it allows within that module, e.g. "create" -- a column of the access grid. */
+    @Column(nullable = false, length = 64)
+    private String action;
+
+    /** The action's label, e.g. "Create". */
     @Column(nullable = false)
     private String name;
 
     @Column
     private String description;
 
-    /** Groups keys in the assignment UI, e.g. "Campaign", "Navigation". */
+    /** The module's label, e.g. "Campaigns". */
     @Column(nullable = false)
     private String category;
+
+    /** Order on the access screen: modules by hundreds, actions within them. */
+    @Column(name = "sort_order", nullable = false)
+    private int sortOrder;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     private AccessControlType type;
 
-    /** False for platform-wide keys (e.g. order.manage) that must never be grantable to a single company's designation -- see DesignationAccessService. */
+    /** False for platform-wide keys (e.g. platform_order.manage) that must never be grantable to a single company's designation -- see DesignationAccessService. */
     @Column(name = "company_assignable", nullable = false)
     private boolean companyAssignable = true;
 
@@ -62,7 +74,10 @@ public class AccessControl {
     private Instant updatedAt;
 
     public AccessControl(String key, String name, String category, AccessControlType type) {
+        int dot = key.indexOf('.');
         this.key = key;
+        this.module = key.substring(0, dot);
+        this.action = key.substring(dot + 1);
         this.name = name;
         this.category = category;
         this.type = type;

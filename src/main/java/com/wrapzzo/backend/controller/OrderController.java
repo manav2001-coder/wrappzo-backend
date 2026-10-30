@@ -2,11 +2,12 @@ package com.wrapzzo.backend.controller;
 
 import com.wrapzzo.backend.dto.OrderResponse;
 import com.wrapzzo.backend.dto.RequestPhotoLinkResponse;
+import com.wrapzzo.backend.security.Permission.Keys;
+import com.wrapzzo.backend.security.RequiresPermission;
 import com.wrapzzo.backend.service.OrderService;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -22,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/orders")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyAuthority('campaign.manage', 'campaign.submit', 'campaign.approve', 'order.track', 'order.design.review')")
+@RequiresPermission(Keys.ORDER_VIEW)
 public class OrderController {
 
     private final OrderService orderService;

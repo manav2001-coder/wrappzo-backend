@@ -5,6 +5,7 @@ import com.wrapzzo.backend.dto.LogoutRequest;
 import com.wrapzzo.backend.dto.RefreshRequest;
 import com.wrapzzo.backend.dto.SetupVendorPasswordRequest;
 import com.wrapzzo.backend.dto.TokenResponse;
+import com.wrapzzo.backend.security.PublicEndpoint;
 import com.wrapzzo.backend.service.TokenPair;
 import com.wrapzzo.backend.service.VendorAuthService;
 import jakarta.validation.Valid;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/vendor/auth")
 @RequiredArgsConstructor
+@PublicEndpoint
 public class VendorAuthController {
 
     private final VendorAuthService vendorAuthService;

@@ -4,6 +4,8 @@ import com.wrapzzo.backend.dto.CreateRecipientRequest;
 import com.wrapzzo.backend.dto.RecipientResponse;
 import com.wrapzzo.backend.dto.UpcomingBirthdayResponse;
 import com.wrapzzo.backend.dto.UpdateRecipientRequest;
+import com.wrapzzo.backend.security.Permission.Keys;
+import com.wrapzzo.backend.security.RequiresPermission;
 import com.wrapzzo.backend.service.RecipientService;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -28,39 +30,39 @@ public class RecipientController {
     private final RecipientService recipientService;
 
     @GetMapping
-    @PreAuthorize("hasAuthority('recipient.manage')")
+    @RequiresPermission(Keys.RECIPIENT_VIEW)
     public List<RecipientResponse> list() {
         return recipientService.list();
     }
 
     /** "Pick an existing doctor" for the Quick Gift form -- anyone who can send a gift can search, not just recipient.manage holders. */
     @GetMapping("/search")
-    @PreAuthorize("hasAnyAuthority('recipient.manage', 'quickgift.create')")
+    @PreAuthorize("hasAnyAuthority('" + Keys.RECIPIENT_VIEW + "', '" + Keys.REQUEST_CREATE + "', '" + Keys.RECIPIENT_LIST_MANAGE + "')")
     public List<RecipientResponse> search(@RequestParam String q) {
         return recipientService.search(q);
     }
 
     /** An MR's own working list (recipient_assignments) -- not the full shared directory. */
     @GetMapping("/mine")
-    @PreAuthorize("hasAnyAuthority('recipient.manage', 'quickgift.create')")
+    @PreAuthorize("hasAnyAuthority('" + Keys.RECIPIENT_LIST_MANAGE + "', '" + Keys.REQUEST_CREATE + "')")
     public List<RecipientResponse> mine() {
         return recipientService.listMine();
     }
 
     @PostMapping
-    @PreAuthorize("hasAuthority('recipient.manage')")
+    @RequiresPermission(Keys.RECIPIENT_CREATE)
     public RecipientResponse create(@Valid @RequestBody CreateRecipientRequest request) {
         return recipientService.create(request);
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('recipient.manage')")
+    @RequiresPermission(Keys.RECIPIENT_EDIT)
     public RecipientResponse update(@PathVariable UUID id, @Valid @RequestBody UpdateRecipientRequest request) {
         return recipientService.update(id, request);
     }
 
     @GetMapping("/upcoming-birthdays")
-    @PreAuthorize("hasAuthority('recipient.manage')")
+    @RequiresPermission(Keys.RECIPIENT_VIEW)
     public List<UpcomingBirthdayResponse> upcomingBirthdays(@RequestParam(defaultValue = "30") int days) {
         return recipientService.upcomingBirthdays(days);
     }

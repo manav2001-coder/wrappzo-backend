@@ -91,8 +91,9 @@ class WarehouseAndRecurringOrderIntegrationTest {
         company = companyRepository.save(new Company("Warehouse Test Pharma " + UUID.randomUUID()));
         Role member = roleRepository.save(new Role(company, "Member"));
         Role admin = roleRepository.save(new Role(company, "Warehouse Admin"));
-        grant(admin, "warehouse.manage");
-        grant(admin, OrgScopeService.ALL_UNITS_KEY);
+        grant(admin, "warehouse.view");
+        grant(admin, "warehouse.setup");
+        grant(admin, "warehouse.operate");
 
         OrgUnit division = orgUnitRepository.save(new OrgUnit(company, null, "Division", "Division"));
         north = orgUnitRepository.save(new OrgUnit(company, division, "North", "Zone"));
@@ -100,6 +101,8 @@ class WarehouseAndRecurringOrderIntegrationTest {
         mrNorth = saveUser("MR North", member, north);
         otherMr = saveUser("Other MR", member, north);
         warehouseAdmin = saveUser("Ops", admin, null);
+        warehouseAdmin.setCompanyWide(true);
+        warehouseAdmin = userRepository.save(warehouseAdmin);
 
         printer = vendorRepository.save(new Vendor("Pad Printers", "pads-" + UUID.randomUUID() + "@test.com", null, "n/a", warehouseAdmin));
         companyVendorRepository.save(new CompanyVendor(company, printer, null));

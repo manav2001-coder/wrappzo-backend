@@ -3,6 +3,7 @@ package com.wrapzzo.backend.controller;
 import com.wrapzzo.backend.dto.UpdateOrderStatusRequest;
 import com.wrapzzo.backend.dto.VendorOrderResponse;
 import com.wrapzzo.backend.security.CurrentVendor;
+import com.wrapzzo.backend.security.VendorEndpoint;
 import com.wrapzzo.backend.service.OrderService;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/vendor/orders")
 @RequiredArgsConstructor
+@VendorEndpoint
 public class VendorOrderController {
 
     private final OrderService orderService;

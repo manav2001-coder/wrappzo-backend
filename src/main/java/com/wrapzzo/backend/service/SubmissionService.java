@@ -63,6 +63,7 @@ public class SubmissionService {
     private final RecipientService recipientService;
     private final OrderStatusHistoryService orderStatusHistoryService;
     private final WarehouseService warehouseService;
+    private final VisibilityService visibilityService;
 
     public PresignSubmissionAttachmentResponse presignAttachment(UUID campaignId, String contentType) {
         Campaign campaign = campaignService.getEntity(campaignId);
@@ -124,7 +125,12 @@ public class SubmissionService {
     @Transactional(readOnly = true)
     public List<SubmissionResponse> listForCampaign(UUID campaignId) {
         campaignService.getEntity(campaignId);
-        return submissionRepository.findByCampaignIdOrderByCreatedAtDesc(campaignId).stream().map(this::toResponse).toList();
+        Visibility visibility = visibilityService.resolve(campaignService.currentUser());
+        return submissionRepository
+                .findVisibleByCampaign(campaignId, visibility.companyWide(), visibility.peopleForQuery(), visibility.orgUnitsForQuery())
+                .stream()
+                .map(this::toResponse)
+                .toList();
     }
 
     @Transactional(readOnly = true)
@@ -156,7 +162,7 @@ public class SubmissionService {
 
     private void requireInAudience(Campaign campaign) {
         User user = campaignService.currentUser();
-        if (!campaignService.canManage(user) && !campaignService.isInAudience(campaign, user.getId())) {
+        if (!campaignService.canEditCampaigns(user) && !campaignService.isInAudience(campaign, user.getId())) {
             throw new NotInCampaignAudienceException(campaign.getId());
         }
     }

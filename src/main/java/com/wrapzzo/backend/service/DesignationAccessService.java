@@ -9,6 +9,7 @@ import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.DesignationAccessControl;
 import com.wrapzzo.backend.model.Role;
 import com.wrapzzo.backend.model.User;
+import com.wrapzzo.backend.security.Permission;
 import com.wrapzzo.backend.repository.AccessControlRepository;
 import com.wrapzzo.backend.repository.CompanyRepository;
 import com.wrapzzo.backend.repository.DesignationAccessControlRepository;
@@ -16,6 +17,8 @@ import com.wrapzzo.backend.repository.RoleAccessControlRepository;
 import com.wrapzzo.backend.repository.UserRepository;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.ArrayList;
+import java.util.Optional;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -77,8 +80,8 @@ public class DesignationAccessService {
         companyAccessGuard.requireOwnCompanyOrPlatformStaff(companyId);
         Company company = companyRepository.findById(companyId).orElseThrow(() -> new CompanyNotFoundException(companyId));
 
-        List<AccessControl> accessControls = accessControlRepository.findAllById(accessControlIds);
-        if (accessControls.size() != accessControlIds.size()) {
+        List<AccessControl> accessControls = withImpliedViews(accessControlRepository.findAllById(accessControlIds));
+        if (accessControls.stream().map(AccessControl::getId).filter(accessControlIds::contains).count() != accessControlIds.size()) {
             throw new InvalidAccessControlSelectionException();
         }
         List<String> platformOnlyKeys =
@@ -93,7 +96,8 @@ public class DesignationAccessService {
             designationAccessControlRepository.save(new DesignationAccessControl(company, designation, accessControl));
         }
         accessControlCacheService.invalidateDesignationPermissions(companyId, designation);
-        return new DesignationAccessResponse(designation, accessControlIds, roleGrants(companyId, designation));
+        Set<UUID> granted = accessControls.stream().map(AccessControl::getId).collect(Collectors.toSet());
+        return new DesignationAccessResponse(designation, granted, roleGrants(companyId, designation));
     }
 
     /**
@@ -130,5 +134,25 @@ public class DesignationAccessService {
             designationAccessControlRepository.save(new DesignationAccessControl(company, designation, accessControl));
         }
         accessControlCacheService.invalidateDesignationPermissions(companyId, designation);
+    }
+
+    /**
+     * Any action of a module brings its view with it ("Edit campaigns" without "View campaigns"
+     * isn't a usable grant) -- applied here, not only in the access screen, so every grant path agrees.
+     */
+    private List<AccessControl> withImpliedViews(List<AccessControl> selected) {
+        Set<String> keys = selected.stream().map(AccessControl::getKey).collect(Collectors.toSet());
+        Set<String> missingViews = selected.stream()
+                .map(ac -> Permission.fromKey(ac.getKey()).flatMap(Permission::impliedView))
+                .flatMap(Optional::stream)
+                .map(Permission::key)
+                .filter(key -> !keys.contains(key))
+                .collect(Collectors.toSet());
+        if (missingViews.isEmpty()) {
+            return selected;
+        }
+        List<AccessControl> all = new ArrayList<>(selected);
+        missingViews.forEach(key -> accessControlRepository.findByKey(key).ifPresent(all::add));
+        return all;
     }
 }

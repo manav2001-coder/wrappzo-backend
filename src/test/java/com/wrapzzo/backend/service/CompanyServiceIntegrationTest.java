@@ -12,6 +12,7 @@ import com.wrapzzo.backend.repository.RoleAccessControlRepository;
 import com.wrapzzo.backend.repository.RoleRepository;
 import java.util.List;
 import java.util.UUID;
+import com.wrapzzo.backend.security.Permission;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -46,10 +47,8 @@ class CompanyServiceIntegrationTest {
         assertThat(companyAdminRole.getName()).isEqualTo("Company Admin");
 
         List<String> grantedKeys = roleAccessControlRepository.findAccessControlKeysByRoleId(companyAdminRole.getId());
-        assertThat(grantedKeys)
-                .containsExactlyInAnyOrder(
-                        "user.manage", "role.manage", "campaign.manage", "campaign.submit", "campaign.approve",
-                        "quickgift.create", "dashboard.view", "recipient.manage", "order.design.review", "org.scope.all");
+        // Every permission a company can hold -- never a platform-only one.
+        assertThat(grantedKeys).containsExactlyInAnyOrder(Permission.companyAssignablePermissions().stream().map(Permission::key).toArray(String[]::new));
     }
 
     @Test

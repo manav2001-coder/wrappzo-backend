@@ -7,6 +7,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +35,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final String BEARER_PREFIX = "Bearer ";
     public static final String VENDOR_AUTHORITY = "ROLE_VENDOR";
+    /** Every company or platform user carries it alongside their permission keys -- what @SignedInUser checks. */
+    public static final String USER_AUTHORITY = "ROLE_USER";
 
     private final JwtService jwtService;
     private final AccessControlCacheService accessControlCacheService;
@@ -65,6 +68,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private Set<GrantedAuthority> userAuthorities(UserPrincipalClaims claims) {
         Set<String> keys =
                 accessControlCacheService.resolveEffectiveKeys(claims.userId(), claims.roleId(), claims.companyId(), claims.designation());
-        return keys.stream().map(SimpleGrantedAuthority::new).collect(Collectors.toSet());
+        Set<GrantedAuthority> authorities = keys.stream().map(SimpleGrantedAuthority::new).collect(Collectors.toCollection(HashSet::new));
+        authorities.add(new SimpleGrantedAuthority(USER_AUTHORITY));
+        return authorities;
     }
 }

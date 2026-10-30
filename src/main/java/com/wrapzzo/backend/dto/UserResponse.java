@@ -18,6 +18,8 @@ public record UserResponse(
         String reportsToName,
         UUID orgUnitId,
         String orgUnitName,
+        /** Placed at the company itself: sees every record in the company. */
+        boolean companyWide,
         /** Units the user covers beyond their own -- what they see widens to these subtrees too. */
         List<OrgUnitRef> extraOrgUnits,
         UUID roleId,
@@ -39,6 +41,7 @@ public record UserResponse(
                 user.getReportsTo() != null ? user.getReportsTo().getName() : null,
                 user.getOrgUnit() != null ? user.getOrgUnit().getId() : null,
                 user.getOrgUnit() != null ? user.getOrgUnit().getName() : null,
+                user.isCompanyWide(),
                 user.getExtraOrgUnits().stream()
                         .map(unit -> new OrgUnitRef(unit.getId(), unit.getName()))
                         .sorted(Comparator.comparing(OrgUnitRef::name))

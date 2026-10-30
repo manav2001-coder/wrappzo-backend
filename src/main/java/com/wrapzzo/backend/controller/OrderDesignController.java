@@ -2,6 +2,8 @@ package com.wrapzzo.backend.controller;
 
 import com.wrapzzo.backend.dto.OrderDesignResponse;
 import com.wrapzzo.backend.dto.RejectOrderDesignRequest;
+import com.wrapzzo.backend.security.Permission.Keys;
+import com.wrapzzo.backend.security.RequiresPermission;
 import com.wrapzzo.backend.service.OrderDesignService;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -19,22 +21,24 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/orders/{orderId}/designs")
 @RequiredArgsConstructor
-@PreAuthorize("hasAuthority('order.design.review')")
 public class OrderDesignController {
 
     private final OrderDesignService orderDesignService;
 
     @GetMapping
+    @RequiresPermission(Keys.ORDER_VIEW)
     public List<OrderDesignResponse> list(@PathVariable UUID orderId) {
         return orderDesignService.listForCompany(orderId);
     }
 
     @PostMapping("/{designId}/approve")
+    @PreAuthorize("hasAnyAuthority('" + Keys.ORDER_ARTWORK_REVIEW + "', '" + Keys.ORDER_ARTWORK_FINAL + "')")
     public OrderDesignResponse approve(@PathVariable UUID orderId, @PathVariable UUID designId) {
         return orderDesignService.approve(orderId, designId);
     }
 
     @PostMapping("/{designId}/reject")
+    @PreAuthorize("hasAnyAuthority('" + Keys.ORDER_ARTWORK_REVIEW + "', '" + Keys.ORDER_ARTWORK_FINAL + "')")
     public OrderDesignResponse reject(
             @PathVariable UUID orderId, @PathVariable UUID designId, @Valid @RequestBody RejectOrderDesignRequest request) {
         return orderDesignService.reject(orderId, designId, request.comment());

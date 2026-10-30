@@ -3,12 +3,14 @@ package com.wrapzzo.backend.controller;
 import com.wrapzzo.backend.dto.CreateDoctorChangeRequest;
 import com.wrapzzo.backend.dto.DoctorChangeRequestResponse;
 import com.wrapzzo.backend.dto.RejectDoctorChangeRequest;
+import com.wrapzzo.backend.security.Permission.Keys;
+import com.wrapzzo.backend.security.RequiresPermission;
+import com.wrapzzo.backend.security.SignedInUser;
 import com.wrapzzo.backend.service.DoctorChangeRequestService;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -31,28 +33,31 @@ public class DoctorChangeRequestController {
     private final DoctorChangeRequestService doctorChangeRequestService;
 
     @PostMapping
-    @PreAuthorize("hasAnyAuthority('recipient.manage', 'quickgift.create')")
+    @RequiresPermission(Keys.RECIPIENT_LIST_MANAGE)
     public DoctorChangeRequestResponse create(@Valid @RequestBody CreateDoctorChangeRequest request) {
         return doctorChangeRequestService.create(request);
     }
 
     @GetMapping("/mine")
-    @PreAuthorize("hasAnyAuthority('recipient.manage', 'quickgift.create')")
+    @RequiresPermission(Keys.RECIPIENT_LIST_MANAGE)
     public List<DoctorChangeRequestResponse> mine() {
         return doctorChangeRequestService.listMine();
     }
 
     @GetMapping("/pending-review")
+    @SignedInUser
     public List<DoctorChangeRequestResponse> pendingReview() {
         return doctorChangeRequestService.listPendingForReviewer();
     }
 
     @PostMapping("/{id}/approve")
+    @SignedInUser
     public DoctorChangeRequestResponse approve(@PathVariable UUID id) {
         return doctorChangeRequestService.approve(id);
     }
 
     @PostMapping("/{id}/reject")
+    @SignedInUser
     public DoctorChangeRequestResponse reject(@PathVariable UUID id, @Valid @RequestBody RejectDoctorChangeRequest request) {
         return doctorChangeRequestService.reject(id, request.reason());
     }
