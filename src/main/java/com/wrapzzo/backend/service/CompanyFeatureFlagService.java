@@ -1,5 +1,6 @@
 package com.wrapzzo.backend.service;
 
+import com.wrapzzo.backend.dto.ArtworkApprovalLevelsResponse;
 import com.wrapzzo.backend.dto.CompanyFeatureFlagResponse;
 import com.wrapzzo.backend.exception.CompanyNotFoundException;
 import com.wrapzzo.backend.model.Company;
@@ -53,5 +54,20 @@ public class CompanyFeatureFlagService {
         entity.setEnabled(enabled);
         companyFeatureFlagRepository.save(entity);
         return list(companyId);
+    }
+
+    /** How many managers above the MR sign off on artwork while MARKETING_DESIGN_APPROVAL is on (companies.artwork_approval_levels). */
+    @Transactional(readOnly = true)
+    public ArtworkApprovalLevelsResponse getArtworkApprovalLevels(UUID companyId) {
+        Company company = companyRepository.findById(companyId).orElseThrow(() -> new CompanyNotFoundException(companyId));
+        return new ArtworkApprovalLevelsResponse(company.getArtworkApprovalLevels());
+    }
+
+    /** Applies from each proof's next step: a proof already climbing re-reads the level count as it moves up. */
+    @Transactional
+    public ArtworkApprovalLevelsResponse setArtworkApprovalLevels(UUID companyId, int levels) {
+        Company company = companyRepository.findById(companyId).orElseThrow(() -> new CompanyNotFoundException(companyId));
+        company.setArtworkApprovalLevels(levels);
+        return new ArtworkApprovalLevelsResponse(company.getArtworkApprovalLevels());
     }
 }

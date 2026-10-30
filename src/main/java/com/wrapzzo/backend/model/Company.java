@@ -45,6 +45,10 @@ public class Company {
     @Column(name = "logo_key", length = 500)
     private String logoKey;
 
+    /** With Senior Artwork Approval on: how many managers above the MR sign off on artwork, 1-5 (V44). */
+    @Column(name = "artwork_approval_levels", nullable = false)
+    private int artworkApprovalLevels = 1;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
