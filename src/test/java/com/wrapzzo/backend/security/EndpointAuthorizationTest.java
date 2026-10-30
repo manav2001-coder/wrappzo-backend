@@ -67,6 +67,30 @@ class EndpointAuthorizationTest {
         assertThat(leaks).isEmpty();
     }
 
+    /**
+     * Two controllers mapping the same method and path make Spring refuse to start ("Ambiguous
+     * mapping") -- which, deployed, takes the whole API down, login included. Caught here instead.
+     */
+    @Test
+    void noTwoEndpointsShareAMethodAndPath() throws ClassNotFoundException {
+        java.util.Map<String, String> seen = new java.util.HashMap<>();
+        List<String> clashes = new ArrayList<>();
+        for (Method endpoint : endpoints()) {
+            RequestMapping mapping = AnnotatedElementUtils.findMergedAnnotation(endpoint, RequestMapping.class);
+            for (org.springframework.web.bind.annotation.RequestMethod verb : mapping.method()) {
+                for (String path : pathsOf(endpoint)) {
+                    String route = verb + " " + path.replaceAll("\\{[^}/]+}", "{}");
+                    String here = endpoint.getDeclaringClass().getSimpleName() + "." + endpoint.getName();
+                    String other = seen.put(route, here);
+                    if (other != null) {
+                        clashes.add(route + " -> " + other + " and " + here);
+                    }
+                }
+            }
+        }
+        assertThat(clashes).isEmpty();
+    }
+
     private static List<Method> endpoints() throws ClassNotFoundException {
         ClassPathScanningCandidateComponentProvider scanner = new ClassPathScanningCandidateComponentProvider(false);
         scanner.addIncludeFilter(new AnnotationTypeFilter(RestController.class));

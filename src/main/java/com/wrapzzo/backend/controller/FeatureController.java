@@ -26,26 +26,26 @@ public class FeatureController {
 
     private final FeatureService featureService;
 
-    @GetMapping("/companies/{companyId}/features")
+    @GetMapping("/companies/{companyId}/access-features")
     @RequiresPermission(Keys.TEMPLATE_VIEW)
     public List<FeatureResponse> listForCompany(@PathVariable UUID companyId) {
         return featureService.listForCompany(companyId);
     }
 
-    @PostMapping("/companies/{companyId}/features/register")
+    @PostMapping("/companies/{companyId}/access-features/register")
     @RequiresPermission(Keys.TEMPLATE_EDIT)
     public List<FeatureResponse> register(@PathVariable UUID companyId, @RequestBody(required = false) RegisterFeaturesRequest request) {
         return featureService.register(companyId, request == null ? null : request.featureIds());
     }
 
-    @PutMapping("/companies/{companyId}/features/{featureId}/active")
+    @PutMapping("/companies/{companyId}/access-features/{featureId}/active")
     @RequiresPermission(Keys.TEMPLATE_EDIT)
     public FeatureResponse setActive(@PathVariable UUID companyId, @PathVariable UUID featureId, @Valid @RequestBody SetFeatureActiveRequest request) {
         return featureService.setActive(companyId, featureId, request.active());
     }
 
     /** The whole catalogue (platform staff: every key, for system templates; a company: the keys it can hold). */
-    @GetMapping("/features")
+    @GetMapping("/access-features")
     @RequiresPermission(Keys.TEMPLATE_VIEW)
     public List<FeatureResponse> catalogue() {
         return featureService.catalogue();
