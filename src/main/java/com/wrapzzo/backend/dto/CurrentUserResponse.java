@@ -11,7 +11,14 @@ import java.util.UUID;
  * resolve "my company" without a companyId in the URL. managesTeam is true when anyone reports
  * to the caller (users.reports_to_id) -- what makes them an approver of their team's doctor
  * requests, which no access-control key expresses. menuLabels: the company's own names for its
- * navigation menus (menu id -> name), empty when it renamed none.
+ * navigation menus (menu id -> name), empty when it renamed none. companyWide: the caller sees the
+ * whole company (platform staff always do) -- the only people who may change anyone's placement.
  */
-public record CurrentUserResponse(Set<String> permissions, UUID companyId, String companyName, boolean managesTeam, Map<String, String> menuLabels) {
+public record CurrentUserResponse(
+        Set<String> permissions,
+        UUID companyId,
+        String companyName,
+        boolean managesTeam,
+        Map<String, String> menuLabels,
+        boolean companyWide) {
 }

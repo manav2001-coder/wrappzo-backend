@@ -72,7 +72,8 @@ public class AuthService {
                 user.getCompany() != null ? user.getCompany().getId() : null,
                 user.getCompany() != null ? user.getCompany().getName() : null,
                 userRepository.existsByReportsToId(userId),
-                companyMenuLabelService.labelsFor(user.getCompany() != null ? user.getCompany().getId() : null));
+                companyMenuLabelService.labelsFor(user.getCompany() != null ? user.getCompany().getId() : null),
+                user.getCompany() == null || user.isCompanyWide());
     }
 
     @Transactional

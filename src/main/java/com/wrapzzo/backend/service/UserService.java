@@ -35,6 +35,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -153,6 +154,10 @@ public class UserService {
         int createdCount = 0;
         int updatedCount = 0;
         List<User> toSave = new ArrayList<>(rows.size());
+        // Importing is user.create, but placing someone company-wide or moving an existing user
+        // (the importer included) changes who sees what -- that takes placement authority, or a
+        // re-import would be a way round setCompanyWide/setExtraOrgUnits.
+        boolean placementAuthority = hasPlacementAuthority();
 
         for (BulkImportUserRow row : rows) {
             String email = normalizedEmail(row.email());
@@ -160,6 +165,10 @@ public class UserService {
             OrgUnit orgUnit = companyWide ? null : resolveOrgUnit(company, row.orgUnitPath(), orgUnitCache);
 
             User user = byEmail.get(email);
+            if (!placementAuthority && (companyWide || (user != null && movesPlacement(user, orgUnit)))) {
+                throw new AccessDeniedException("Only someone who sees the whole company can place " + row.email()
+                        + (companyWide ? " at the whole company" : " in a different org unit"));
+            }
             if (user == null) {
                 user = new User(company, memberRole, row.name(), email, placeholderHash);
                 user.setStatus(UserStatus.INVITED);
@@ -356,10 +365,20 @@ public class UserService {
      * user.edit must not be able to widen their own, or anyone's, view beyond their own.
      */
     private void requirePlacementAuthority() {
-        User caller = currentUser();
-        if (caller.getCompany() != null && !caller.isCompanyWide()) {
+        if (!hasPlacementAuthority()) {
             throw new AccessDeniedException("Only someone who sees the whole company can change who sees what");
         }
+    }
+
+    private boolean hasPlacementAuthority() {
+        User caller = currentUser();
+        return caller.getCompany() == null || caller.isCompanyWide();
+    }
+
+    private static boolean movesPlacement(User user, OrgUnit newUnit) {
+        UUID current = user.getOrgUnit() != null ? user.getOrgUnit().getId() : null;
+        UUID next = newUnit != null ? newUnit.getId() : null;
+        return user.isCompanyWide() || !Objects.equals(current, next);
     }
 
     private User getCompanyUser(UUID companyId, UUID userId) {
