@@ -4,6 +4,7 @@ import com.wrapzzo.backend.model.AccessControl;
 import com.wrapzzo.backend.model.AccessControlType;
 import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.repository.AccessControlRepository;
+import com.wrapzzo.backend.repository.CompanyAccessControlRepository;
 import com.wrapzzo.backend.repository.TemplateRepository;
 import com.wrapzzo.backend.repository.UserRepository;
 import java.time.Duration;
@@ -48,6 +49,7 @@ public class AccessControlCacheService {
     private final UserRepository userRepository;
     private final TemplateRepository templateRepository;
     private final AccessControlRepository accessControlRepository;
+    private final CompanyAccessControlRepository companyAccessControlRepository;
     private final StringRedisTemplate redisTemplate;
 
     /** Effective keys of a user whose id is all the caller has (the JWT filter). */
@@ -90,8 +92,9 @@ public class AccessControlCacheService {
         roots.addAll(templateRepository.findTemplateIdsByUserId(user.getId()));
         Set<String> keys = roots.isEmpty() ? new HashSet<>() : loadGraph().resolve(roots);
         if (user.getCompany() != null) {
-            // A system template may carry platform-only keys for platform staff; a company's people never get them.
-            keys.retainAll(accessControlRepository.findByCompanyAssignableTrue().stream().map(AccessControl::getKey).collect(java.util.stream.Collectors.toSet()));
+            // A system template may carry keys a company never registered, or switched off (the feature
+            // master); a company's people hold only the features it has on.
+            keys.retainAll(companyAccessControlRepository.findActiveKeysByCompanyId(user.getCompany().getId()));
         }
         return keys;
     }

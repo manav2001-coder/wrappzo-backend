@@ -67,6 +67,7 @@ class WarehouseAndRecurringOrderIntegrationTest {
     @Autowired private CompanyFeatureFlagService companyFeatureFlagService;
     @Autowired private CompanyRepository companyRepository;
     @Autowired private RoleRepository roleRepository;
+    @Autowired private FeatureService featureService;
     @Autowired private TemplateRepository templateRepository;
     @Autowired private AccessControlRepository accessControlRepository;
     @Autowired private UserRepository userRepository;
@@ -89,6 +90,7 @@ class WarehouseAndRecurringOrderIntegrationTest {
     @BeforeEach
     void setUp() {
         company = companyRepository.save(new Company("Warehouse Test Pharma " + UUID.randomUUID()));
+        featureService.registerAll(company);
         Role member = roleRepository.save(new Role(company, "Member"));
         Role admin = roleRepository.save(new Role(company, "Warehouse Admin"));
         grant(admin, "warehouse.view");

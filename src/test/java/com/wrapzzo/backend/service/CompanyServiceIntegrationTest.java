@@ -45,7 +45,7 @@ class CompanyServiceIntegrationTest {
         assertThat(company.displayId()).matches("CID-\\d+");
 
         List<Role> roles = roleRepository.findByCompanyId(company.id());
-        assertThat(roles).extracting(Role::getName).containsExactlyInAnyOrder("Company Admin", "Member");
+        assertThat(roles).extracting(Role::getName).containsExactly("Company Admin");
         Role companyAdminRole = roles.stream().filter(role -> role.getName().equals("Company Admin")).findFirst().orElseThrow();
 
         // The role carries the system master template, which holds every permission a company can

@@ -14,6 +14,7 @@ import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.Template;
 import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.repository.AccessControlRepository;
+import com.wrapzzo.backend.repository.CompanyAccessControlRepository;
 import com.wrapzzo.backend.repository.CompanyRepository;
 import com.wrapzzo.backend.repository.TemplateRepository;
 import com.wrapzzo.backend.repository.UserRepository;
@@ -45,11 +46,12 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class TemplateService {
 
-    /** Seeded for every new company's Company Admin and Member roles; the app finds them by name. */
-    public static final Set<String> PROTECTED_SYSTEM_NAMES = Set.of(RoleService.COMPANY_ADMIN_ROLE_NAME, RoleService.MEMBER_ROLE_NAME);
+    /** Seeded for every new company's Company Admin role; the app finds it by name. */
+    public static final Set<String> PROTECTED_SYSTEM_NAMES = Set.of(RoleService.COMPANY_ADMIN_ROLE_NAME);
 
     private final TemplateRepository templateRepository;
     private final AccessControlRepository accessControlRepository;
+    private final CompanyAccessControlRepository companyAccessControlRepository;
     private final CompanyRepository companyRepository;
     private final UserRepository userRepository;
     private final CompanyAccessGuard companyAccessGuard;
@@ -117,8 +119,9 @@ public class TemplateService {
         Template copy = new Template(company, copyName, source.getDescription());
         copy.setActive(true);
         templateRepository.saveAndFlush(copy);
-        // Keys a company can't hold (a platform master's) are left out of the copy rather than refusing the clone.
-        copy.getAccessControls().addAll(source.getAccessControls().stream().filter(AccessControl::isCompanyAssignable).toList());
+        // Features the company hasn't enabled are left out of the copy rather than refusing the clone.
+        Set<UUID> enabled = new HashSet<>(companyAccessControlRepository.findActiveAccessControlIdsByCompanyId(companyId));
+        copy.getAccessControls().addAll(source.getAccessControls().stream().filter(ac -> enabled.contains(ac.getId())).toList());
         copy.getReferences().addAll(source.getReferences().stream().filter(Template::isActive).toList());
         accessControlCacheService.invalidateAfterCommit();
         return toResponse(copy);
@@ -261,9 +264,11 @@ public class TemplateService {
             throw new InvalidTemplateException("One or more selected access-control keys don't exist.");
         }
         if (!template.isSystem()) {
-            List<String> platformOnly = accessControls.stream().filter(ac -> !ac.isCompanyAssignable()).map(AccessControl::getKey).toList();
-            if (!platformOnly.isEmpty()) {
-                throw new InvalidTemplateException("These keys are platform-only and can't be in a company template: " + String.join(", ", platformOnly));
+            Set<UUID> enabled = new HashSet<>(companyAccessControlRepository.findActiveAccessControlIdsByCompanyId(template.getCompany().getId()));
+            List<String> notEnabled = accessControls.stream().filter(ac -> !enabled.contains(ac.getId())).map(AccessControl::getKey).toList();
+            if (!notEnabled.isEmpty()) {
+                throw new InvalidTemplateException(
+                        "These features aren't enabled for this company -- add them in the Feature Master first: " + String.join(", ", notEnabled));
             }
         }
         List<Template> references = templateRepository.findAllById(request.referencedTemplateIds());

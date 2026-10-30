@@ -33,7 +33,7 @@ public interface TemplateRepository extends JpaRepository<Template, UUID> {
             from template_access_controls tac
             join access_controls ac on ac.id = tac.access_control_id
             join templates t on t.id = tac.template_id
-            where t.is_active and ac.is_active and tac.template_id in (:ids)
+            where t.is_active and tac.template_id in (:ids)
             """, nativeQuery = true)
     List<Object[]> findDirectKeys(@Param("ids") Collection<UUID> ids);
 

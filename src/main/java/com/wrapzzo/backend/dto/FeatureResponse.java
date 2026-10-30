@@ -3,7 +3,11 @@ package com.wrapzzo.backend.dto;
 import com.wrapzzo.backend.model.AccessControl;
 import java.util.UUID;
 
-/** One entry of the feature master: a permission key, with whether a company can hold it and whether it is switched on. */
+/**
+ * One entry of the feature master. In a company's view {@code registered} says whether the company
+ * has the key and {@code active} whether it is switched on there; in the platform catalogue both
+ * are simply true.
+ */
 public record FeatureResponse(
         UUID id,
         String key,
@@ -13,10 +17,11 @@ public record FeatureResponse(
         String description,
         String category,
         boolean companyAssignable,
+        boolean registered,
         boolean active,
         int sortOrder) {
 
-    public static FeatureResponse from(AccessControl accessControl) {
+    public static FeatureResponse from(AccessControl accessControl, boolean registered, boolean active) {
         return new FeatureResponse(
                 accessControl.getId(),
                 accessControl.getKey(),
@@ -26,7 +31,8 @@ public record FeatureResponse(
                 accessControl.getDescription(),
                 accessControl.getCategory(),
                 accessControl.isCompanyAssignable(),
-                accessControl.isActive(),
+                registered,
+                active,
                 accessControl.getSortOrder());
     }
 }

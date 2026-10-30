@@ -305,12 +305,11 @@ public class UserService {
     }
 
     /**
-     * Demotes a Company Admin back to Member -- e.g. someone was promoted by mistake.
-     * Refuses to leave a company with zero admins; same JWT-staleness caveat as
-     * makeCompanyAdmin applies to when this takes effect for the demoted user.
+     * Demotes a Company Admin to a role of the company's choosing. Refuses to leave a company with
+     * zero admins; the demoted user's permissions follow their new role at once.
      */
     @Transactional
-    public UserResponse removeCompanyAdmin(UUID companyId, UUID userId) {
+    public UserResponse removeCompanyAdmin(UUID companyId, UUID userId, UUID roleId) {
         companyAccessGuard.requireOwnCompanyOrPlatformStaff(companyId);
         requirePlacementAuthority();
         User user = getCompanyUser(companyId, userId);
@@ -320,11 +319,12 @@ public class UserService {
         if (userRepository.countByCompanyIdAndRoleId(companyId, companyAdminRole.getId()) <= 1) {
             throw new LastCompanyAdminException(companyId);
         }
-        Role memberRole = roleRepository
-                .findByCompanyIdAndName(companyId, RoleService.MEMBER_ROLE_NAME)
-                .orElseThrow(() -> new IllegalStateException("Member role missing for company " + companyId));
+        Role role = roleRepository.findById(roleId)
+                .filter(candidate -> candidate.getCompany() != null && candidate.getCompany().getId().equals(companyId) && candidate.isActive())
+                .filter(candidate -> !COMPANY_ADMIN_ROLE_NAME.equals(candidate.getName()))
+                .orElseThrow(() -> new RoleNotFoundException(roleId));
 
-        user.setRole(memberRole);
+        user.setRole(role);
         userRepository.save(user);
         accessControlCacheService.invalidateAfterCommit();
         return UserResponse.from(user);

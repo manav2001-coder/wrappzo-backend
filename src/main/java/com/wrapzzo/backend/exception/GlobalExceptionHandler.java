@@ -83,7 +83,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
     }
 
-    @ExceptionHandler({RoleNotFoundException.class, TemplateNotFoundException.class})
+    @ExceptionHandler({RoleNotFoundException.class, TemplateNotFoundException.class, CompanyVendorNotFoundException.class})
     public ResponseEntity<Map<String, String>> handleRoleOrTemplateNotFound(RuntimeException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
     }

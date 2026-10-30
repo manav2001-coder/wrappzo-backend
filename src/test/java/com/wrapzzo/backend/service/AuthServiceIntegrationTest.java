@@ -74,6 +74,9 @@ class AuthServiceIntegrationTest {
     private TemplateRepository templateRepository;
 
     @Autowired
+    private FeatureService featureService;
+
+    @Autowired
     private UserRepository userRepository;
 
     @Autowired
@@ -93,6 +96,7 @@ class AuthServiceIntegrationTest {
         billingView = accessControlRepository.save(
                 new AccessControl("billing.view", "View Billing", "Billing", AccessControlType.FUNCTIONAL));
 
+        featureService.registerAll(company);
         Template roleTemplate = new Template(company, "Campaign Manager access", null);
         roleTemplate.getAccessControls().add(campaignCreate);
         role.getTemplates().add(templateRepository.save(roleTemplate));

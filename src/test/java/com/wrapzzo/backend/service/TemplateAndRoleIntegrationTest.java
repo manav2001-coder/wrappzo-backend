@@ -53,6 +53,8 @@ class TemplateAndRoleIntegrationTest {
     void seed() {
         company = companyRepository.save(new Company("Template Test Co"));
         otherCompany = companyRepository.save(new Company("Other Template Co"));
+        featureService.registerAll(company);
+        featureService.registerAll(otherCompany);
         Role platformRole = roleRepository.save(new Role(null, "Test Platform Staff " + UUID.randomUUID()));
         User platformStaff = userRepository.save(
                 new User(null, platformRole, "Platform Staff", "platform-" + UUID.randomUUID() + "@wrapzzo.com", "n/a"));
@@ -247,22 +249,53 @@ class TemplateAndRoleIntegrationTest {
     }
 
     @Test
-    void aSwitchedOffFeatureGrantsNothingEvenWhereATemplateCarriesIt() {
+    void aFeatureSwitchedOffForTheCompanyGrantsNothingEvenWhereATemplateCarriesIt() {
         TemplateResponse orders = template(company.getId(), "Orders", orderView, Set.of());
         RoleResponse role = roleService.create(company.getId(), new RoleRequest("Orderer", null, null, Set.of(orders.id())));
         User user = userRepository.save(new User(company, roleRepository.findById(role.id()).orElseThrow(), "O", "o-" + UUID.randomUUID() + "@x.com", "h"));
 
-        featureService.setActive(orderView.iterator().next(), false);
+        featureService.setActive(company.getId(), orderView.iterator().next(), false);
         accessControlCacheService.invalidateAll();
 
         assertThat(accessControlCacheService.resolveEffectiveKeys(user)).isEmpty();
-        assertThat(featureService.list()).filteredOn(feature -> feature.key().equals("order.view")).allMatch(feature -> !feature.active());
+        assertThat(featureService.listForCompany(company.getId())).filteredOn(feature -> feature.key().equals("order.view")).allMatch(feature -> !feature.active());
+        assertThat(featureService.listForCompany(otherCompany.getId())).filteredOn(feature -> feature.key().equals("order.view")).allMatch(feature -> feature.active());
     }
 
     @Test
     void theKeysThatRunTheAccessScreensCannotBeSwitchedOff() {
         UUID templateView = accessControlRepository.findByKey("template.view").orElseThrow().getId();
 
-        assertThatThrownBy(() -> featureService.setActive(templateView, false)).isInstanceOf(ConflictException.class);
+        assertThatThrownBy(() -> featureService.setActive(company.getId(), templateView, false)).isInstanceOf(ConflictException.class);
+    }
+
+    @Test
+    void aCompanyTemplateMayCarryOnlyFeaturesTheCompanyHasEnabled() {
+        Company fresh = companyRepository.save(new Company("Fresh Co " + UUID.randomUUID()));
+
+        assertThatThrownBy(() -> template(fresh.getId(), "Early", orderView, Set.of())).isInstanceOf(InvalidTemplateException.class);
+
+        featureService.register(fresh.getId(), orderView);
+        assertThat(template(fresh.getId(), "Later", orderView, Set.of()).accessControlIds()).containsAll(orderView);
+    }
+
+    @Test
+    void registeringWithNoIdsAddsEveryMissingFeatureAndNeverTouchesOnesSwitchedOff() {
+        Company fresh = companyRepository.save(new Company("Fresh Co " + UUID.randomUUID()));
+        assertThat(featureService.listForCompany(fresh.getId())).noneMatch(feature -> feature.registered());
+
+        featureService.register(fresh.getId(), null);
+        featureService.setActive(fresh.getId(), orderView.iterator().next(), false);
+        featureService.register(fresh.getId(), null);
+
+        assertThat(featureService.listForCompany(fresh.getId())).allMatch(feature -> feature.registered());
+        assertThat(featureService.listForCompany(fresh.getId())).filteredOn(feature -> feature.key().equals("order.view")).allMatch(feature -> !feature.active());
+    }
+
+    @Test
+    void platformOnlyFeaturesCannotBeRegisteredForACompany() {
+        Set<UUID> platformOnly = Set.of(accessControlRepository.findByKey("platform_company.view").orElseThrow().getId());
+
+        assertThatThrownBy(() -> featureService.register(company.getId(), platformOnly)).isInstanceOf(InvalidTemplateException.class);
     }
 }
