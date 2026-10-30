@@ -5,6 +5,7 @@ import com.wrapzzo.backend.dto.PresignOrderDesignRequest;
 import com.wrapzzo.backend.dto.PresignOrderDesignResponse;
 import com.wrapzzo.backend.dto.UploadOrderDesignRequest;
 import com.wrapzzo.backend.security.CurrentVendor;
+import com.wrapzzo.backend.security.VendorEndpoint;
 import com.wrapzzo.backend.service.OrderDesignService;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/vendor/orders/{orderId}/designs")
 @RequiredArgsConstructor
+@VendorEndpoint
 public class VendorOrderDesignController {
 
     private final OrderDesignService orderDesignService;

@@ -1,25 +1,26 @@
 package com.wrapzzo.backend.controller;
 
 import com.wrapzzo.backend.dto.AccessControlResponse;
-import com.wrapzzo.backend.repository.AccessControlRepository;
+import com.wrapzzo.backend.security.Permission.Keys;
+import com.wrapzzo.backend.security.RequiresPermission;
+import com.wrapzzo.backend.service.AccessControlCatalogService;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** The full, fixed catalog of grantable capabilities -- read-only, for building a designation's grant checklist. */
+/** The catalogue of permissions a company designation can be given -- read-only, for the access grid. */
 @RestController
 @RequestMapping("/api/access-controls")
 @RequiredArgsConstructor
-@PreAuthorize("hasAuthority('role.manage')")
+@RequiresPermission(Keys.ACCESS_VIEW)
 public class AccessControlController {
 
-    private final AccessControlRepository accessControlRepository;
+    private final AccessControlCatalogService accessControlCatalogService;
 
     @GetMapping
     public List<AccessControlResponse> list() {
-        return accessControlRepository.findByCompanyAssignableTrue().stream().map(AccessControlResponse::from).toList();
+        return accessControlCatalogService.listCompanyAssignable();
     }
 }

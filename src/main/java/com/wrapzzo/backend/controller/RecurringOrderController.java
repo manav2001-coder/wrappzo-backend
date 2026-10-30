@@ -2,12 +2,13 @@ package com.wrapzzo.backend.controller;
 
 import com.wrapzzo.backend.dto.CreateQuickGiftRequest;
 import com.wrapzzo.backend.dto.RecurringOrderPlanResponse;
+import com.wrapzzo.backend.security.Permission.Keys;
+import com.wrapzzo.backend.security.RequiresPermission;
 import com.wrapzzo.backend.service.RecurringOrderService;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/recurring-orders")
 @RequiredArgsConstructor
-@PreAuthorize("hasAuthority('quickgift.create')")
+@RequiresPermission(Keys.REQUEST_CREATE)
 public class RecurringOrderController {
 
     private final RecurringOrderService recurringOrderService;

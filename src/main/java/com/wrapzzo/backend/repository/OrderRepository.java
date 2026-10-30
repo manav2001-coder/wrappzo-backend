@@ -14,18 +14,15 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
 
     List<Order> findByCompanyIdOrderByCreatedAtDesc(UUID companyId);
 
-    /** A company's orders narrowed to an OrgScope's units, plus whatever the caller raised themselves. orgUnitIds must be non-empty. */
+    /** A company's orders the caller can see (see Visibility): by owner, or by the org unit they're stamped with. */
     @Query("""
             select o from Order o
             where o.company.id = :companyId
-              and (o.createdBy.id = :userId or o.orgUnit.id in :orgUnitIds)
+              and (:companyWide = true or o.owner.id in :people or o.orgUnit.id in :orgUnits)
             order by o.createdAt desc
             """)
-    List<Order> findVisibleInCompany(@Param("companyId") UUID companyId, @Param("userId") UUID userId,
-            @Param("orgUnitIds") Collection<UUID> orgUnitIds);
-
-    /** The empty-scope case of findVisibleInCompany: no org unit on the profile, so only one's own. */
-    List<Order> findByCompanyIdAndCreatedByIdOrderByCreatedAtDesc(UUID companyId, UUID createdById);
+    List<Order> findVisibleInCompany(@Param("companyId") UUID companyId, @Param("companyWide") boolean companyWide,
+            @Param("people") Collection<UUID> people, @Param("orgUnits") Collection<UUID> orgUnits);
 
     List<Order> findByCampaignIdOrderByCreatedAtDesc(UUID campaignId);
 

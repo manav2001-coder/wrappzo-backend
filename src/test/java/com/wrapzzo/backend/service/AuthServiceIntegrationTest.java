@@ -94,7 +94,7 @@ class AuthServiceIntegrationTest {
         Role role = roleRepository.save(new Role(company, "Campaign Manager"));
 
         campaignCreate = accessControlRepository.save(
-                new AccessControl("campaign.create", "Create Campaign", "Campaign", AccessControlType.FUNCTIONAL));
+                new AccessControl("test_reports.create", "Create Report", "Reports", AccessControlType.FUNCTIONAL));
         billingView = accessControlRepository.save(
                 new AccessControl("billing.view", "View Billing", "Billing", AccessControlType.FUNCTIONAL));
 
@@ -197,14 +197,14 @@ class AuthServiceIntegrationTest {
     @Test
     void effectivePermissionsCombineRoleGrantsWithUserOverridesAndInvalidateCorrectly() {
         Set<String> initial = accessControlCacheService.resolveEffectiveKeys(user);
-        assertThat(initial).containsExactly("campaign.create");
+        assertThat(initial).containsExactly("test_reports.create");
 
         userAccessControlRepository.save(
                 new UserAccessControl(user, billingView, AccessEffect.GRANT, null));
         accessControlCacheService.invalidateUserOverrides(user.getId());
 
         Set<String> afterGrant = accessControlCacheService.resolveEffectiveKeys(user);
-        assertThat(afterGrant).containsExactlyInAnyOrder("campaign.create", "billing.view");
+        assertThat(afterGrant).containsExactlyInAnyOrder("test_reports.create", "billing.view");
 
         roleAccessControlRepository.deleteAll(roleAccessControlRepository.findByRoleId(user.getRole().getId()));
         accessControlCacheService.invalidateRolePermissions(user.getRole().getId());

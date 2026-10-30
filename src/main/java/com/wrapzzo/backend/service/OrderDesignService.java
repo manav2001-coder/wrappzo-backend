@@ -1,5 +1,6 @@
 package com.wrapzzo.backend.service;
 
+import com.wrapzzo.backend.security.Permission;
 import com.wrapzzo.backend.dto.ArtworkApprovalStep;
 import com.wrapzzo.backend.dto.OrderDesignResponse;
 import com.wrapzzo.backend.dto.PendingArtworkApprovalResponse;
@@ -13,13 +14,11 @@ import com.wrapzzo.backend.model.OrderDesign;
 import com.wrapzzo.backend.model.OrderDesignApproval;
 import com.wrapzzo.backend.model.OrderDesignDecision;
 import com.wrapzzo.backend.model.OrderDesignStatus;
-import com.wrapzzo.backend.model.QuickGiftRequest;
 import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.model.Vendor;
 import com.wrapzzo.backend.repository.OrderDesignApprovalRepository;
 import com.wrapzzo.backend.repository.OrderDesignRepository;
 import com.wrapzzo.backend.repository.OrderRepository;
-import com.wrapzzo.backend.repository.QuickGiftRequestRepository;
 import com.wrapzzo.backend.repository.UserRepository;
 import com.wrapzzo.backend.repository.VendorRepository;
 import com.wrapzzo.backend.security.CurrentUser;
@@ -50,7 +49,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class OrderDesignService {
 
     /** Granted to Company Admin by default (V42): sign any management level on artwork, as cover for the manager it waits on. */
-    public static final String FINAL_APPROVAL_KEY = "order.design.final";
+    public static final String FINAL_APPROVAL_KEY = Permission.ORDER_ARTWORK_FINAL.key();
 
     private static final Duration UPLOAD_URL_EXPIRY = Duration.ofMinutes(5);
 
@@ -60,9 +59,8 @@ public class OrderDesignService {
     private final VendorRepository vendorRepository;
     private final UserRepository userRepository;
     private final FileStorageService fileStorageService;
-    private final OrgScopeService orgScopeService;
+    private final VisibilityService visibilityService;
     private final CompanyFeatureFlagService companyFeatureFlagService;
-    private final QuickGiftRequestRepository quickGiftRequestRepository;
     private final AccessControlCacheService accessControlCacheService;
 
     // --- Vendor side: only orders assigned to them. ---
@@ -189,8 +187,8 @@ public class OrderDesignService {
         switch (design.getStatus()) {
             case PENDING_REVIEW -> getOwnCompanyEntity(orderId);
             case PENDING_FINAL_APPROVAL -> {
-                // A manager up the line may sit outside the MR's org subtree checks (a manager over
-                // another branch), so this is authorised by the reporting line, not OrgScope.
+                // Authorised by the approval chain (canApproveCurrentLevel): the manager the level
+                // waits on is above the MR, so always sees the order; a cover signer must see it too.
                 User reviewer = currentUser();
                 if (reviewer.getCompany() == null || !design.getOrder().getCompany().getId().equals(reviewer.getCompany().getId())) {
                     throw new OrderNotFoundException(orderId);
@@ -211,9 +209,9 @@ public class OrderDesignService {
     }
 
     /**
-     * The manager the current level waits on may sign it; so may an order.design.final holder, as
-     * cover. Nobody signs twice on one proof (the MR's own approval included), and the MR who
-     * placed the order never signs their own artwork up the line.
+     * The manager the current level waits on may sign it; so may an order.artwork_final holder who
+     * can see the order (see Visibility), as cover. Nobody signs twice on one proof (the MR's own
+     * approval included), and the MR who placed the order never signs their own artwork up the line.
      */
     private boolean canApproveCurrentLevel(OrderDesign design, User reviewer) {
         User requester = requesterOf(design.getOrder());
@@ -227,7 +225,9 @@ public class OrderDesignService {
         if (waitingOn != null && waitingOn.getId().equals(reviewer.getId())) {
             return true;
         }
-        return accessControlCacheService.resolveEffectiveKeys(reviewer).contains(FINAL_APPROVAL_KEY);
+        Order order = design.getOrder();
+        return accessControlCacheService.resolveEffectiveKeys(reviewer).contains(FINAL_APPROVAL_KEY)
+                && visibilityService.resolve(reviewer).canSee(order.getOwner(), order.getOrgUnit());
     }
 
     /**
@@ -289,9 +289,9 @@ public class OrderDesignService {
                         Collectors.mapping(ArtworkApprovalStep::from, Collectors.toList())));
     }
 
-    /** The MR behind an order: a Quick Gift's requester (an approved one's createdBy is its approver), else whoever created it. */
-    private User requesterOf(Order order) {
-        return quickGiftRequestRepository.findByOrderId(order.getId()).map(QuickGiftRequest::getRequestedBy).orElse(order.getCreatedBy());
+    /** The MR behind an order -- its owner, the person it was placed for (see Order.owner). */
+    private static User requesterOf(Order order) {
+        return order.getOwner();
     }
 
     private Order getEntityForVendor(UUID orderId, UUID vendorId) {
@@ -303,14 +303,14 @@ public class OrderDesignService {
     }
 
     /**
-     * A reviewer reviews within their own org subtree (the MR who placed it always can) -- the
-     * same OrgScope the Orders list uses, so "can see it" and "can review it" never disagree.
+     * A reviewer reviews only orders they can see (the MR who placed it always can) -- the same
+     * Visibility the Orders list uses, so "can see it" and "can review it" never disagree.
      */
     private Order getOwnCompanyEntity(UUID orderId) {
         Order order = getEntity(orderId);
         User user = currentUser();
         if (!order.getCompany().getId().equals(user.getCompany().getId())
-                || !orgScopeService.resolve(user).covers(order.getOrgUnit(), order.getCreatedBy())) {
+                || !visibilityService.resolve(user).canSee(order.getOwner(), order.getOrgUnit())) {
             throw new OrderNotFoundException(orderId);
         }
         return order;

@@ -47,6 +47,11 @@ public class Submission {
     @JoinColumn(name = "submitted_by", nullable = false)
     private User submittedBy;
 
+    /** The submitter's org unit when they submitted -- what visibility goes by. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "org_unit_id")
+    private OrgUnit orgUnit;
+
     /** Which of the campaign's offered gifts this recipient gets -- required, not assumed from the campaign. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "gift_id")
@@ -79,6 +84,7 @@ public class Submission {
         this.company = company;
         this.campaign = campaign;
         this.submittedBy = submittedBy;
+        this.orgUnit = submittedBy.getOrgUnit();
         this.gift = gift;
     }
 

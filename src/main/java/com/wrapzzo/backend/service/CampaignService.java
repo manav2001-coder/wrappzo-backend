@@ -34,9 +34,8 @@ import com.wrapzzo.backend.repository.OrgUnitRepository;
 import com.wrapzzo.backend.repository.SubmissionRepository;
 import com.wrapzzo.backend.repository.UserRepository;
 import com.wrapzzo.backend.security.CurrentUser;
-import java.util.ArrayDeque;
+import com.wrapzzo.backend.security.Permission;
 import java.util.ArrayList;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -91,10 +90,7 @@ public class CampaignService {
     @Transactional(readOnly = true)
     public List<CampaignResponse> listForCurrentUser() {
         User user = currentUser();
-        List<Campaign> campaigns = campaignRepository.findByCompanyIdOrderByCreatedAtDesc(user.getCompany().getId());
-        List<Campaign> visible = canManage(user)
-                ? campaigns
-                : campaigns.stream().filter(c -> c.getStatus() != CampaignStatus.DRAFT && isInAudience(c, user.getId())).toList();
+        List<Campaign> visible = visibleCampaigns(user);
         Map<UUID, CampaignStats> stats = statsFor(visible.stream().map(Campaign::getId).toList());
         return visible.stream().map(c -> toResponse(c, stats.getOrDefault(c.getId(), CampaignStats.EMPTY))).toList();
     }
@@ -213,23 +209,39 @@ public class CampaignService {
         return result;
     }
 
-    /** BFS over User.reportsTo -- bounded by real org depth, a few hundred users per company at most. */
+    /** Everyone below the manager in the reporting line, at any depth. */
     public Set<UUID> findAllReportIds(UUID managerId) {
-        Set<UUID> visited = new HashSet<>();
-        Deque<UUID> queue = new ArrayDeque<>(List.of(managerId));
-        while (!queue.isEmpty()) {
-            UUID current = queue.poll();
-            for (User report : userRepository.findByReportsToId(current)) {
-                if (visited.add(report.getId())) {
-                    queue.add(report.getId());
-                }
-            }
-        }
-        return visited;
+        return new HashSet<>(userRepository.findReportingLineIds(managerId));
     }
 
-    public boolean canManage(User user) {
-        return accessControlCacheService.resolveEffectiveKeys(user).contains("campaign.manage");
+    /**
+     * The campaigns a user may see: with campaign.view, every campaign -- drafts only for those
+     * who can also create, edit or publish them; otherwise only published campaigns they're in
+     * the audience of (to submit to them).
+     */
+    @Transactional(readOnly = true)
+    public List<Campaign> visibleCampaigns(User user) {
+        List<Campaign> campaigns = campaignRepository.findByCompanyIdOrderByCreatedAtDesc(user.getCompany().getId());
+        return campaigns.stream().filter(c -> canSee(user, c)).toList();
+    }
+
+    /** Whoever can edit campaigns may also submit to one they aren't in the audience of (e.g. on someone's behalf). */
+    public boolean canEditCampaigns(User user) {
+        return accessControlCacheService.resolveEffectiveKeys(user).contains(Permission.CAMPAIGN_EDIT.key());
+    }
+
+    private boolean canSee(User user, Campaign campaign) {
+        Set<String> keys = accessControlCacheService.resolveEffectiveKeys(user);
+        if (keys.contains(Permission.CAMPAIGN_VIEW.key())) {
+            return campaign.getStatus() != CampaignStatus.DRAFT || canWorkOnDrafts(keys);
+        }
+        return campaign.getStatus() != CampaignStatus.DRAFT && isInAudience(campaign, user.getId());
+    }
+
+    private static boolean canWorkOnDrafts(Set<String> keys) {
+        return keys.contains(Permission.CAMPAIGN_CREATE.key())
+                || keys.contains(Permission.CAMPAIGN_EDIT.key())
+                || keys.contains(Permission.CAMPAIGN_PUBLISH.key());
     }
 
     // --- internal ---
@@ -242,14 +254,10 @@ public class CampaignService {
         return campaign;
     }
 
-    /** Same as getEntity, but a non-manager may only see published (non-Draft) campaigns they're in the audience of. */
+    /** Same as getEntity, but only a campaign the caller may see (see visibleCampaigns). */
     private Campaign getVisibleEntity(UUID id) {
         Campaign campaign = getEntity(id);
-        User user = currentUser();
-        if (canManage(user)) {
-            return campaign;
-        }
-        if (campaign.getStatus() == CampaignStatus.DRAFT || !isInAudience(campaign, user.getId())) {
+        if (!canSee(currentUser(), campaign)) {
             throw new CampaignNotFoundException(id);
         }
         return campaign;

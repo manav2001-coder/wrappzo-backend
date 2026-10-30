@@ -38,12 +38,15 @@ public class RecipientService {
     private final RecipientRepository recipientRepository;
     private final RecipientAssignmentRepository recipientAssignmentRepository;
     private final UserRepository userRepository;
-    private final CampaignService campaignService;
+    private final VisibilityService visibilityService;
 
     @Transactional(readOnly = true)
     public List<RecipientResponse> list() {
         User user = currentUser();
-        return recipientRepository.findByCompanyIdOrderByNameAsc(user.getCompany().getId()).stream()
+        Visibility visibility = visibilityService.resolve(user);
+        return recipientRepository
+                .findVisible(user.getCompany().getId(), visibility.companyWide(), visibility.peopleForQuery(), visibility.orgUnitsForQuery())
+                .stream()
                 .map(RecipientResponse::from)
                 .toList();
     }
@@ -66,7 +69,11 @@ public class RecipientService {
         if (query == null || query.isBlank()) {
             return List.of();
         }
-        return recipientRepository.search(user.getCompany().getId(), query.trim()).stream()
+        Visibility visibility = visibilityService.resolve(user);
+        return recipientRepository
+                .searchVisible(user.getCompany().getId(), query.trim(), visibility.companyWide(), visibility.peopleForQuery(),
+                        visibility.orgUnitsForQuery())
+                .stream()
                 .limit(SEARCH_LIMIT)
                 .map(RecipientResponse::from)
                 .toList();
@@ -136,10 +143,16 @@ public class RecipientService {
         recipient.setClinicName(doctor.clinicName());
     }
 
+    /** 404 for another company's recipient and for one the caller can't see (see Visibility) alike. */
     private Recipient getEntity(UUID id) {
         User user = currentUser();
         Recipient recipient = recipientRepository.findById(id).orElseThrow(() -> new RecipientNotFoundException(id));
         if (!recipient.getCompany().getId().equals(user.getCompany().getId())) {
+            throw new RecipientNotFoundException(id);
+        }
+        Visibility visibility = visibilityService.resolve(user);
+        if (!visibility.companyWide()
+                && !recipientRepository.isVisible(id, false, visibility.peopleForQuery(), visibility.orgUnitsForQuery())) {
             throw new RecipientNotFoundException(id);
         }
         return recipient;
@@ -176,14 +189,14 @@ public class RecipientService {
         recipientRepository.save(recipient);
     }
 
-    /** A Company Admin sees every upcoming birthday company-wide; a Member sees only the recipients they themselves added. */
+    /** Upcoming birthdays of the recipients the caller can see (see Visibility). */
     @Transactional(readOnly = true)
     public List<UpcomingBirthdayResponse> upcomingBirthdays(int daysAhead) {
         User user = currentUser();
         LocalDate today = LocalDate.now();
-        List<Recipient> recipients = campaignService.canManage(user)
-                ? recipientRepository.findByCompanyIdAndDateOfBirthIsNotNull(user.getCompany().getId())
-                : recipientRepository.findByCompanyIdAndCreatedByIdAndDateOfBirthIsNotNull(user.getCompany().getId(), user.getId());
+        Visibility visibility = visibilityService.resolve(user);
+        List<Recipient> recipients = recipientRepository.findVisibleWithDateOfBirth(
+                user.getCompany().getId(), visibility.companyWide(), visibility.peopleForQuery(), visibility.orgUnitsForQuery());
         return recipients.stream()
                 .map(r -> Map.entry(r, daysUntilNextBirthday(r.getDateOfBirth(), today)))
                 .filter(e -> e.getValue() <= daysAhead)

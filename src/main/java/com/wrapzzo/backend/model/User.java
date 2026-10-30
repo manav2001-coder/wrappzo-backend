@@ -55,7 +55,7 @@ public class User {
 
     /**
      * Units this user also covers (V37) -- e.g. a zonal manager looking after a second zone.
-     * They widen what the user sees (OrgScope); orgUnit stays the one their own orders carry.
+     * They widen what the user sees (see Visibility); orgUnit stays the one their own orders carry.
      */
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(name = "user_extra_org_units", joinColumns = @JoinColumn(name = "user_id"), inverseJoinColumns = @JoinColumn(name = "org_unit_id"))
@@ -65,6 +65,10 @@ public class User {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reports_to_id")
     private User reportsTo;
+
+    /** Placed at the company itself rather than in a unit: sees every record in the company (see VisibilityService). */
+    @Column(name = "company_wide", nullable = false)
+    private boolean companyWide;
 
     @Column(nullable = false)
     private String name;

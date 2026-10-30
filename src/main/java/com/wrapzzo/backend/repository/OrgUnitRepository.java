@@ -14,4 +14,8 @@ public interface OrgUnitRepository extends JpaRepository<OrgUnit, UUID> {
     /** Every org unit at or under orgUnitId -- uses the ancestor_ids GIN index (see V2). */
     @Query(value = "SELECT * FROM org_units WHERE id = :orgUnitId OR ancestor_ids @> ARRAY[:orgUnitId]::uuid[]", nativeQuery = true)
     List<OrgUnit> findSelfAndDescendants(@Param("orgUnitId") UUID orgUnitId);
+
+    /** The ids of every org unit strictly under orgUnitId (not itself) -- same GIN index. */
+    @Query(value = "SELECT id FROM org_units WHERE ancestor_ids @> ARRAY[:orgUnitId]::uuid[]", nativeQuery = true)
+    List<UUID> findDescendantIds(@Param("orgUnitId") UUID orgUnitId);
 }

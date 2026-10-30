@@ -1,9 +1,11 @@
 package com.wrapzzo.backend.controller;
 
 import com.wrapzzo.backend.dto.PendingArtworkApprovalResponse;
+import com.wrapzzo.backend.security.Permission.Keys;
 import com.wrapzzo.backend.service.OrderDesignService;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -22,6 +24,7 @@ public class ArtworkApprovalController {
     private final OrderDesignService orderDesignService;
 
     @GetMapping("/pending")
+    @PreAuthorize("hasAnyAuthority('" + Keys.ORDER_ARTWORK_REVIEW + "', '" + Keys.ORDER_ARTWORK_FINAL + "')")
     public List<PendingArtworkApprovalResponse> pending() {
         return orderDesignService.listPendingFinalApproval();
     }

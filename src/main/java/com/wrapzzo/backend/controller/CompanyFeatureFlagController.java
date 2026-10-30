@@ -4,12 +4,13 @@ import com.wrapzzo.backend.dto.ArtworkApprovalLevelsRequest;
 import com.wrapzzo.backend.dto.ArtworkApprovalLevelsResponse;
 import com.wrapzzo.backend.dto.CompanyFeatureFlagResponse;
 import com.wrapzzo.backend.dto.SetCompanyFeatureFlagRequest;
+import com.wrapzzo.backend.security.Permission.Keys;
+import com.wrapzzo.backend.security.RequiresPermission;
 import com.wrapzzo.backend.service.CompanyFeatureFlagService;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -22,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/platform/companies/{companyId}/features")
 @RequiredArgsConstructor
-@PreAuthorize("hasAuthority('company.manage')")
+@RequiresPermission(Keys.PLATFORM_COMPANY_CONFIGURE)
 public class CompanyFeatureFlagController {
 
     private final CompanyFeatureFlagService companyFeatureFlagService;

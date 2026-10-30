@@ -55,7 +55,7 @@ public class WarehouseService {
     private final OrderRepository orderRepository;
     private final QuickGiftRequestRepository quickGiftRequestRepository;
     private final UserRepository userRepository;
-    private final OrgScopeService orgScopeService;
+    private final VisibilityService visibilityService;
     private final OrderStatusHistoryService orderStatusHistoryService;
     private final CompanyFeatureFlagService companyFeatureFlagService;
 
@@ -122,15 +122,15 @@ public class WarehouseService {
         order.setWarehouse(nearest);
     }
 
-    /** Warehouse-routed orders inside the caller's org scope, from production through delivery. */
+    /** Warehouse-routed orders the caller can see (see Visibility), from production through delivery. */
     @Transactional(readOnly = true)
     public List<WarehouseOrderResponse> listOrders() {
         User user = currentUser();
-        OrgScope scope = orgScopeService.resolve(user);
+        Visibility visibility = visibilityService.resolve(user);
         List<Order> orders = orderRepository
                 .findByCompanyIdAndWarehouseIsNotNullAndStatusInOrderByUpdatedAtDesc(user.getCompany().getId(), QUEUE_STATUSES)
                 .stream()
-                .filter(o -> scope.covers(o.getOrgUnit(), o.getCreatedBy()))
+                .filter(o -> visibility.canSee(o.getOwner(), o.getOrgUnit()))
                 .toList();
         Map<UUID, QuickGiftRequest> requestByOrderId = quickGiftRequestRepository
                 .findByOrder_IdIn(orders.stream().map(Order::getId).toList())
@@ -146,7 +146,7 @@ public class WarehouseService {
         Order order = orderRepository.findById(orderId).orElseThrow(() -> new OrderNotFoundException(orderId));
         if (order.getWarehouse() == null
                 || !order.getCompany().getId().equals(user.getCompany().getId())
-                || !orgScopeService.resolve(user).covers(order.getOrgUnit(), order.getCreatedBy())) {
+                || !visibilityService.resolve(user).canSee(order.getOwner(), order.getOrgUnit())) {
             throw new OrderNotFoundException(orderId);
         }
         if (NEXT_STAGE.get(order.getStatus()) != newStatus) {

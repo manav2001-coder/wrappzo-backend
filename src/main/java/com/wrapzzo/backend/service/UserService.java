@@ -1,5 +1,6 @@
 package com.wrapzzo.backend.service;
 
+import com.wrapzzo.backend.security.Permission;
 import com.wrapzzo.backend.dto.BulkImportUserRow;
 import com.wrapzzo.backend.dto.BulkImportUsersResponse;
 import com.wrapzzo.backend.dto.UserResponse;
@@ -34,6 +35,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -41,6 +43,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -58,9 +61,12 @@ public class UserService {
     private static final String DEFAULT_MEMBER_ROLE_NAME = "Member";
     private static final String COMPANY_ADMIN_ROLE_NAME = "Company Admin";
 
-    /** Granted to every new company's auto-seeded "Member" role. */
-    private static final List<String> DEFAULT_MEMBER_ACCESS_KEYS =
-            List.of("campaign.submit", "quickgift.create", "dashboard.view", "recipient.manage", "order.design.review");
+    /** Granted to every new company's auto-seeded "Member" role: place requests, submit entries, follow their own orders. */
+    private static final List<String> DEFAULT_MEMBER_ACCESS_KEYS = List.of(
+            Permission.DASHBOARD_VIEW, Permission.CAMPAIGN_ENTRY_SUBMIT, Permission.REQUEST_CREATE, Permission.PRODUCT_VIEW,
+            Permission.ORDER_VIEW, Permission.ORDER_ARTWORK_REVIEW, Permission.RECIPIENT_VIEW, Permission.RECIPIENT_CREATE,
+            Permission.RECIPIENT_EDIT, Permission.RECIPIENT_LIST_MANAGE)
+            .stream().map(Permission::key).toList();
 
     private final UserRepository userRepository;
     private final CompanyRepository companyRepository;
@@ -73,6 +79,7 @@ public class UserService {
     private final ApplicationEventPublisher eventPublisher;
     private final CompanyAccessGuard companyAccessGuard;
     private final DesignationAccessService designationAccessService;
+    private final VisibilityService visibilityService;
     private final long inviteTokenExpiryHours;
     private final String frontendBaseUrl;
 
@@ -88,6 +95,7 @@ public class UserService {
             ApplicationEventPublisher eventPublisher,
             CompanyAccessGuard companyAccessGuard,
             DesignationAccessService designationAccessService,
+            VisibilityService visibilityService,
             @Value("${user.invite-token-expiry-hours}") long inviteTokenExpiryHours,
             @Value("${app.frontend-base-url}") String frontendBaseUrl) {
         this.userRepository = userRepository;
@@ -101,6 +109,7 @@ public class UserService {
         this.eventPublisher = eventPublisher;
         this.companyAccessGuard = companyAccessGuard;
         this.designationAccessService = designationAccessService;
+        this.visibilityService = visibilityService;
         this.inviteTokenExpiryHours = inviteTokenExpiryHours;
         this.frontendBaseUrl = frontendBaseUrl;
     }
@@ -145,12 +154,21 @@ public class UserService {
         int createdCount = 0;
         int updatedCount = 0;
         List<User> toSave = new ArrayList<>(rows.size());
+        // Importing is user.create, but placing someone company-wide or moving an existing user
+        // (the importer included) changes who sees what -- that takes placement authority, or a
+        // re-import would be a way round setCompanyWide/setExtraOrgUnits.
+        boolean placementAuthority = hasPlacementAuthority();
 
         for (BulkImportUserRow row : rows) {
             String email = normalizedEmail(row.email());
-            OrgUnit orgUnit = resolveOrgUnit(company, row.orgUnitPath(), orgUnitCache);
+            boolean companyWide = isCompanyWidePlacement(row.orgUnitPath());
+            OrgUnit orgUnit = companyWide ? null : resolveOrgUnit(company, row.orgUnitPath(), orgUnitCache);
 
             User user = byEmail.get(email);
+            if (!placementAuthority && (companyWide || (user != null && movesPlacement(user, orgUnit)))) {
+                throw new AccessDeniedException("Only someone who sees the whole company can place " + row.email()
+                        + (companyWide ? " at the whole company" : " in a different org unit"));
+            }
             if (user == null) {
                 user = new User(company, memberRole, row.name(), email, placeholderHash);
                 user.setStatus(UserStatus.INVITED);
@@ -163,6 +181,7 @@ public class UserService {
             user.setDesignation(blankToNull(row.designation()));
             user.setEmployeeCode(blankToNull(row.employeeCode()));
             user.setOrgUnit(orgUnit);
+            user.setCompanyWide(companyWide);
             byEmail.put(email, user);
             toSave.add(user);
         }
@@ -189,6 +208,7 @@ public class UserService {
 
         List<User> toInvite = toSave.stream().filter(user -> user.getStatus() == UserStatus.INVITED).toList();
         issueInvitesAndSendEmails(toInvite);
+        eventPublisher.publishEvent(new CompanyStructureChangedEvent(companyId));
 
         List<UserResponse> responses = rows.stream().map(row -> UserResponse.from(byEmail.get(normalizedEmail(row.email())))).toList();
         return new BulkImportUsersResponse(createdCount, updatedCount, responses);
@@ -197,21 +217,38 @@ public class UserService {
     @Transactional(readOnly = true)
     public List<UserResponse> listByCompany(UUID companyId) {
         companyAccessGuard.requireOwnCompanyOrPlatformStaff(companyId);
-        return userRepository.findByCompanyId(companyId).stream().map(UserResponse::from).toList();
+        Visibility visibility = visibilityService.resolve(currentUser());
+        return userRepository
+                .findVisibleInCompany(companyId, visibility.companyWide(), visibility.peopleForQuery(), visibility.orgUnitsForQuery())
+                .stream()
+                .map(UserResponse::from)
+                .toList();
+    }
+
+    /**
+     * Makes a user see the whole company (or narrows them back to their place in the tree).
+     * Only someone who already sees the whole company may change this -- see requirePlacementAuthority.
+     */
+    @Transactional
+    public UserResponse setCompanyWide(UUID companyId, UUID userId, boolean companyWide) {
+        companyAccessGuard.requireOwnCompanyOrPlatformStaff(companyId);
+        requirePlacementAuthority();
+        User user = getCompanyUser(companyId, userId);
+        user.setCompanyWide(companyWide);
+        eventPublisher.publishEvent(new CompanyStructureChangedEvent(companyId));
+        return UserResponse.from(userRepository.save(user));
     }
 
     /**
      * Replace-all of the units a user covers beyond their own. Every unit must be this company's.
-     * The user's own unit is dropped from the set -- it is already covered. Visibility is
-     * resolved per request (OrgScopeService), so this takes effect on the user's next request.
+     * The user's own unit is dropped from the set -- it is already covered. Takes effect on the
+     * user's next request (VisibilityService's cache is dropped once this commits).
      */
     @Transactional
     public UserResponse setExtraOrgUnits(UUID companyId, UUID userId, List<UUID> orgUnitIds) {
         companyAccessGuard.requireOwnCompanyOrPlatformStaff(companyId);
-        User user = userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException(userId));
-        if (user.getCompany() == null || !user.getCompany().getId().equals(companyId)) {
-            throw new UserNotFoundException(userId);
-        }
+        requirePlacementAuthority();
+        User user = getCompanyUser(companyId, userId);
         Set<OrgUnit> units = new HashSet<>();
         for (UUID id : new HashSet<>(orgUnitIds)) {
             OrgUnit unit = orgUnitRepository.findById(id).orElseThrow(() -> new OrgUnitNotFoundException(id));
@@ -224,6 +261,7 @@ public class UserService {
         }
         user.getExtraOrgUnits().clear();
         user.getExtraOrgUnits().addAll(units);
+        eventPublisher.publishEvent(new CompanyStructureChangedEvent(companyId));
         return UserResponse.from(userRepository.save(user));
     }
 
@@ -245,16 +283,17 @@ public class UserService {
     @Transactional
     public UserResponse makeCompanyAdmin(UUID companyId, UUID userId) {
         companyAccessGuard.requireOwnCompanyOrPlatformStaff(companyId);
-        User user = userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException(userId));
-        if (user.getCompany() == null || !user.getCompany().getId().equals(companyId)) {
-            throw new UserNotFoundException(userId);
-        }
+        requirePlacementAuthority();
+        User user = getCompanyUser(companyId, userId);
         Role companyAdminRole = roleRepository
                 .findByCompanyIdAndName(companyId, COMPANY_ADMIN_ROLE_NAME)
                 .orElseThrow(() -> new IllegalStateException("Company Admin role missing for company " + companyId));
 
+        // A Company Admin runs the whole company, so sees all of it (they keep their unit for what they place themselves).
         user.setRole(companyAdminRole);
+        user.setCompanyWide(true);
         userRepository.save(user);
+        eventPublisher.publishEvent(new CompanyStructureChangedEvent(companyId));
 
         if (user.getDesignation() != null) {
             Set<UUID> companyAdminGrantIds = roleAccessControlRepository.findByRoleId(companyAdminRole.getId()).stream()
@@ -274,10 +313,8 @@ public class UserService {
     @Transactional
     public UserResponse removeCompanyAdmin(UUID companyId, UUID userId) {
         companyAccessGuard.requireOwnCompanyOrPlatformStaff(companyId);
-        User user = userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException(userId));
-        if (user.getCompany() == null || !user.getCompany().getId().equals(companyId)) {
-            throw new UserNotFoundException(userId);
-        }
+        requirePlacementAuthority();
+        User user = getCompanyUser(companyId, userId);
         Role companyAdminRole = roleRepository
                 .findByCompanyIdAndName(companyId, COMPANY_ADMIN_ROLE_NAME)
                 .orElseThrow(() -> new IllegalStateException("Company Admin role missing for company " + companyId));
@@ -304,10 +341,7 @@ public class UserService {
         if (userId.equals(CurrentUser.id())) {
             throw new CannotDeleteSelfException();
         }
-        User user = userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException(userId));
-        if (user.getCompany() == null || !user.getCompany().getId().equals(companyId)) {
-            throw new UserNotFoundException(userId);
-        }
+        User user = getVisibleCompanyUser(companyId, userId);
         try {
             userInviteTokenRepository.deleteUnusedByUserId(userId);
             userRepository.delete(user);
@@ -315,6 +349,58 @@ public class UserService {
         } catch (DataIntegrityViolationException e) {
             throw new UserHasActivityException(userId);
         }
+        eventPublisher.publishEvent(new CompanyStructureChangedEvent(companyId));
+    }
+
+    /** The value in the first org level that places a user at the company itself -- they see everything. */
+    public static final String COMPANY_WIDE_PLACEMENT = "ALL";
+
+    private static boolean isCompanyWidePlacement(List<String> orgUnitPath) {
+        return orgUnitPath != null && !orgUnitPath.isEmpty() && COMPANY_WIDE_PLACEMENT.equalsIgnoreCase(orgUnitPath.get(0).trim());
+    }
+
+    /**
+     * Where someone sits decides what they see, so changing a placement (company-wide, extra
+     * units) needs someone who already sees the whole company -- a zonal manager holding
+     * user.edit must not be able to widen their own, or anyone's, view beyond their own.
+     */
+    private void requirePlacementAuthority() {
+        if (!hasPlacementAuthority()) {
+            throw new AccessDeniedException("Only someone who sees the whole company can change who sees what");
+        }
+    }
+
+    private boolean hasPlacementAuthority() {
+        User caller = currentUser();
+        return caller.getCompany() == null || caller.isCompanyWide();
+    }
+
+    private static boolean movesPlacement(User user, OrgUnit newUnit) {
+        UUID current = user.getOrgUnit() != null ? user.getOrgUnit().getId() : null;
+        UUID next = newUnit != null ? newUnit.getId() : null;
+        return user.isCompanyWide() || !Objects.equals(current, next);
+    }
+
+    private User getCompanyUser(UUID companyId, UUID userId) {
+        User user = userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException(userId));
+        if (user.getCompany() == null || !user.getCompany().getId().equals(companyId)) {
+            throw new UserNotFoundException(userId);
+        }
+        return user;
+    }
+
+    /** A company user the caller can see (see Visibility) -- 404 otherwise, the same as one that doesn't exist. */
+    private User getVisibleCompanyUser(UUID companyId, UUID userId) {
+        User user = getCompanyUser(companyId, userId);
+        if (!visibilityService.resolve(currentUser()).canSeeUser(user)) {
+            throw new UserNotFoundException(userId);
+        }
+        return user;
+    }
+
+    private User currentUser() {
+        UUID callerId = CurrentUser.id();
+        return userRepository.findById(callerId).orElseThrow(() -> new IllegalStateException("Authenticated user not found: " + callerId));
     }
 
     /**
@@ -337,6 +423,10 @@ public class UserService {
             User existing = existingByEmail.get(email);
             if (existing != null && !existing.getCompany().getId().equals(companyId)) {
                 errors.add("Row " + rowNum + " (" + row.email() + "): this email already belongs to a different company");
+            }
+            if (isCompanyWidePlacement(row.orgUnitPath()) && row.orgUnitPath().stream().skip(1).anyMatch(level -> blankToNull(level) != null)) {
+                errors.add("Row " + rowNum + " (" + row.email() + "): " + COMPANY_WIDE_PLACEMENT
+                        + " in the first org level means the whole company -- leave the other levels empty");
             }
         }
 

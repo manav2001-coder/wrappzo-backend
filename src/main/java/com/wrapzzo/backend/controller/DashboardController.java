@@ -2,9 +2,10 @@ package com.wrapzzo.backend.controller;
 
 import com.wrapzzo.backend.dto.DashboardDrilldownResponse;
 import com.wrapzzo.backend.dto.DashboardResponse;
+import com.wrapzzo.backend.security.Permission.Keys;
+import com.wrapzzo.backend.security.RequiresPermission;
 import com.wrapzzo.backend.service.DashboardService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -14,7 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/dashboard")
 @RequiredArgsConstructor
-@PreAuthorize("hasAuthority('dashboard.view')")
+@RequiresPermission(Keys.DASHBOARD_VIEW)
 public class DashboardController {
 
     private final DashboardService dashboardService;

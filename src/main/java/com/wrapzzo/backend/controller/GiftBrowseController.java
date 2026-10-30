@@ -4,6 +4,8 @@ import com.wrapzzo.backend.dto.GiftResponse;
 import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.repository.UserRepository;
 import com.wrapzzo.backend.security.CurrentUser;
+import com.wrapzzo.backend.security.Permission.Keys;
+import com.wrapzzo.backend.security.RequiresPermission;
 import com.wrapzzo.backend.service.GiftService;
 import java.util.List;
 import java.util.UUID;
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/gifts")
 @RequiredArgsConstructor
+@RequiresPermission(Keys.PRODUCT_VIEW)
 public class GiftBrowseController {
 
     private final GiftService giftService;

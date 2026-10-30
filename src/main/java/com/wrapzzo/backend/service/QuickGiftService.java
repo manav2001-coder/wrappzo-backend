@@ -33,6 +33,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -59,7 +60,7 @@ public class QuickGiftService {
     private final OrderService orderService;
     private final GiftService giftService;
     private final CompanyFeatureFlagService companyFeatureFlagService;
-    private final OrgScopeService orgScopeService;
+    private final VisibilityService visibilityService;
     private final WarehouseService warehouseService;
 
     public PresignQuickGiftPhotoResponse presignPhoto(String contentType) {
@@ -142,6 +143,7 @@ public class QuickGiftService {
                 request.getCompany(), request.getGift(), OrderSource.QUICK_GIFT, request.getRecipientName(),
                 request.getRecipientPhone(), actor);
         order.orderQuantity(request.getQuantity());
+        order.setOwner(request.getRequestedBy());
         order.setOrgUnit(request.getOrgUnit());
         warehouseService.routeOnPlacement(order);
         // saveAndFlush -- orderNo is DB-generated and only readable after the physical INSERT runs.
@@ -162,22 +164,23 @@ public class QuickGiftService {
                 .toList();
     }
 
-    /** Only requests from the approver's own org subtree (or the whole company with org.scope.all). */
+    /** Requests waiting for approval that the approver can see (see Visibility) -- never their own. */
     @Transactional(readOnly = true)
     public List<QuickGiftRequestResponse> listPendingApproval() {
         User approver = currentUser();
-        OrgScope scope = orgScopeService.resolve(approver);
+        Visibility visibility = visibilityService.resolve(approver);
         return quickGiftRequestRepository
-                .findByCompanyIdAndStatusOrderByCreatedAtDesc(approver.getCompany().getId(), QuickGiftStatus.SUBMITTED)
+                .findVisibleInCompanyByStatus(approver.getCompany().getId(), QuickGiftStatus.SUBMITTED,
+                        visibility.companyWide(), visibility.peopleForQuery(), visibility.orgUnitsForQuery())
                 .stream()
-                .filter(r -> scope.covers(r.getOrgUnit(), r.getRequestedBy()))
+                .filter(r -> !r.getRequestedBy().getId().equals(approver.getId()))
                 .map(this::toResponse)
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public QuickGiftRequestResponse get(UUID id) {
-        return toResponse(getEntity(id));
+        return toResponse(getVisibleEntity(id));
     }
 
     @Transactional
@@ -230,11 +233,20 @@ public class QuickGiftService {
         return gift;
     }
 
-    /** 404 for a request outside the approver's org subtree, same as for another company's. */
-    private QuickGiftRequest getReviewableEntity(UUID id) {
+    /** 404 for a request the caller can't see (see Visibility), same as for another company's. */
+    private QuickGiftRequest getVisibleEntity(UUID id) {
         QuickGiftRequest request = getEntity(id);
-        if (!orgScopeService.resolve(currentUser()).covers(request.getOrgUnit(), request.getRequestedBy())) {
+        if (!visibilityService.resolve(currentUser()).canSee(request.getRequestedBy(), request.getOrgUnit())) {
             throw new QuickGiftRequestNotFoundException(id);
+        }
+        return request;
+    }
+
+    /** A request the approver can see, and isn't their own -- nobody approves their own request. */
+    private QuickGiftRequest getReviewableEntity(UUID id) {
+        QuickGiftRequest request = getVisibleEntity(id);
+        if (request.getRequestedBy().getId().equals(currentUser().getId())) {
+            throw new AccessDeniedException("You can't approve your own request");
         }
         return request;
     }

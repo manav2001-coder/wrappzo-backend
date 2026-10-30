@@ -84,8 +84,7 @@ public class DashboardService {
     private final OrderStatusHistoryService orderStatusHistoryService;
     private final GiftImageRepository giftImageRepository;
     private final FileStorageService fileStorageService;
-    private final AccessControlCacheService accessControlCacheService;
-    private final OrgScopeService orgScopeService;
+    private final VisibilityService visibilityService;
 
     /** Everything the dashboard reads, already scoped to company-wide or just-this-viewer. */
     private record ScopedData(
@@ -196,49 +195,32 @@ public class DashboardService {
         };
     }
 
+    /**
+     * Everything the dashboard counts, narrowed to what the viewer can see (see Visibility) --
+     * the same rule as the Orders list and the approval queues. Someone who sees only their own
+     * records gets a personal dashboard; anyone who sees more gets the team view.
+     */
     private ScopedData resolveScopedData() {
         User user = currentUser();
         Company company = user.getCompany();
         UUID companyId = company.getId();
-        // campaign.manage is the usual company-wide signal, but order.track/order.design.review
-        // are narrower alternatives (see OrderController) for a company scoped to just order
-        // tracking/design review with no campaign-management access at all -- they still see
-        // their whole company's dashboard, not just their own personal activity.
-        Set<String> keys = accessControlCacheService.resolveEffectiveKeys(user);
-        boolean companyWide = campaignService.canManage(user) || keys.contains("order.track") || keys.contains("order.design.review");
+        Visibility visibility = visibilityService.resolve(user);
+        boolean companyWide = !visibility.ownRecordsOnly();
 
-        List<Campaign> allCampaigns = campaignRepository.findByCompanyIdOrderByCreatedAtDesc(companyId);
-        List<Order> allOrders = orderRepository.findByCompanyIdOrderByCreatedAtDesc(companyId);
-        List<QuickGiftRequest> allQuickGifts = quickGiftRequestRepository.findByCompanyIdOrderByCreatedAtDesc(companyId);
-        List<Submission> allSubmissions = companyWide
-                ? submissionRepository.findByCompanyIdOrderByCreatedAtDesc(companyId)
-                : submissionRepository.findBySubmittedByIdOrderByCreatedAtDesc(user.getId());
+        List<Campaign> campaigns = campaignService.visibleCampaigns(user);
+        List<Order> orders = orderRepository.findVisibleInCompany(
+                companyId, visibility.companyWide(), visibility.peopleForQuery(), visibility.orgUnitsForQuery());
+        List<QuickGiftRequest> quickGifts = quickGiftRequestRepository.findByCompanyIdOrderByCreatedAtDesc(companyId).stream()
+                .filter(q -> visibility.canSee(q.getRequestedBy(), q.getOrgUnit()))
+                .toList();
+        List<Submission> submissions = submissionRepository.findByCompanyIdOrderByCreatedAtDesc(companyId).stream()
+                .filter(sub -> visibility.canSee(sub.getSubmittedBy(), sub.getOrgUnit()))
+                .toList();
 
-        // Quick Gift orders no longer carry their requester directly (createdBy becomes the
-        // approver on approval, same as a Campaign order) -- resolve requester via this map.
-        Map<UUID, User> quickGiftRequesterByOrderId = allQuickGifts.stream()
+        // Quick Gift orders' createdBy is whoever approved them -- departments and names go by the requester.
+        Map<UUID, User> quickGiftRequesterByOrderId = quickGifts.stream()
                 .filter(q -> q.getOrder() != null)
                 .collect(Collectors.toMap(q -> q.getOrder().getId(), QuickGiftRequest::getRequestedBy));
-
-        List<Campaign> campaigns = companyWide
-                ? allCampaigns
-                : allCampaigns.stream()
-                        .filter(c -> c.getStatus() != CampaignStatus.DRAFT && campaignService.isInAudience(c, user.getId()))
-                        .toList();
-        // A team view still stops at the viewer's org scope -- the same rule as the Orders list
-        // and the approval queue -- so a zonal manager's dashboard is their zone, not the company.
-        OrgScope scope = orgScopeService.resolve(user);
-        List<Order> orders = companyWide
-                ? allOrders.stream()
-                        .filter(o -> scope.covers(o.getOrgUnit(), null) || belongsToUser(o, user.getId(), quickGiftRequesterByOrderId))
-                        .toList()
-                : allOrders.stream().filter(o -> belongsToUser(o, user.getId(), quickGiftRequesterByOrderId)).toList();
-        List<QuickGiftRequest> quickGifts = companyWide
-                ? allQuickGifts.stream().filter(q -> scope.covers(q.getOrgUnit(), q.getRequestedBy())).toList()
-                : allQuickGifts.stream().filter(q -> q.getRequestedBy().getId().equals(user.getId())).toList();
-        List<Submission> submissions = companyWide
-                ? allSubmissions.stream().filter(s -> scope.covers(s.getSubmittedBy().getOrgUnit(), s.getSubmittedBy())).toList()
-                : allSubmissions;
 
         return new ScopedData(company, companyWide, campaigns, orders, quickGifts, submissions, quickGiftRequesterByOrderId);
     }
@@ -459,15 +441,6 @@ public class DashboardService {
             points.add(new TrendPoint(weekStart.format(labelFormat), weekStart.toString(), submissionCount, quickGiftCount));
         }
         return points;
-    }
-
-    /** CAMPAIGN orders trace back through their submission's submitter; Quick Gift orders through their requester. */
-    private boolean belongsToUser(Order order, UUID userId, Map<UUID, User> quickGiftRequesterByOrderId) {
-        if (order.getSource() == OrderSource.CAMPAIGN) {
-            return order.getSubmission() != null && order.getSubmission().getSubmittedBy().getId().equals(userId);
-        }
-        User requester = quickGiftRequesterByOrderId.get(order.getId());
-        return requester != null && requester.getId().equals(userId);
     }
 
     private List<TopGift> topGifts(List<Order> orders) {

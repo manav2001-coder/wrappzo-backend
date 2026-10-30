@@ -1,5 +1,6 @@
 package com.wrapzzo.backend.service;
 
+import com.wrapzzo.backend.security.Permission;
 import com.wrapzzo.backend.dto.CreateDoctorChangeRequest;
 import com.wrapzzo.backend.dto.DoctorChangeRequestResponse;
 import com.wrapzzo.backend.dto.DoctorDetails;
@@ -41,13 +42,14 @@ import org.springframework.transaction.annotation.Transactional;
 public class DoctorChangeRequestService {
 
     /** Granted to Company Admin by default (V39): review any MR's request in the company. */
-    public static final String APPROVE_ANY_KEY = "recipient.approve";
+    public static final String APPROVE_ANY_KEY = Permission.RECIPIENT_LIST_APPROVE.key();
 
     private final DoctorChangeRequestRepository doctorChangeRequestRepository;
     private final RecipientRepository recipientRepository;
     private final RecipientAssignmentRepository recipientAssignmentRepository;
     private final UserRepository userRepository;
     private final AccessControlCacheService accessControlCacheService;
+    private final VisibilityService visibilityService;
 
     @Transactional
     public DoctorChangeRequestResponse create(CreateDoctorChangeRequest request) {
@@ -81,16 +83,27 @@ public class DoctorChangeRequestService {
                 .toList();
     }
 
-    /** A manager's own approval queue: their direct reports' pending requests, or every other pending request company-wide if they hold recipient.approve. */
+    /**
+     * A manager's own approval queue: their direct reports' pending requests -- and, with
+     * recipient_list.approve, every other pending request they can see (see Visibility).
+     */
     @Transactional(readOnly = true)
     public List<DoctorChangeRequestResponse> listPendingForReviewer() {
         User reviewer = currentUser();
         if (reviewer.getCompany() == null) {
             return List.of();
         }
-        List<DoctorChangeRequest> pending = canReviewCompanyWide(reviewer)
-                ? doctorChangeRequestRepository.findByCompany_IdAndStatusOrderByCreatedAtAsc(reviewer.getCompany().getId(), DoctorChangeStatus.PENDING)
-                : doctorChangeRequestRepository.findByRequestedBy_ReportsTo_IdAndStatusOrderByCreatedAtAsc(reviewer.getId(), DoctorChangeStatus.PENDING);
+        List<DoctorChangeRequest> pending;
+        if (canApproveAny(reviewer)) {
+            Visibility visibility = visibilityService.resolve(reviewer);
+            pending = doctorChangeRequestRepository
+                    .findByCompany_IdAndStatusOrderByCreatedAtAsc(reviewer.getCompany().getId(), DoctorChangeStatus.PENDING)
+                    .stream()
+                    .filter(r -> isDirectManager(reviewer, r) || visibility.canSeeUser(r.getRequestedBy()))
+                    .toList();
+        } else {
+            pending = doctorChangeRequestRepository.findByRequestedBy_ReportsTo_IdAndStatusOrderByCreatedAtAsc(reviewer.getId(), DoctorChangeStatus.PENDING);
+        }
         return pending.stream()
                 .filter(r -> !r.getRequestedBy().getId().equals(reviewer.getId()))
                 .map(DoctorChangeRequestResponse::from)
@@ -194,9 +207,9 @@ public class DoctorChangeRequestService {
         if (entity.getRequestedBy().getId().equals(reviewer.getId())) {
             throw new AccessDeniedException("You can't review your own request");
         }
-        boolean isDirectManager = entity.getRequestedBy().getReportsTo() != null
-                && entity.getRequestedBy().getReportsTo().getId().equals(reviewer.getId());
-        if (!isDirectManager && !canReviewCompanyWide(reviewer)) {
+        boolean mayReview = isDirectManager(reviewer, entity)
+                || (canApproveAny(reviewer) && visibilityService.resolve(reviewer).canSeeUser(entity.getRequestedBy()));
+        if (!mayReview) {
             throw new AccessDeniedException("Not authorized to review this request");
         }
         if (entity.getStatus() != DoctorChangeStatus.PENDING) {
@@ -205,8 +218,13 @@ public class DoctorChangeRequestService {
         return entity;
     }
 
-    private boolean canReviewCompanyWide(User user) {
+    private boolean canApproveAny(User user) {
         return accessControlCacheService.resolveEffectiveKeys(user).contains(APPROVE_ANY_KEY);
+    }
+
+    private static boolean isDirectManager(User reviewer, DoctorChangeRequest request) {
+        User manager = request.getRequestedBy().getReportsTo();
+        return manager != null && manager.getId().equals(reviewer.getId());
     }
 
     private Recipient getOwnCompanyRecipient(UUID recipientId, UUID companyId) {

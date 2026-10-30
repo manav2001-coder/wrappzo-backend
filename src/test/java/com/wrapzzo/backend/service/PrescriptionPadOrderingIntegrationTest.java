@@ -267,14 +267,15 @@ class PrescriptionPadOrderingIntegrationTest {
     }
 
     @Test
-    void orgScopeAllSeesEveryUnit() {
+    void aCompanyWideUserSeesEveryUnit() {
         enableDirectOrdering();
         actAs(mrNorth);
         UUID northOrder = quickGiftService.create(padOrder(pad, 1)).orderId();
 
         Role adminRole = roleRepository.save(new Role(company, "Company Admin"));
-        roleAccessControlRepository.save(new RoleAccessControl(adminRole, accessControlRepository.findByKey(OrgScopeService.ALL_UNITS_KEY).orElseThrow()));
-        User headOffice = userRepository.save(new User(company, adminRole, "Head Office", "ho-" + UUID.randomUUID() + "@test.com", "n/a"));
+        User headOffice = new User(company, adminRole, "Head Office", "ho-" + UUID.randomUUID() + "@test.com", "n/a");
+        headOffice.setCompanyWide(true);
+        headOffice = userRepository.save(headOffice);
 
         actAs(headOffice);
         assertThat(orderService.list()).extracting(OrderResponse::id).contains(northOrder);

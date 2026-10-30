@@ -4,6 +4,7 @@ import com.wrapzzo.backend.dto.OrgUnitResponse;
 import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.repository.UserRepository;
 import com.wrapzzo.backend.security.CurrentUser;
+import com.wrapzzo.backend.security.Permission.Keys;
 import com.wrapzzo.backend.service.OrgUnitService;
 import java.util.List;
 import java.util.UUID;
@@ -20,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/company/org-units")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyAuthority('company.vendor.manage', 'warehouse.manage')")
+@PreAuthorize("hasAnyAuthority('" + Keys.COMPANY_VENDOR_VIEW + "', '" + Keys.WAREHOUSE_VIEW + "', '" + Keys.USER_VIEW + "')")
 public class CompanyOrgUnitController {
 
     private final OrgUnitService orgUnitService;

@@ -7,6 +7,7 @@ import com.wrapzzo.backend.dto.PresignGiftImageUploadRequest;
 import com.wrapzzo.backend.dto.PresignGiftImageUploadResponse;
 import com.wrapzzo.backend.dto.UpdateGiftRequest;
 import com.wrapzzo.backend.security.CurrentVendor;
+import com.wrapzzo.backend.security.VendorEndpoint;
 import com.wrapzzo.backend.service.GiftService;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/vendor/gifts")
 @RequiredArgsConstructor
+@VendorEndpoint
 public class VendorGiftController {
 
     private final GiftService giftService;

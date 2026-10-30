@@ -112,6 +112,14 @@ public class Order {
     @JoinColumn(name = "created_by", nullable = false)
     private User createdBy;
 
+    /**
+     * Whose order it is -- the requester or the campaign entry's submitter, not the approver who
+     * created it. Visibility follows the owner (and orgUnit). Defaults to createdBy.
+     */
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "owner_id", nullable = false)
+    private User owner;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -134,6 +142,7 @@ public class Order {
         this.recipientPhone = recipientPhone;
         this.totalPrice = gift != null ? gift.getTotalPrice() : null;
         this.createdBy = createdBy;
+        this.owner = createdBy;
     }
 
     /** Quick Gift path -- no campaign/submission; created on approval, or straight away under direct vendor ordering. */
@@ -145,6 +154,7 @@ public class Order {
         this.recipientPhone = recipientPhone;
         this.totalPrice = gift != null ? gift.getTotalPrice() : null;
         this.createdBy = createdBy;
+        this.owner = createdBy;
     }
 
     /** Sets the unit count and re-snapshots totalPrice for all of them. */
