@@ -66,6 +66,7 @@ class UserServiceIntegrationTest {
     @BeforeEach
     void seedCompany() {
         company = companyRepository.save(new Company("Nanz Test Pharma"));
+        roleRepository.save(new Role(company, "Member"));
         emailSender.sent.clear();
 
         Role platformRole = roleRepository.save(new Role(null, "Test Platform Staff " + UUID.randomUUID()));
@@ -85,10 +86,10 @@ class UserServiceIntegrationTest {
         // The manager's row appears AFTER their report's row -- exercises the two-pass resolution.
         List<BulkImportUserRow> rows = List.of(
                 new BulkImportUserRow(
-                        "Arpita Banerjee", "arpita@nanz-test.com", "700378", "KAM", "3168",
+                        "Arpita Banerjee", "arpita@nanz-test.com", "700378", "KAM", "Member", "3168",
                         "rajesh@nanz-test.com", List.of("HOSPIAID", "EAST")),
                 new BulkImportUserRow(
-                        "Rajesh Nayak", "rajesh@nanz-test.com", "943833", "RBM", "3032", null, List.of("HOSPIAID", "EAST")));
+                        "Rajesh Nayak", "rajesh@nanz-test.com", "943833", "RBM", "Member", "3032", null, List.of("HOSPIAID", "EAST")));
 
         BulkImportUsersResponse response = userService.bulkImport(company.getId(), rows);
 
@@ -112,8 +113,8 @@ class UserServiceIntegrationTest {
     @Test
     void sharedOrgUnitBranchIsReusedNotDuplicated() {
         List<BulkImportUserRow> rows = List.of(
-                new BulkImportUserRow("Arpita Banerjee", "arpita2@nanz-test.com", null, "KAM", null, null, List.of("HOSPIAID", "EAST")),
-                new BulkImportUserRow("Another KAM", "another@nanz-test.com", null, "KAM", null, null, List.of("HOSPIAID", "EAST")));
+                new BulkImportUserRow("Arpita Banerjee", "arpita2@nanz-test.com", null, "KAM", "Member", null, null, List.of("HOSPIAID", "EAST")),
+                new BulkImportUserRow("Another KAM", "another@nanz-test.com", null, "KAM", "Member", null, null, List.of("HOSPIAID", "EAST")));
 
         userService.bulkImport(company.getId(), rows);
 
@@ -130,11 +131,11 @@ class UserServiceIntegrationTest {
     void reimportingTheSameEmailUpdatesInsteadOfDuplicating() {
         userService.bulkImport(
                 company.getId(),
-                List.of(new BulkImportUserRow("Old Name", "reimport@nanz-test.com", null, "KAM", null, null, null)));
+                List.of(new BulkImportUserRow("Old Name", "reimport@nanz-test.com", null, "KAM", "Member", null, null, null)));
 
         BulkImportUsersResponse second = userService.bulkImport(
                 company.getId(),
-                List.of(new BulkImportUserRow("New Name", "reimport@nanz-test.com", "999", "SR.KAM", "EMP1", null, null)));
+                List.of(new BulkImportUserRow("New Name", "reimport@nanz-test.com", "999", "SR.KAM", "Member", "EMP1", null, null)));
 
         assertThat(second.createdCount()).isZero();
         assertThat(second.updatedCount()).isEqualTo(1);
@@ -145,7 +146,7 @@ class UserServiceIntegrationTest {
     @Test
     void unresolvableReportsToEmailFailsValidationBeforeAnyWrite() {
         List<BulkImportUserRow> rows = List.of(
-                new BulkImportUserRow("Ghost Report", "ghost@nanz-test.com", null, "KAM", null, "nobody@nanz-test.com", null));
+                new BulkImportUserRow("Ghost Report", "ghost@nanz-test.com", null, "KAM", "Member", null, "nobody@nanz-test.com", null));
 
         assertThatThrownBy(() -> userService.bulkImport(company.getId(), rows)).isInstanceOf(UserImportValidationException.class);
         assertThat(userRepository.findByEmail("ghost@nanz-test.com")).isEmpty();
@@ -154,8 +155,8 @@ class UserServiceIntegrationTest {
     @Test
     void duplicateEmailWithinTheSameSheetFailsValidation() {
         List<BulkImportUserRow> rows = List.of(
-                new BulkImportUserRow("First", "dup2@nanz-test.com", null, "KAM", null, null, null),
-                new BulkImportUserRow("Second", "dup2@nanz-test.com", null, "KAM", null, null, null));
+                new BulkImportUserRow("First", "dup2@nanz-test.com", null, "KAM", "Member", null, null, null),
+                new BulkImportUserRow("Second", "dup2@nanz-test.com", null, "KAM", "Member", null, null, null));
 
         assertThatThrownBy(() -> userService.bulkImport(company.getId(), rows)).isInstanceOf(UserImportValidationException.class);
     }
@@ -163,8 +164,8 @@ class UserServiceIntegrationTest {
     @Test
     void duplicateEmployeeCodeWithinTheSameSheetFailsValidationWithASpecificMessage() {
         List<BulkImportUserRow> rows = List.of(
-                new BulkImportUserRow("First", "code1@nanz-test.com", null, "KAM", "DUP-1", null, null),
-                new BulkImportUserRow("Second", "code2@nanz-test.com", null, "KAM", "DUP-1", null, null));
+                new BulkImportUserRow("First", "code1@nanz-test.com", null, "KAM", "Member", "DUP-1", null, null),
+                new BulkImportUserRow("Second", "code2@nanz-test.com", null, "KAM", "Member", "DUP-1", null, null));
 
         assertThatThrownBy(() -> userService.bulkImport(company.getId(), rows))
                 .isInstanceOf(UserImportValidationException.class)
@@ -178,9 +179,9 @@ class UserServiceIntegrationTest {
     void employeeCodeAlreadyUsedByAnExistingUserFailsValidation() {
         userService.bulkImport(
                 company.getId(),
-                List.of(new BulkImportUserRow("Existing", "existing-code@nanz-test.com", null, "KAM", "EXIST-1", null, null)));
+                List.of(new BulkImportUserRow("Existing", "existing-code@nanz-test.com", null, "KAM", "Member", "EXIST-1", null, null)));
 
-        List<BulkImportUserRow> rows = List.of(new BulkImportUserRow("New Person", "new-code@nanz-test.com", null, "KAM", "EXIST-1", null, null));
+        List<BulkImportUserRow> rows = List.of(new BulkImportUserRow("New Person", "new-code@nanz-test.com", null, "KAM", "Member", "EXIST-1", null, null));
 
         assertThatThrownBy(() -> userService.bulkImport(company.getId(), rows)).isInstanceOf(UserImportValidationException.class);
         assertThat(userRepository.findByEmail("new-code@nanz-test.com")).isEmpty();
@@ -189,13 +190,14 @@ class UserServiceIntegrationTest {
     @Test
     void emailAlreadyBelongingToAnotherCompanyFailsValidation() {
         Company otherCompany = companyRepository.save(new Company("Other Test Co"));
+        roleRepository.save(new Role(otherCompany, "Member"));
         userService.bulkImport(
                 otherCompany.getId(),
-                List.of(new BulkImportUserRow("Existing Elsewhere", "elsewhere@nanz-test.com", null, "KAM", null, null, null)));
+                List.of(new BulkImportUserRow("Existing Elsewhere", "elsewhere@nanz-test.com", null, "KAM", "Member", null, null, null)));
 
         assertThatThrownBy(() -> userService.bulkImport(
                         company.getId(),
-                        List.of(new BulkImportUserRow("Same Email", "elsewhere@nanz-test.com", null, "KAM", null, null, null))))
+                        List.of(new BulkImportUserRow("Same Email", "elsewhere@nanz-test.com", null, "KAM", "Member", null, null, null))))
                 .isInstanceOf(UserImportValidationException.class);
     }
 
@@ -203,7 +205,7 @@ class UserServiceIntegrationTest {
     void listByCompanyReturnsImportedUsers() {
         userService.bulkImport(
                 company.getId(),
-                List.of(new BulkImportUserRow("Listed Person", "listed@nanz-test.com", null, "KAM", null, null, null)));
+                List.of(new BulkImportUserRow("Listed Person", "listed@nanz-test.com", null, "KAM", "Member", null, null, null)));
 
         List<UserResponse> listed = userService.listByCompany(company.getId());
         assertThat(listed).extracting(UserResponse::email).contains("listed@nanz-test.com");
@@ -213,11 +215,11 @@ class UserServiceIntegrationTest {
     void reportsToCanReferenceAUserFromAPreviousImportRun() {
         userService.bulkImport(
                 company.getId(),
-                List.of(new BulkImportUserRow("Manager", "manager@nanz-test.com", null, "ZBM", null, null, null)));
+                List.of(new BulkImportUserRow("Manager", "manager@nanz-test.com", null, "ZBM", "Member", null, null, null)));
 
         userService.bulkImport(
                 company.getId(),
-                List.of(new BulkImportUserRow("New Report", "report@nanz-test.com", null, "KAM", null, "manager@nanz-test.com", null)));
+                List.of(new BulkImportUserRow("New Report", "report@nanz-test.com", null, "KAM", "Member", null, "manager@nanz-test.com", null)));
 
         User report = userRepository.findByEmail("report@nanz-test.com").orElseThrow();
         User manager = userRepository.findByEmail("manager@nanz-test.com").orElseThrow();

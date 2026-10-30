@@ -8,7 +8,7 @@ import com.wrapzzo.backend.dto.PresignLogoUploadResponse;
 import com.wrapzzo.backend.exception.CompanyNotFoundException;
 import com.wrapzzo.backend.model.CompanyStatus;
 import com.wrapzzo.backend.model.Role;
-import com.wrapzzo.backend.repository.RoleAccessControlRepository;
+import com.wrapzzo.backend.repository.TemplateRepository;
 import com.wrapzzo.backend.repository.RoleRepository;
 import java.util.List;
 import java.util.UUID;
@@ -29,7 +29,10 @@ class CompanyServiceIntegrationTest {
     private RoleRepository roleRepository;
 
     @Autowired
-    private RoleAccessControlRepository roleAccessControlRepository;
+    private TemplateRepository templateRepository;
+
+    @Autowired
+    private AccessControlCacheService accessControlCacheService;
 
     @Test
     void createSeedsADefaultCompanyAdminRoleWithTheRightGrants() {
@@ -42,13 +45,16 @@ class CompanyServiceIntegrationTest {
         assertThat(company.displayId()).matches("CID-\\d+");
 
         List<Role> roles = roleRepository.findByCompanyId(company.id());
-        assertThat(roles).hasSize(1);
-        Role companyAdminRole = roles.get(0);
-        assertThat(companyAdminRole.getName()).isEqualTo("Company Admin");
+        assertThat(roles).extracting(Role::getName).containsExactlyInAnyOrder("Company Admin", "Member");
+        Role companyAdminRole = roles.stream().filter(role -> role.getName().equals("Company Admin")).findFirst().orElseThrow();
 
-        List<String> grantedKeys = roleAccessControlRepository.findAccessControlKeysByRoleId(companyAdminRole.getId());
-        // Every permission a company can hold -- never a platform-only one.
-        assertThat(grantedKeys).containsExactlyInAnyOrder(Permission.companyAssignablePermissions().stream().map(Permission::key).toArray(String[]::new));
+        // The role carries the system master template, which holds every permission a company can
+        // hold -- never a platform-only one.
+        assertThat(templateRepository.findTemplateIdsByRoleId(companyAdminRole.getId()))
+                .containsExactly(templateRepository.findSystemByName("Company Admin").orElseThrow().getId());
+        UUID templateId = templateRepository.findTemplateIdsByRoleId(companyAdminRole.getId()).get(0);
+        assertThat(accessControlCacheService.loadGraph().resolve(List.of(templateId)))
+                .containsExactlyInAnyOrder(Permission.companyAssignablePermissions().stream().map(Permission::key).toArray(String[]::new));
     }
 
     @Test

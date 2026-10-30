@@ -54,6 +54,12 @@ public enum Permission {
     ACCESS_VIEW(Keys.ACCESS_VIEW, true),
     ACCESS_EDIT(Keys.ACCESS_EDIT, true),
 
+    ROLE_VIEW(Keys.ROLE_VIEW, true),
+    ROLE_EDIT(Keys.ROLE_EDIT, true),
+
+    TEMPLATE_VIEW(Keys.TEMPLATE_VIEW, true),
+    TEMPLATE_EDIT(Keys.TEMPLATE_EDIT, true),
+
     COMPANY_VENDOR_VIEW(Keys.COMPANY_VENDOR_VIEW, true),
     COMPANY_VENDOR_ADD(Keys.COMPANY_VENDOR_ADD, true),
 
@@ -166,6 +172,12 @@ public enum Permission {
 
         public static final String ACCESS_VIEW = "access.view";
         public static final String ACCESS_EDIT = "access.edit";
+
+        public static final String ROLE_VIEW = "role.view";
+        public static final String ROLE_EDIT = "role.edit";
+
+        public static final String TEMPLATE_VIEW = "template.view";
+        public static final String TEMPLATE_EDIT = "template.edit";
 
         public static final String COMPANY_VENDOR_VIEW = "company_vendor.view";
         public static final String COMPANY_VENDOR_ADD = "company_vendor.add";

@@ -21,7 +21,7 @@ import com.wrapzzo.backend.model.GiftModule;
 import com.wrapzzo.backend.model.OrgUnit;
 import com.wrapzzo.backend.model.Recipient;
 import com.wrapzzo.backend.model.Role;
-import com.wrapzzo.backend.model.RoleAccessControl;
+import com.wrapzzo.backend.model.Template;
 import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.model.Vendor;
 import com.wrapzzo.backend.repository.AccessControlRepository;
@@ -31,7 +31,7 @@ import com.wrapzzo.backend.repository.GiftRepository;
 import com.wrapzzo.backend.repository.OrgUnitRepository;
 import com.wrapzzo.backend.repository.RecipientAssignmentRepository;
 import com.wrapzzo.backend.repository.RecipientRepository;
-import com.wrapzzo.backend.repository.RoleAccessControlRepository;
+import com.wrapzzo.backend.repository.TemplateRepository;
 import com.wrapzzo.backend.repository.RoleRepository;
 import com.wrapzzo.backend.repository.UserRepository;
 import com.wrapzzo.backend.repository.VendorRepository;
@@ -70,7 +70,7 @@ class OrgScopeAndDoctorChangeIntegrationTest {
     @Autowired private CompanyFeatureFlagService companyFeatureFlagService;
     @Autowired private CompanyRepository companyRepository;
     @Autowired private RoleRepository roleRepository;
-    @Autowired private RoleAccessControlRepository roleAccessControlRepository;
+    @Autowired private TemplateRepository templateRepository;
     @Autowired private AccessControlRepository accessControlRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private OrgUnitRepository orgUnitRepository;
@@ -130,7 +130,14 @@ class OrgScopeAndDoctorChangeIntegrationTest {
     }
 
     private void grant(Role role, String key) {
-        roleAccessControlRepository.save(new RoleAccessControl(role, accessControlRepository.findByKey(key).orElseThrow()));
+        Template template = role.getTemplates().stream().findFirst().orElseGet(() -> {
+            Template created = templateRepository.save(new Template(role.getCompany(), role.getName() + " access " + java.util.UUID.randomUUID(), null));
+            role.getTemplates().add(created);
+            roleRepository.save(role);
+            return created;
+        });
+        template.getAccessControls().add(accessControlRepository.findByKey(key).orElseThrow());
+        templateRepository.save(template);
     }
 
     private User saveUser(String name, Role role, OrgUnit unit) {

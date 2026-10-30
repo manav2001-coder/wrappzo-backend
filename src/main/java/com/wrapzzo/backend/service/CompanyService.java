@@ -1,18 +1,14 @@
 package com.wrapzzo.backend.service;
 
-import com.wrapzzo.backend.security.Permission;
 import com.wrapzzo.backend.dto.CompanyResponse;
 import com.wrapzzo.backend.dto.PresignLogoUploadResponse;
 import com.wrapzzo.backend.exception.CompanyNotFoundException;
-import com.wrapzzo.backend.model.AccessControl;
 import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.CompanyStatus;
 import com.wrapzzo.backend.model.Role;
-import com.wrapzzo.backend.model.RoleAccessControl;
-import com.wrapzzo.backend.repository.AccessControlRepository;
 import com.wrapzzo.backend.repository.CompanyRepository;
-import com.wrapzzo.backend.repository.RoleAccessControlRepository;
 import com.wrapzzo.backend.repository.RoleRepository;
+import com.wrapzzo.backend.repository.TemplateRepository;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -25,11 +21,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class CompanyService {
 
-    /** A new company's auto-seeded "Company Admin" role gets every permission a company can hold. */
-    private static List<String> defaultCompanyAdminAccessKeys() {
-        return Permission.companyAssignablePermissions().stream().map(Permission::key).toList();
-    }
-
     private static final Duration LOGO_UPLOAD_URL_EXPIRY = Duration.ofMinutes(5);
 
     private static final Map<String, String> EXTENSION_BY_CONTENT_TYPE = Map.of(
@@ -41,8 +32,7 @@ public class CompanyService {
 
     private final CompanyRepository companyRepository;
     private final RoleRepository roleRepository;
-    private final AccessControlRepository accessControlRepository;
-    private final RoleAccessControlRepository roleAccessControlRepository;
+    private final TemplateRepository templateRepository;
     private final FileStorageService fileStorageService;
 
     @Transactional
@@ -51,7 +41,7 @@ public class CompanyService {
         // becomes readable on this entity once the physical INSERT actually runs, which a
         // plain save() defers until transaction commit, after the response below is built.
         Company company = companyRepository.saveAndFlush(new Company(name));
-        seedDefaultCompanyAdminRole(company);
+        seedDefaultRoles(company);
         return toResponse(company);
     }
 
@@ -105,13 +95,12 @@ public class CompanyService {
         return CompanyResponse.from(company, logoUrl);
     }
 
-    private void seedDefaultCompanyAdminRole(Company company) {
-        Role role = roleRepository.save(new Role(company, "Company Admin"));
-        for (String key : defaultCompanyAdminAccessKeys()) {
-            AccessControl accessControl = accessControlRepository
-                    .findByKey(key)
-                    .orElseThrow(() -> new IllegalStateException("Missing seeded access control: " + key));
-            roleAccessControlRepository.save(new RoleAccessControl(role, accessControl));
+    /** A new company starts with its two protected roles, each carrying the matching system master template. */
+    private void seedDefaultRoles(Company company) {
+        for (String roleName : List.of(RoleService.COMPANY_ADMIN_ROLE_NAME, RoleService.MEMBER_ROLE_NAME)) {
+            Role role = new Role(company, roleName);
+            templateRepository.findSystemByName(roleName).ifPresent(role.getTemplates()::add);
+            roleRepository.save(role);
         }
     }
 }

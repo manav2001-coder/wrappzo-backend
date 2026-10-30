@@ -1,28 +1,25 @@
 package com.wrapzzo.backend.service;
 
-import com.wrapzzo.backend.security.Permission;
 import com.wrapzzo.backend.dto.BulkImportUserRow;
 import com.wrapzzo.backend.dto.BulkImportUsersResponse;
 import com.wrapzzo.backend.dto.UserResponse;
 import com.wrapzzo.backend.exception.CannotDeleteSelfException;
 import com.wrapzzo.backend.exception.CompanyNotFoundException;
+import com.wrapzzo.backend.exception.ConflictException;
 import com.wrapzzo.backend.exception.LastCompanyAdminException;
 import com.wrapzzo.backend.exception.OrgUnitNotFoundException;
+import com.wrapzzo.backend.exception.RoleNotFoundException;
 import com.wrapzzo.backend.exception.UserHasActivityException;
 import com.wrapzzo.backend.exception.UserImportValidationException;
 import com.wrapzzo.backend.exception.UserNotFoundException;
-import com.wrapzzo.backend.model.AccessControl;
 import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.OrgUnit;
 import com.wrapzzo.backend.model.Role;
-import com.wrapzzo.backend.model.RoleAccessControl;
 import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.model.UserInviteToken;
 import com.wrapzzo.backend.model.UserStatus;
-import com.wrapzzo.backend.repository.AccessControlRepository;
 import com.wrapzzo.backend.repository.CompanyRepository;
 import com.wrapzzo.backend.repository.OrgUnitRepository;
-import com.wrapzzo.backend.repository.RoleAccessControlRepository;
 import com.wrapzzo.backend.repository.RoleRepository;
 import com.wrapzzo.backend.repository.UserInviteTokenRepository;
 import com.wrapzzo.backend.repository.UserRepository;
@@ -49,36 +46,23 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Bulk employee onboarding from a client's roster sheet -- see BulkImportUserRow's doc
- * comment for the generic template shape. No per-designation Role mapping yet: every
- * imported user lands in one auto-created "Member" role, granted just enough to see the
- * campaigns they're in the audience of and submit recipients into them (campaign.submit)
- * -- until real Role management exists, Company Admin and Member are the only two roles
- * a company gets.
+ * comment for the generic template shape. Every row names a role of the company (the roles
+ * master, RoleService) -- what that role may do comes from the templates mapped to it.
  */
 @Service
 public class UserService {
 
-    private static final String DEFAULT_MEMBER_ROLE_NAME = "Member";
-    private static final String COMPANY_ADMIN_ROLE_NAME = "Company Admin";
-
-    /** Granted to every new company's auto-seeded "Member" role: place requests, submit entries, follow their own orders. */
-    private static final List<String> DEFAULT_MEMBER_ACCESS_KEYS = List.of(
-            Permission.DASHBOARD_VIEW, Permission.CAMPAIGN_ENTRY_SUBMIT, Permission.REQUEST_CREATE, Permission.PRODUCT_VIEW,
-            Permission.ORDER_VIEW, Permission.ORDER_ARTWORK_REVIEW, Permission.RECIPIENT_VIEW, Permission.RECIPIENT_CREATE,
-            Permission.RECIPIENT_EDIT, Permission.RECIPIENT_LIST_MANAGE)
-            .stream().map(Permission::key).toList();
+    private static final String COMPANY_ADMIN_ROLE_NAME = RoleService.COMPANY_ADMIN_ROLE_NAME;
 
     private final UserRepository userRepository;
     private final CompanyRepository companyRepository;
     private final RoleRepository roleRepository;
-    private final AccessControlRepository accessControlRepository;
-    private final RoleAccessControlRepository roleAccessControlRepository;
     private final OrgUnitRepository orgUnitRepository;
     private final UserInviteTokenRepository userInviteTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
     private final CompanyAccessGuard companyAccessGuard;
-    private final DesignationAccessService designationAccessService;
+    private final AccessControlCacheService accessControlCacheService;
     private final VisibilityService visibilityService;
     private final long inviteTokenExpiryHours;
     private final String frontendBaseUrl;
@@ -87,28 +71,24 @@ public class UserService {
             UserRepository userRepository,
             CompanyRepository companyRepository,
             RoleRepository roleRepository,
-            AccessControlRepository accessControlRepository,
-            RoleAccessControlRepository roleAccessControlRepository,
             OrgUnitRepository orgUnitRepository,
             UserInviteTokenRepository userInviteTokenRepository,
             PasswordEncoder passwordEncoder,
             ApplicationEventPublisher eventPublisher,
             CompanyAccessGuard companyAccessGuard,
-            DesignationAccessService designationAccessService,
+            AccessControlCacheService accessControlCacheService,
             VisibilityService visibilityService,
             @Value("${user.invite-token-expiry-hours}") long inviteTokenExpiryHours,
             @Value("${app.frontend-base-url}") String frontendBaseUrl) {
         this.userRepository = userRepository;
         this.companyRepository = companyRepository;
         this.roleRepository = roleRepository;
-        this.accessControlRepository = accessControlRepository;
-        this.roleAccessControlRepository = roleAccessControlRepository;
         this.orgUnitRepository = orgUnitRepository;
         this.userInviteTokenRepository = userInviteTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.eventPublisher = eventPublisher;
         this.companyAccessGuard = companyAccessGuard;
-        this.designationAccessService = designationAccessService;
+        this.accessControlCacheService = accessControlCacheService;
         this.visibilityService = visibilityService;
         this.inviteTokenExpiryHours = inviteTokenExpiryHours;
         this.frontendBaseUrl = frontendBaseUrl;
@@ -135,12 +115,17 @@ public class UserService {
             byEmail.put(existing.getEmail().toLowerCase(), existing);
         }
 
-        List<String> errors = validate(companyId, rows, byEmail);
+        Map<String, Role> rolesByName = new HashMap<>();
+        for (Role role : roleRepository.findByCompanyId(companyId)) {
+            if (role.isActive()) {
+                rolesByName.put(role.getName().toLowerCase(), role);
+            }
+        }
+        List<String> errors = validate(companyId, rows, byEmail, rolesByName);
         if (!errors.isEmpty()) {
             throw new UserImportValidationException(errors);
         }
 
-        Role memberRole = findOrCreateMemberRole(company);
         Map<String, OrgUnit> orgUnitCache = loadOrgUnitCache(company);
 
         // Argon2 is deliberately expensive (that's the point, for a real password) --
@@ -169,11 +154,16 @@ public class UserService {
                 throw new AccessDeniedException("Only someone who sees the whole company can place " + row.email()
                         + (companyWide ? " at the whole company" : " in a different org unit"));
             }
+            Role role = rolesByName.get(row.role().trim().toLowerCase());
             if (user == null) {
-                user = new User(company, memberRole, row.name(), email, placeholderHash);
+                user = new User(company, role, row.name(), email, placeholderHash);
                 user.setStatus(UserStatus.INVITED);
                 createdCount++;
             } else {
+                // A Company Admin is demoted through removeCompanyAdmin (which keeps the last one), never by a sheet.
+                if (!COMPANY_ADMIN_ROLE_NAME.equals(user.getRole().getName())) {
+                    user.setRole(role);
+                }
                 updatedCount++;
             }
             user.setName(row.name());
@@ -194,6 +184,7 @@ public class UserService {
         // one delete into the point where all of this batch's write cost actually lands.
         userRepository.saveAll(toSave);
         userRepository.flush();
+        accessControlCacheService.invalidateAfterCommit();
 
         for (BulkImportUserRow row : rows) {
             String reportsToEmail = blankToNull(row.reportsToEmail());
@@ -271,14 +262,7 @@ public class UserService {
      * Company Admin role auto-seeded at creation time (see CompanyService), so this only
      * ever reassigns an existing user onto it; it never creates the role itself.
      *
-     * Also propagates Company Admin's current grants onto the promoted user's designation
-     * (additive, see DesignationAccessService.grantAccessControls) -- so anyone else sharing
-     * that same designation, now or hired later, picks up the same access without Super Admin
-     * having to hand-configure that designation separately. This is a one-time snapshot, not a
-     * live link: demoting this user back to Member does NOT revert it (see removeCompanyAdmin).
-     *
-     * The user's roleId is baked into their JWT at login (see JwtService), so this takes
-     * effect on their next token refresh/login, not necessarily their very next request.
+     * Takes effect on their very next request: permissions are resolved per user, not read from the token.
      */
     @Transactional
     public UserResponse makeCompanyAdmin(UUID companyId, UUID userId) {
@@ -294,14 +278,29 @@ public class UserService {
         user.setCompanyWide(true);
         userRepository.save(user);
         eventPublisher.publishEvent(new CompanyStructureChangedEvent(companyId));
+        accessControlCacheService.invalidateAfterCommit();
+        return UserResponse.from(user);
+    }
 
-        if (user.getDesignation() != null) {
-            Set<UUID> companyAdminGrantIds = roleAccessControlRepository.findByRoleId(companyAdminRole.getId()).stream()
-                    .map(rac -> rac.getAccessControl().getId())
-                    .collect(Collectors.toSet());
-            designationAccessService.grantAccessControls(companyId, user.getDesignation(), companyAdminGrantIds);
+    /**
+     * Moves a user to another role of the company. Company Admin is entered and left through
+     * makeCompanyAdmin / removeCompanyAdmin, which also keep the company's last admin in place.
+     */
+    @Transactional
+    public UserResponse changeRole(UUID companyId, UUID userId, UUID roleId) {
+        companyAccessGuard.requireOwnCompanyOrPlatformStaff(companyId);
+        requirePlacementAuthority();
+        User user = getCompanyUser(companyId, userId);
+        Role role = roleRepository.findById(roleId)
+                .filter(candidate -> candidate.getCompany() != null && candidate.getCompany().getId().equals(companyId) && candidate.isActive())
+                .orElseThrow(() -> new RoleNotFoundException(roleId));
+        if (COMPANY_ADMIN_ROLE_NAME.equals(role.getName()) || COMPANY_ADMIN_ROLE_NAME.equals(user.getRole().getName())) {
+            throw new ConflictException("Use Make admin / Remove admin to move someone into or out of Company Admin");
         }
-
+        user.setRole(role);
+        userRepository.save(user);
+        eventPublisher.publishEvent(new CompanyStructureChangedEvent(companyId));
+        accessControlCacheService.invalidateAfterCommit();
         return UserResponse.from(user);
     }
 
@@ -322,11 +321,12 @@ public class UserService {
             throw new LastCompanyAdminException(companyId);
         }
         Role memberRole = roleRepository
-                .findByCompanyIdAndName(companyId, DEFAULT_MEMBER_ROLE_NAME)
+                .findByCompanyIdAndName(companyId, RoleService.MEMBER_ROLE_NAME)
                 .orElseThrow(() -> new IllegalStateException("Member role missing for company " + companyId));
 
         user.setRole(memberRole);
         userRepository.save(user);
+        accessControlCacheService.invalidateAfterCommit();
         return UserResponse.from(user);
     }
 
@@ -408,7 +408,7 @@ public class UserService {
      * cleanly, or none of it does, so a bad row never leaves a half-imported roster.
      * existingByEmail is the one bulk-fetched lookup from bulkImport -- no query here.
      */
-    private List<String> validate(UUID companyId, List<BulkImportUserRow> rows, Map<String, User> existingByEmail) {
+    private List<String> validate(UUID companyId, List<BulkImportUserRow> rows, Map<String, User> existingByEmail, Map<String, Role> rolesByName) {
         List<String> errors = new ArrayList<>();
         Set<String> emailsInBatch = new HashSet<>();
 
@@ -416,6 +416,13 @@ public class UserService {
             BulkImportUserRow row = rows.get(i);
             String email = normalizedEmail(row.email());
             int rowNum = i + 1;
+
+            Role role = rolesByName.get(row.role().trim().toLowerCase());
+            if (role == null) {
+                errors.add("Row " + rowNum + " (" + row.email() + "): role '" + row.role().trim() + "' is not an active role of this company -- add it in Roles first");
+            } else if (COMPANY_ADMIN_ROLE_NAME.equals(role.getName())) {
+                errors.add("Row " + rowNum + " (" + row.email() + "): Company Admin can't be set from a sheet -- import the user, then use Make admin");
+            }
 
             if (!emailsInBatch.add(email)) {
                 errors.add("Row " + rowNum + " (" + row.email() + "): duplicate email within this sheet");
@@ -472,22 +479,6 @@ public class UserService {
         }
 
         return errors;
-    }
-
-    private Role findOrCreateMemberRole(Company company) {
-        return roleRepository.findByCompanyId(company.getId()).stream()
-                .filter(role -> role.getName().equals(DEFAULT_MEMBER_ROLE_NAME))
-                .findFirst()
-                .orElseGet(() -> {
-                    Role role = roleRepository.save(new Role(company, DEFAULT_MEMBER_ROLE_NAME));
-                    for (String key : DEFAULT_MEMBER_ACCESS_KEYS) {
-                        AccessControl accessControl = accessControlRepository
-                                .findByKey(key)
-                                .orElseThrow(() -> new IllegalStateException("Missing seeded access control: " + key));
-                        roleAccessControlRepository.save(new RoleAccessControl(role, accessControl));
-                    }
-                    return role;
-                });
     }
 
     private Map<String, OrgUnit> loadOrgUnitCache(Company company) {
