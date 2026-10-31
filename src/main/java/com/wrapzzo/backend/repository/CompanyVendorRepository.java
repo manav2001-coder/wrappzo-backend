@@ -19,6 +19,11 @@ public interface CompanyVendorRepository extends JpaRepository<CompanyVendor, UU
             """)
     List<UUID> findVendorIdsVisibleToOrgUnits(@Param("companyId") UUID companyId, @Param("orgUnitIds") List<UUID> orgUnitIds);
 
+    @Query("select distinct cv.vendor.id from CompanyVendor cv where cv.company.id = :companyId")
+    List<UUID> findVendorIdsByCompany(@Param("companyId") UUID companyId);
+
+    boolean existsByCompany_IdAndVendor_Id(UUID companyId, UUID vendorId);
+
     @Query("select cv.vendor.id from CompanyVendor cv where cv.company.id = :companyId and cv.orgUnit is null")
     List<UUID> findCompanyWideVendorIds(@Param("companyId") UUID companyId);
 }

@@ -29,6 +29,15 @@ public record GiftResponse(
         List<GiftImageResponse> images,
         Instant createdAt) {
 
+    /**
+     * What a company's own users see in the Gift Store: the price they pay, not the vendor's base
+     * price or the platform's markup and commission that make it up.
+     */
+    public GiftResponse forCompany() {
+        return new GiftResponse(id, displayId, name, category, description, moq, leadTimeDays, active, photoRequired, artworkRequired, modules,
+                null, null, null, totalPrice, vendorId, vendorName, images, createdAt);
+    }
+
     public static GiftResponse from(Gift gift, List<GiftImageResponse> images) {
         return new GiftResponse(
                 gift.getId(),

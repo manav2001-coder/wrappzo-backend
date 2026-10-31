@@ -121,7 +121,7 @@ public class UserService {
                 rolesByName.put(role.getName().toLowerCase(), role);
             }
         }
-        List<String> errors = validate(companyId, rows, byEmail, rolesByName);
+        List<String> errors = validate(companyId, rows, byEmail, rolesByName, visibilityService.resolve(currentUser()));
         if (!errors.isEmpty()) {
             throw new UserImportValidationException(errors);
         }
@@ -161,7 +161,17 @@ public class UserService {
                 createdCount++;
             } else {
                 // A Company Admin is demoted through removeCompanyAdmin (which keeps the last one), never by a sheet.
-                if (!COMPANY_ADMIN_ROLE_NAME.equals(user.getRole().getName())) {
+                boolean roleChanges = !COMPANY_ADMIN_ROLE_NAME.equals(user.getRole().getName()) && !user.getRole().getId().equals(role.getId());
+                String managerEmail = blankToNull(row.reportsToEmail());
+                boolean managerChanges = managerEmail != null
+                        && (user.getReportsTo() == null || !user.getReportsTo().getEmail().equalsIgnoreCase(managerEmail.trim()));
+                // What someone can do (their role) and who sees whose records (the reporting line) are
+                // changed only by someone who sees the whole company -- else a sheet would be a way round
+                // changeRole, or a way to pull another person's records into one's own view.
+                if (!placementAuthority && (roleChanges || managerChanges)) {
+                    throw new AccessDeniedException("Only someone who sees the whole company can change " + row.email() + "'s role or manager");
+                }
+                if (roleChanges) {
                     user.setRole(role);
                 }
                 updatedCount++;
@@ -269,6 +279,7 @@ public class UserService {
         companyAccessGuard.requireOwnCompanyOrPlatformStaff(companyId);
         requirePlacementAuthority();
         User user = getCompanyUser(companyId, userId);
+        requireNotSelf(userId);
         Role companyAdminRole = roleRepository
                 .findByCompanyIdAndName(companyId, COMPANY_ADMIN_ROLE_NAME)
                 .orElseThrow(() -> new IllegalStateException("Company Admin role missing for company " + companyId));
@@ -291,6 +302,7 @@ public class UserService {
         companyAccessGuard.requireOwnCompanyOrPlatformStaff(companyId);
         requirePlacementAuthority();
         User user = getCompanyUser(companyId, userId);
+        requireNotSelf(userId);
         Role role = roleRepository.findById(roleId)
                 .filter(candidate -> candidate.getCompany() != null && candidate.getCompany().getId().equals(companyId) && candidate.isActive())
                 .orElseThrow(() -> new RoleNotFoundException(roleId));
@@ -316,6 +328,9 @@ public class UserService {
         Role companyAdminRole = roleRepository
                 .findByCompanyIdAndName(companyId, COMPANY_ADMIN_ROLE_NAME)
                 .orElseThrow(() -> new IllegalStateException("Company Admin role missing for company " + companyId));
+        if (!user.getRole().getId().equals(companyAdminRole.getId())) {
+            throw new ConflictException(user.getName() + " isn't a Company Admin");
+        }
         if (userRepository.countByCompanyIdAndRoleId(companyId, companyAdminRole.getId()) <= 1) {
             throw new LastCompanyAdminException(companyId);
         }
@@ -342,6 +357,13 @@ public class UserService {
             throw new CannotDeleteSelfException();
         }
         User user = getVisibleCompanyUser(companyId, userId);
+        if (user.isCompanyWide()) {
+            requirePlacementAuthority();
+        }
+        if (COMPANY_ADMIN_ROLE_NAME.equals(user.getRole().getName())
+                && userRepository.countByCompanyIdAndRoleId(companyId, user.getRole().getId()) <= 1) {
+            throw new LastCompanyAdminException(companyId);
+        }
         try {
             userInviteTokenRepository.deleteUnusedByUserId(userId);
             userRepository.delete(user);
@@ -381,6 +403,17 @@ public class UserService {
         return user.isCompanyWide() || !Objects.equals(current, next);
     }
 
+    /** Nobody promotes or re-roles themselves: another admin does it, so no one can grant themselves more. */
+    private void requireNotSelf(UUID userId) {
+        if (userId.equals(CurrentUser.id())) {
+            throw new ConflictException("You can't change your own role -- ask another admin");
+        }
+    }
+
+    private static boolean belongsTo(User user, UUID companyId) {
+        return user.getCompany() != null && user.getCompany().getId().equals(companyId);
+    }
+
     private User getCompanyUser(UUID companyId, UUID userId) {
         User user = userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException(userId));
         if (user.getCompany() == null || !user.getCompany().getId().equals(companyId)) {
@@ -408,7 +441,8 @@ public class UserService {
      * cleanly, or none of it does, so a bad row never leaves a half-imported roster.
      * existingByEmail is the one bulk-fetched lookup from bulkImport -- no query here.
      */
-    private List<String> validate(UUID companyId, List<BulkImportUserRow> rows, Map<String, User> existingByEmail, Map<String, Role> rolesByName) {
+    private List<String> validate(
+            UUID companyId, List<BulkImportUserRow> rows, Map<String, User> existingByEmail, Map<String, Role> rolesByName, Visibility visibility) {
         List<String> errors = new ArrayList<>();
         Set<String> emailsInBatch = new HashSet<>();
 
@@ -428,8 +462,11 @@ public class UserService {
                 errors.add("Row " + rowNum + " (" + row.email() + "): duplicate email within this sheet");
             }
             User existing = existingByEmail.get(email);
-            if (existing != null && !existing.getCompany().getId().equals(companyId)) {
+            if (existing != null && !belongsTo(existing, companyId)) {
                 errors.add("Row " + rowNum + " (" + row.email() + "): this email already belongs to a different company");
+            } else if (existing != null && !visibility.canSeeUser(existing)) {
+                // A row updates the person it names, so it may only name people the importer can see.
+                errors.add("Row " + rowNum + " (" + row.email() + "): you can't update this person -- they are outside the part of the company you can see");
             }
             if (isCompanyWidePlacement(row.orgUnitPath()) && row.orgUnitPath().stream().skip(1).anyMatch(level -> blankToNull(level) != null)) {
                 errors.add("Row " + rowNum + " (" + row.email() + "): " + COMPANY_WIDE_PLACEMENT
@@ -445,10 +482,13 @@ public class UserService {
             }
             String normalized = normalizedEmail(reportsToEmail);
             boolean inBatch = emailsInBatch.contains(normalized);
-            boolean inDb = existingByEmail.containsKey(normalized);
-            if (!inBatch && !inDb) {
+            // Only this company's own people can be a manager; another company's user is reported as not found.
+            boolean inCompany = existingByEmail.containsKey(normalized) && belongsTo(existingByEmail.get(normalized), companyId);
+            if (normalized.equals(normalizedEmail(row.email()))) {
+                errors.add("Row " + (i + 1) + " (" + row.email() + "): a person can't report to themselves");
+            } else if (!inBatch && !inCompany) {
                 errors.add("Row " + (i + 1) + " (" + row.email() + "): reportsTo email '" + reportsToEmail
-                        + "' was not found in this sheet or among existing users");
+                        + "' was not found in this sheet or among this company's users");
             }
         }
 

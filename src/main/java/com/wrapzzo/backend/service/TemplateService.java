@@ -158,6 +158,14 @@ public class TemplateService {
                 errors.add(new AddReferencesResponse.Rejection(candidateId, candidate.map(Template::getName).orElse(null), reason));
                 continue;
             }
+            if (caller().getCompany() != null) {
+                Set<String> lacking = accessControlCacheService.loadGraph().resolve(List.of(candidateId));
+                lacking.removeAll(accessControlCacheService.resolveEffectiveKeys(caller()));
+                if (!lacking.isEmpty()) {
+                    errors.add(new AddReferencesResponse.Rejection(candidateId, candidate.get().getName(), "It grants access you don't hold yourself"));
+                    continue;
+                }
+            }
             Set<UUID> proposed = new HashSet<>(included);
             proposed.add(candidateId);
             if (!accessControlCacheService.loadGraph().allowsReferences(id, proposed)) {
@@ -207,8 +215,11 @@ public class TemplateService {
     public Set<UUID> replaceUserTemplates(UUID companyId, UUID userId, Set<UUID> templateIds) {
         companyAccessGuard.requireOwnCompanyOrPlatformStaff(companyId);
         User user = companyUser(companyId, userId);
+        List<Template> wanted = requireAssignable(companyId, templateIds);
+        Set<UUID> already = user.getTemplates().stream().map(Template::getId).collect(Collectors.toSet());
+        requireGrantable(wanted.stream().filter(template -> !already.contains(template.getId())).toList());
         user.getTemplates().clear();
-        user.getTemplates().addAll(requireAssignable(companyId, templateIds));
+        user.getTemplates().addAll(wanted);
         userRepository.save(user);
         accessControlCacheService.invalidateAfterCommit();
         return templateIds;
@@ -219,6 +230,7 @@ public class TemplateService {
     public BulkUserTemplatesResponse bulkAssignUserTemplates(UUID companyId, Set<UUID> userIds, Set<UUID> templateIds) {
         companyAccessGuard.requireOwnCompanyOrPlatformStaff(companyId);
         List<Template> templates = requireAssignable(companyId, templateIds);
+        requireGrantable(templates);
         List<BulkUserTemplatesResponse.UserResult> results = new ArrayList<>();
         for (UUID userId : userIds) {
             User user = userRepository.findById(userId)
@@ -239,6 +251,22 @@ public class TemplateService {
         }
         accessControlCacheService.invalidateAfterCommit();
         return new BulkUserTemplatesResponse(results);
+    }
+
+    /**
+     * Nobody grants what they don't hold: the keys the given templates would add (followed through
+     * what they include) must all be among the caller's own. Platform staff are exempt. Callers pass
+     * only what is being NEWLY granted, so editing around a template one can't grant still works.
+     */
+    void requireGrantable(Collection<Template> templates) {
+        if (templates.isEmpty() || caller().getCompany() == null) {
+            return;
+        }
+        Set<String> wanted = accessControlCacheService.loadGraph().resolve(templates.stream().map(Template::getId).toList());
+        wanted.removeAll(accessControlCacheService.resolveEffectiveKeys(caller()));
+        if (!wanted.isEmpty()) {
+            throw new AccessDeniedException("You can only grant access you hold yourself -- you lack: " + String.join(", ", new java.util.TreeSet<>(wanted)));
+        }
     }
 
     /** The templates a company may map to its roles and users: active, and either system or its own. */
@@ -278,6 +306,15 @@ public class TemplateService {
         for (Template reference : references) {
             if (!mayInclude(template, reference)) {
                 throw new InvalidTemplateException("Template \"" + reference.getName() + "\" can't be included here.");
+            }
+        }
+        if (caller().getCompany() != null) {
+            Set<String> held = accessControlCacheService.resolveEffectiveKeys(caller());
+            Set<String> newKeys = accessControls.stream().filter(ac -> !template.getAccessControls().contains(ac)).map(AccessControl::getKey).collect(Collectors.toCollection(HashSet::new));
+            newKeys.addAll(accessControlCacheService.loadGraph().resolve(references.stream().filter(r -> !template.getReferences().contains(r)).map(Template::getId).toList()));
+            newKeys.removeAll(held);
+            if (!newKeys.isEmpty()) {
+                throw new AccessDeniedException("You can only grant access you hold yourself -- you lack: " + String.join(", ", new java.util.TreeSet<>(newKeys)));
             }
         }
         if (!accessControlCacheService.loadGraph().allowsReferences(template.getId(), request.referencedTemplateIds())) {

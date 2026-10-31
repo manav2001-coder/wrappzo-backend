@@ -7,6 +7,7 @@ import com.wrapzzo.backend.exception.ConflictException;
 import com.wrapzzo.backend.exception.RoleNotFoundException;
 import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.Role;
+import com.wrapzzo.backend.model.Template;
 import com.wrapzzo.backend.repository.CompanyRepository;
 import com.wrapzzo.backend.repository.RoleRepository;
 import com.wrapzzo.backend.repository.UserRepository;
@@ -55,7 +56,9 @@ public class RoleService {
         Role role = new Role(company, name);
         role.setDescription(blankToNull(request.description()));
         if (request.templateIds() != null) {
-            role.getTemplates().addAll(templateService.requireAssignable(companyId, request.templateIds()));
+            List<Template> wanted = templateService.requireAssignable(companyId, request.templateIds());
+            templateService.requireGrantable(wanted);
+            role.getTemplates().addAll(wanted);
         }
         roleRepository.save(role);
         accessControlCacheService.invalidateAfterCommit();
@@ -86,8 +89,15 @@ public class RoleService {
     public RoleResponse replaceTemplates(UUID companyId, UUID roleId, Set<UUID> templateIds) {
         companyAccessGuard.requireOwnCompanyOrPlatformStaff(companyId);
         Role role = getEntity(companyId, roleId);
+        List<Template> wanted = templateService.requireAssignable(companyId, templateIds);
+        if (isProtected(role) && wanted.isEmpty()) {
+            // Company Admin repairs access for everyone; emptying it would lock the company out of that.
+            throw new ConflictException("\"" + role.getName() + "\" must keep at least one template");
+        }
+        Set<UUID> already = role.getTemplates().stream().map(Template::getId).collect(java.util.stream.Collectors.toSet());
+        templateService.requireGrantable(wanted.stream().filter(template -> !already.contains(template.getId())).toList());
         role.getTemplates().clear();
-        role.getTemplates().addAll(templateService.requireAssignable(companyId, templateIds));
+        role.getTemplates().addAll(wanted);
         accessControlCacheService.invalidateAfterCommit();
         return toResponse(role);
     }
