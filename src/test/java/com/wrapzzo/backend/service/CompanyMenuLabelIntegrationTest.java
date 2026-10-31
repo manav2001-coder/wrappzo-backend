@@ -3,6 +3,7 @@ package com.wrapzzo.backend.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.wrapzzo.backend.exception.CompanyNotFoundException;
 import com.wrapzzo.backend.exception.InvalidMenuLabelException;
 import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.Role;
@@ -23,7 +24,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 
-/** A company's own menu names: replace-all, cleaned, scoped to the caller's company, and on /api/auth/me. */
+/** A company's menu names, set by platform staff: replace-all, cleaned, scoped to one company, and on /api/auth/me. */
 @SpringBootTest
 @Transactional
 class CompanyMenuLabelIntegrationTest {
@@ -59,11 +60,12 @@ class CompanyMenuLabelIntegrationTest {
 
     @Test
     void renamedMenusReachEveryoneInTheCompanyAndNoOneElse() {
-        actAs(alembicAdmin);
-        Map<String, String> saved = companyMenuLabelService.replace(Map.of(
+        UUID alembic = alembicAdmin.getCompany().getId();
+        Map<String, String> saved = companyMenuLabelService.replace(alembic, Map.of(
                 "quick-gift", "  Request   Prescription Pads ",
                 "gift-store", "Prescription Pads"));
         assertThat(saved).containsEntry("quick-gift", "Request Prescription Pads").containsEntry("gift-store", "Prescription Pads");
+        actAs(alembicAdmin);
         assertThat(authService.getCurrentUser().menuLabels()).isEqualTo(saved);
 
         actAs(otherCompanyUser);
@@ -72,18 +74,24 @@ class CompanyMenuLabelIntegrationTest {
 
     @Test
     void aBlankOrOmittedNameGoesBackToTheDefault() {
-        actAs(alembicAdmin);
-        companyMenuLabelService.replace(Map.of("quick-gift", "Request Prescription Pads", "gift-store", "Prescription Pads"));
+        UUID alembic = alembicAdmin.getCompany().getId();
+        companyMenuLabelService.replace(alembic, Map.of("quick-gift", "Request Prescription Pads", "gift-store", "Prescription Pads"));
         Map<String, String> next = new HashMap<>();
         next.put("quick-gift", "   ");
-        assertThat(companyMenuLabelService.replace(next)).isEmpty();
-        assertThat(companyMenuLabelService.listOwn()).isEmpty();
+        assertThat(companyMenuLabelService.replace(alembic, next)).isEmpty();
+        assertThat(companyMenuLabelService.list(alembic)).isEmpty();
     }
 
     @Test
     void badMenuIdsAndOverlongNamesAreRefused() {
-        actAs(alembicAdmin);
-        assertThatThrownBy(() -> companyMenuLabelService.replace(Map.of("Quick Gift!", "x"))).isInstanceOf(InvalidMenuLabelException.class);
-        assertThatThrownBy(() -> companyMenuLabelService.replace(Map.of("quick-gift", "x".repeat(61)))).isInstanceOf(InvalidMenuLabelException.class);
+        UUID alembic = alembicAdmin.getCompany().getId();
+        assertThatThrownBy(() -> companyMenuLabelService.replace(alembic, Map.of("Quick Gift!", "x"))).isInstanceOf(InvalidMenuLabelException.class);
+        assertThatThrownBy(() -> companyMenuLabelService.replace(alembic, Map.of("quick-gift", "x".repeat(61)))).isInstanceOf(InvalidMenuLabelException.class);
+    }
+
+    @Test
+    void anUnknownCompanyIsRefused() {
+        assertThatThrownBy(() -> companyMenuLabelService.replace(UUID.randomUUID(), Map.of("quick-gift", "x"))).isInstanceOf(CompanyNotFoundException.class);
+        assertThatThrownBy(() -> companyMenuLabelService.list(UUID.randomUUID())).isInstanceOf(CompanyNotFoundException.class);
     }
 }

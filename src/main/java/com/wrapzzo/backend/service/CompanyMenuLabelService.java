@@ -1,11 +1,10 @@
 package com.wrapzzo.backend.service;
 
+import com.wrapzzo.backend.exception.CompanyNotFoundException;
 import com.wrapzzo.backend.exception.InvalidMenuLabelException;
 import com.wrapzzo.backend.model.CompanyMenuLabel;
-import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.repository.CompanyMenuLabelRepository;
-import com.wrapzzo.backend.repository.UserRepository;
-import com.wrapzzo.backend.security.CurrentUser;
+import com.wrapzzo.backend.repository.CompanyRepository;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.UUID;
@@ -16,9 +15,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * A company's own names for its navigation menus. The menu ids are the frontend's (its nav
- * config owns them), so this only checks their shape; an id the frontend no longer has is
- * simply never shown. Always the caller's own company.
+ * A company's own names for its navigation menus, set by platform staff (Platform config > Menu
+ * config) -- a company's admins can't rename their own menus. The menu ids are the frontend's (its
+ * nav config owns them), so this only checks their shape; an id the frontend no longer has is
+ * simply never shown. Everyone in the company reads the names through /api/auth/me.
  */
 @Service
 @RequiredArgsConstructor
@@ -28,7 +28,7 @@ public class CompanyMenuLabelService {
     private static final Pattern MENU_ID = Pattern.compile("[a-z0-9][a-z0-9-]{0,63}");
 
     private final CompanyMenuLabelRepository companyMenuLabelRepository;
-    private final UserRepository userRepository;
+    private final CompanyRepository companyRepository;
 
     /** Menu id -> the company's name for it; empty for a company that renamed nothing (or no company). */
     @Transactional(readOnly = true)
@@ -40,10 +40,10 @@ public class CompanyMenuLabelService {
                 .collect(Collectors.toMap(l -> l.getId().getMenuId(), CompanyMenuLabel::getLabel, (a, b) -> a, TreeMap::new));
     }
 
-    /** Replace-all for the caller's company: a blank name, or a menu left out, goes back to the default. */
+    /** Replace-all for one company: a blank name, or a menu left out, goes back to the default. */
     @Transactional
-    public Map<String, String> replace(Map<String, String> labels) {
-        UUID companyId = callerCompanyId();
+    public Map<String, String> replace(UUID companyId, Map<String, String> labels) {
+        requireCompany(companyId);
         Map<String, String> cleaned = new TreeMap<>();
         labels.forEach((menuId, label) -> {
             if (menuId == null || !MENU_ID.matcher(menuId).matches()) {
@@ -64,16 +64,14 @@ public class CompanyMenuLabelService {
     }
 
     @Transactional(readOnly = true)
-    public Map<String, String> listOwn() {
-        return labelsFor(callerCompanyId());
+    public Map<String, String> list(UUID companyId) {
+        requireCompany(companyId);
+        return labelsFor(companyId);
     }
 
-    private UUID callerCompanyId() {
-        UUID userId = CurrentUser.id();
-        User user = userRepository.findById(userId).orElseThrow(() -> new IllegalStateException("Authenticated user not found: " + userId));
-        if (user.getCompany() == null) {
-            throw new InvalidMenuLabelException("Menu names belong to a company; platform staff have none");
+    private void requireCompany(UUID companyId) {
+        if (!companyRepository.existsById(companyId)) {
+            throw new CompanyNotFoundException(companyId);
         }
-        return user.getCompany().getId();
     }
 }

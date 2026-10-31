@@ -77,8 +77,6 @@ public enum Permission {
     WAREHOUSE_SETUP(Keys.WAREHOUSE_SETUP, true),
     WAREHOUSE_OPERATE(Keys.WAREHOUSE_OPERATE, true),
 
-    MENU_EDIT(Keys.MENU_EDIT, true),
-
     PLATFORM_COMPANY_VIEW(Keys.PLATFORM_COMPANY_VIEW, false),
     PLATFORM_COMPANY_CREATE(Keys.PLATFORM_COMPANY_CREATE, false),
     PLATFORM_COMPANY_EDIT(Keys.PLATFORM_COMPANY_EDIT, false),
@@ -101,7 +99,10 @@ public enum Permission {
     PLATFORM_DASHBOARD_VIEW(Keys.PLATFORM_DASHBOARD_VIEW, false),
 
     PLATFORM_JOBS_VIEW(Keys.PLATFORM_JOBS_VIEW, false),
-    PLATFORM_JOBS_MANAGE(Keys.PLATFORM_JOBS_MANAGE, false);
+    PLATFORM_JOBS_MANAGE(Keys.PLATFORM_JOBS_MANAGE, false),
+
+    PLATFORM_MENU_CONFIG_VIEW(Keys.PLATFORM_MENU_CONFIG_VIEW, false),
+    PLATFORM_MENU_CONFIG_EDIT(Keys.PLATFORM_MENU_CONFIG_EDIT, false);
 
     /** The action every module that can be read at all is read with; granting any other action of a module implies it. */
     public static final String VIEW_ACTION = "view";
@@ -211,8 +212,6 @@ public enum Permission {
         public static final String WAREHOUSE_SETUP = "warehouse.setup";
         public static final String WAREHOUSE_OPERATE = "warehouse.operate";
 
-        public static final String MENU_EDIT = "menu.edit";
-
         public static final String PLATFORM_COMPANY_VIEW = "platform_company.view";
         public static final String PLATFORM_COMPANY_CREATE = "platform_company.create";
         public static final String PLATFORM_COMPANY_EDIT = "platform_company.edit";
@@ -236,6 +235,9 @@ public enum Permission {
 
         public static final String PLATFORM_JOBS_VIEW = "platform_jobs.view";
         public static final String PLATFORM_JOBS_MANAGE = "platform_jobs.manage";
+
+        public static final String PLATFORM_MENU_CONFIG_VIEW = "platform_menu_config.view";
+        public static final String PLATFORM_MENU_CONFIG_EDIT = "platform_menu_config.edit";
 
         private Keys() {
         }
