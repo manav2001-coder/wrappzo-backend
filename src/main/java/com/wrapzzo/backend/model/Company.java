@@ -23,7 +23,7 @@ import org.hibernate.generator.EventType;
 @Getter
 @Setter
 @NoArgsConstructor
-public class Company {
+public class Company extends AuditNames {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

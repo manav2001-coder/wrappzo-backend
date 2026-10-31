@@ -15,7 +15,11 @@ public record VendorResponse(
         BigDecimal markupFees,
         BigDecimal commission,
         VendorStatus status,
-        Instant createdAt) {
+        Instant createdAt,
+        Instant addedOn,
+        String addedByName,
+        Instant updatedOn,
+        String updatedByName) {
 
     public static VendorResponse from(Vendor vendor) {
         return new VendorResponse(
@@ -27,6 +31,10 @@ public record VendorResponse(
                 vendor.getMarkupFees(),
                 vendor.getCommission(),
                 vendor.getStatus(),
-                vendor.getCreatedAt());
+                vendor.getCreatedAt(),
+                vendor.getCreatedAt(),
+                vendor.getCreatedByName(),
+                vendor.getUpdatedAt(),
+                vendor.getUpdatedByName());
     }
 }

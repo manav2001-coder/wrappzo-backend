@@ -35,7 +35,7 @@ import org.hibernate.annotations.BatchSize;
 @Getter
 @Setter
 @NoArgsConstructor
-public class User {
+public class User extends AuditNames {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

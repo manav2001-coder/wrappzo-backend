@@ -23,7 +23,11 @@ public record CompanyResponse(
         String state,
         String pincode,
         String notes,
-        Instant createdAt) {
+        Instant createdAt,
+        Instant addedOn,
+        String addedByName,
+        Instant updatedOn,
+        String updatedByName) {
 
     public static CompanyResponse from(Company company, String logoUrl) {
         return new CompanyResponse(
@@ -44,6 +48,10 @@ public record CompanyResponse(
                 company.getState(),
                 company.getPincode(),
                 company.getNotes(),
-                company.getCreatedAt());
+                company.getCreatedAt(),
+                company.getCreatedAt(),
+                company.getCreatedByName(),
+                company.getUpdatedAt(),
+                company.getUpdatedByName());
     }
 }

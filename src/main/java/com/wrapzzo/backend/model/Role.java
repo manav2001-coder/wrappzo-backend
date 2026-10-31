@@ -31,7 +31,7 @@ import lombok.Setter;
 @Getter
 @Setter
 @NoArgsConstructor
-public class Role {
+public class Role extends AuditNames {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

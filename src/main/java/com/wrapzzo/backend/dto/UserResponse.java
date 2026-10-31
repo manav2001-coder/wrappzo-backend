@@ -24,7 +24,11 @@ public record UserResponse(
         List<OrgUnitRef> extraOrgUnits,
         UUID roleId,
         String roleName,
-        Instant createdAt) {
+        Instant createdAt,
+        Instant addedOn,
+        String addedByName,
+        Instant updatedOn,
+        String updatedByName) {
 
     public record OrgUnitRef(UUID id, String name) {
     }
@@ -48,6 +52,10 @@ public record UserResponse(
                         .toList(),
                 user.getRole().getId(),
                 user.getRole().getName(),
-                user.getCreatedAt());
+                user.getCreatedAt(),
+                user.getCreatedAt(),
+                user.getCreatedByName(),
+                user.getUpdatedAt(),
+                user.getUpdatedByName());
     }
 }
