@@ -1,17 +1,25 @@
 package com.wrapzzo.backend.service;
 
+import com.wrapzzo.backend.dto.BulkImportRoleRow;
+import com.wrapzzo.backend.dto.BulkImportRolesResponse;
 import com.wrapzzo.backend.dto.RoleRequest;
 import com.wrapzzo.backend.dto.RoleResponse;
 import com.wrapzzo.backend.exception.CompanyNotFoundException;
 import com.wrapzzo.backend.exception.ConflictException;
 import com.wrapzzo.backend.exception.RoleNotFoundException;
+import com.wrapzzo.backend.exception.UserImportValidationException;
 import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.Role;
 import com.wrapzzo.backend.repository.CompanyRepository;
 import com.wrapzzo.backend.repository.RoleRepository;
 import com.wrapzzo.backend.repository.UserRepository;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -66,6 +74,58 @@ public class RoleService {
         roleRepository.save(role);
         accessControlCacheService.invalidateAfterCommit(companyId);
         return toResponse(role);
+    }
+
+    /**
+     * Roles from a sheet, all or none: every row is checked before any is written. A name the company
+     * already has keeps the role and takes the sheet's description (when it gives one), so the same
+     * sheet can be imported again. Company Admin is built in and can't be changed from a sheet.
+     */
+    @Transactional
+    public BulkImportRolesResponse bulkImport(UUID companyId, List<BulkImportRoleRow> rows) {
+        companyAccessGuard.requireOwnCompanyOrPlatformStaff(companyId);
+        Company company = companyRepository.findById(companyId).orElseThrow(() -> new CompanyNotFoundException(companyId));
+        Map<String, Role> existingByName = new HashMap<>();
+        for (Role role : roleRepository.findByCompanyId(companyId)) {
+            existingByName.put(role.getName().toLowerCase(), role);
+        }
+
+        List<String> errors = new ArrayList<>();
+        Set<String> namesInBatch = new HashSet<>();
+        for (int i = 0; i < rows.size(); i++) {
+            String name = rows.get(i).name().trim();
+            if (!namesInBatch.add(name.toLowerCase())) {
+                errors.add("Row " + (i + 1) + " (" + name + "): duplicate role name within this sheet");
+            } else if (COMPANY_ADMIN_ROLE_NAME.equalsIgnoreCase(name)) {
+                errors.add("Row " + (i + 1) + " (" + name + "): Company Admin is built in and can't be imported");
+            }
+        }
+        if (!errors.isEmpty()) {
+            throw new UserImportValidationException(errors);
+        }
+
+        int created = 0;
+        int updated = 0;
+        List<RoleResponse> saved = new ArrayList<>();
+        for (BulkImportRoleRow row : rows) {
+            String name = row.name().trim();
+            String description = blankToNull(row.description());
+            Role role = existingByName.get(name.toLowerCase());
+            if (role == null) {
+                role = new Role(company, name);
+                role.setDescription(description);
+                roleRepository.save(role);
+                created++;
+            } else {
+                if (description != null) {
+                    role.setDescription(description);
+                }
+                updated++;
+            }
+            saved.add(toResponse(role));
+        }
+        accessControlCacheService.invalidateAfterCommit(companyId);
+        return new BulkImportRolesResponse(created, updated, saved);
     }
 
     @Transactional

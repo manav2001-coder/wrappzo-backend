@@ -1,5 +1,7 @@
 package com.wrapzzo.backend.controller;
 
+import com.wrapzzo.backend.dto.BulkImportRolesRequest;
+import com.wrapzzo.backend.dto.BulkImportRolesResponse;
 import com.wrapzzo.backend.dto.RoleRequest;
 import com.wrapzzo.backend.dto.RoleResponse;
 import com.wrapzzo.backend.security.Permission.Keys;
@@ -39,6 +41,12 @@ public class RoleController {
     @RequiresPermission(Keys.ROLE_EDIT)
     public RoleResponse create(@PathVariable UUID companyId, @Valid @RequestBody RoleRequest request) {
         return roleService.create(companyId, request);
+    }
+
+    @PostMapping("/bulk-import")
+    @RequiresPermission(Keys.ROLE_EDIT)
+    public BulkImportRolesResponse bulkImport(@PathVariable UUID companyId, @Valid @RequestBody BulkImportRolesRequest request) {
+        return roleService.bulkImport(companyId, request.rows());
     }
 
     @PutMapping("/{roleId}")
