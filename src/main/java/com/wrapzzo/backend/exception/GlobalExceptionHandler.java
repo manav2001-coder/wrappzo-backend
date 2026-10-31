@@ -1,17 +1,27 @@
 package com.wrapzzo.backend.exception;
 
+import jakarta.validation.ConstraintViolationException;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.hibernate.LazyInitializationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.validation.FieldError;
+import org.springframework.validation.ObjectError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Pattern ROW_INDEX = Pattern.compile("\\[(\\d+)]");
 
     /**
      * Safety net for plain @Valid/@NotBlank/@Email-style request-body validation failures
@@ -25,11 +35,65 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleMethodArgumentNotValid(MethodArgumentNotValidException e) {
-        List<String> details = e.getBindingResult().getFieldErrors().stream()
-                .map(fieldError -> fieldError.getField() + ": " + fieldError.getDefaultMessage())
+        List<String> details = e.getBindingResult().getAllErrors().stream().map(GlobalExceptionHandler::describe).toList();
+        return validationFailed(details);
+    }
+
+    /** A body that is not JSON, or a value of the wrong type (a word where a number goes, an unknown enum value). */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, Object>> handleUnreadableBody(HttpMessageNotReadableException e) {
+        return validationFailed(List.of("the request body is malformed or has a value of the wrong type"));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<Map<String, Object>> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
+        return validationFailed(List.of("'" + e.getValue() + "' is not a valid " + readable(e.getName())));
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<Map<String, Object>> handleMissingParameter(MissingServletRequestParameterException e) {
+        return validationFailed(List.of(readable(e.getParameterName()) + " is required"));
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<Map<String, Object>> handleConstraintViolation(ConstraintViolationException e) {
+        List<String> details = e.getConstraintViolations().stream()
+                .map(violation -> readable(lastSegment(violation.getPropertyPath().toString())) + " " + violation.getMessage())
                 .toList();
+        return validationFailed(details);
+    }
+
+    /** The headline carries the reasons, so a client that shows only the message still says what is wrong. */
+    private static ResponseEntity<Map<String, Object>> validationFailed(List<String> reasons) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(Map.of("error", "Validation failed.", "details", details));
+                .body(Map.of("error", "Validation failed: " + String.join("; ", reasons) + ".", "details", reasons));
+    }
+
+    /** "name must not be blank", "row 3 contact email must be a well-formed email address". */
+    private static String describe(ObjectError error) {
+        String message = error.getDefaultMessage() == null ? "is invalid" : error.getDefaultMessage();
+        return error instanceof FieldError field ? readable(field.getField()) + " " + message : message;
+    }
+
+    private static String lastSegment(String path) {
+        return path.substring(path.lastIndexOf('.') + 1);
+    }
+
+    /** "rows[2].contactEmail" -> "row 3 contact email" (people count rows from 1); "name" -> "name". */
+    static String readable(String path) {
+        Matcher index = ROW_INDEX.matcher(path);
+        StringBuilder words = new StringBuilder();
+        while (index.find()) {
+            index.appendReplacement(words, " row " + (Integer.parseInt(index.group(1)) + 1) + " ");
+        }
+        index.appendTail(words);
+        return words.toString()
+                .replaceFirst("^\\s*\\w+ (row \\d+)", "$1")
+                .replace('.', ' ')
+                .replaceAll("([a-z])([A-Z])", "$1 $2")
+                .replaceAll("\\s+", " ")
+                .trim()
+                .toLowerCase();
     }
 
     @ExceptionHandler(InvalidCredentialsException.class)
