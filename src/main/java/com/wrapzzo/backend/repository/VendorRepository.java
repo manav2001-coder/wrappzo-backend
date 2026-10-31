@@ -12,6 +12,4 @@ public interface VendorRepository extends JpaRepository<Vendor, UUID> {
     Optional<Vendor> findByContactEmail(String contactEmail);
 
     List<Vendor> findByStatus(VendorStatus status);
-
-    long countByStatus(VendorStatus status);
 }

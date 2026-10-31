@@ -16,6 +16,4 @@ public interface GiftRepository extends JpaRepository<Gift, UUID> {
     List<Gift> findByVendorId(UUID vendorId);
 
     Optional<Gift> findByName(String name);
-
-    long countByActiveTrue();
 }

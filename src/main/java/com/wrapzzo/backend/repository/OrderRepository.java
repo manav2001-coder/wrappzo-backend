@@ -46,8 +46,4 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
     /** One batched query for every campaign's order count -- not a per-campaign query (PRD 4.7). */
     @Query("select o.campaign.id as campaignId, count(o) as cnt from Order o where o.campaign.id in :campaignIds group by o.campaign.id")
     List<CampaignOrderCount> countByCampaignIdIn(@Param("campaignIds") Collection<UUID> campaignIds);
-
-    /** Every company's orders grouped by status -- the platform dashboard's pipeline. */
-    @Query("select o.status as status, count(o) as cnt from Order o group by o.status")
-    List<OrderStatusCount> countByStatus();
 }
