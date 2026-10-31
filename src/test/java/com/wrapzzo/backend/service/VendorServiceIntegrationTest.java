@@ -141,6 +141,6 @@ class VendorServiceIntegrationTest {
     void listIncludesAddedVendors() {
         VendorResponse added = vendorService.add(new AddVendorRequest("Listed Vendor", "contact6@acme-test.com", null, null, null));
 
-        assertThat(vendorService.list()).extracting(VendorResponse::id).contains(added.id());
+        assertThat(vendorService.list(null)).extracting(VendorResponse::id).contains(added.id());
     }
 }

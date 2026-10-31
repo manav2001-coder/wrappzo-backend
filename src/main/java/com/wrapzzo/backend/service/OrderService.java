@@ -5,6 +5,7 @@ import com.wrapzzo.backend.dto.DashboardResponse.StageEvent;
 import com.wrapzzo.backend.dto.OrderResponse;
 import com.wrapzzo.backend.dto.VendorOrderResponse;
 import com.wrapzzo.backend.exception.ArtworkNotApprovedException;
+import com.wrapzzo.backend.exception.ConflictException;
 import com.wrapzzo.backend.exception.InvalidOrderStatusTransitionException;
 import com.wrapzzo.backend.exception.NoAvailableVendorException;
 import com.wrapzzo.backend.exception.OrderNotFoundException;
@@ -21,6 +22,7 @@ import com.wrapzzo.backend.model.Gift;
 import com.wrapzzo.backend.model.GiftImage;
 import com.wrapzzo.backend.model.OrderDesign;
 import com.wrapzzo.backend.model.OrderDesignStatus;
+import com.wrapzzo.backend.repository.CompanyVendorRepository;
 import com.wrapzzo.backend.repository.GiftImageRepository;
 import com.wrapzzo.backend.repository.OrderDesignRepository;
 import com.wrapzzo.backend.repository.OrderRepository;
@@ -70,6 +72,7 @@ public class OrderService {
     private final VisibilityService visibilityService;
     private final UserRepository userRepository;
     private final VendorRepository vendorRepository;
+    private final CompanyVendorRepository companyVendorRepository;
     private final OrderStatusHistoryService orderStatusHistoryService;
     private final OrderPhotoService orderPhotoService;
     private final GiftImageRepository giftImageRepository;
@@ -197,6 +200,7 @@ public class OrderService {
     public OrderResponse assignVendorManually(UUID orderId, UUID vendorId) {
         Order order = getEntity(orderId);
         Vendor vendor = vendorRepository.findById(vendorId).orElseThrow(() -> new VendorNotFoundException(vendorId));
+        requireCanAssign(order, vendor);
         applyAssignment(order, vendor, OrderAssignmentMode.MANUAL);
         return toResponse(order);
     }
@@ -210,10 +214,7 @@ public class OrderService {
     @Transactional
     public OrderResponse autoAssignVendor(UUID orderId) {
         Order order = getEntity(orderId);
-        Vendor vendor = order.getGift() != null && order.getGift().getVendor() != null
-                ? order.getGift().getVendor()
-                : leastLoadedActiveVendor();
-        applyAssignment(order, vendor, OrderAssignmentMode.AUTO);
+        applyAssignment(order, autoVendorFor(order), OrderAssignmentMode.AUTO);
         return toResponse(order);
     }
 
@@ -250,10 +251,7 @@ public class OrderService {
         int skipped = 0;
         for (Order order : targets) {
             try {
-                Vendor vendor = order.getGift() != null && order.getGift().getVendor() != null
-                        ? order.getGift().getVendor()
-                        : leastLoadedActiveVendor();
-                applyAssignment(order, vendor, OrderAssignmentMode.AUTO);
+                applyAssignment(order, autoVendorFor(order), OrderAssignmentMode.AUTO);
                 assigned++;
             } catch (NoAvailableVendorException e) {
                 skipped++;
@@ -264,6 +262,9 @@ public class OrderService {
 
     private BulkAssignResponse bulkAssign(List<Order> targets, UUID vendorId, Supplier<List<OrderResponse>> resultLoader) {
         Vendor vendor = vendorRepository.findById(vendorId).orElseThrow(() -> new VendorNotFoundException(vendorId));
+        for (Order order : targets) {
+            requireCanAssign(order, vendor);
+        }
         for (Order order : targets) {
             applyAssignment(order, vendor, OrderAssignmentMode.MANUAL);
         }
@@ -334,10 +335,39 @@ public class OrderService {
                 .toList();
     }
 
-    private Vendor leastLoadedActiveVendor() {
-        return vendorRepository.findByStatus(VendorStatus.ACTIVE).stream()
+    /** The gift's own vendor when it serves the order's company and is active; otherwise the least loaded of that company's vendors. */
+    private Vendor autoVendorFor(Order order) {
+        Vendor giftVendor = order.getGift() != null ? order.getGift().getVendor() : null;
+        if (giftVendor != null && giftVendor.getStatus() == VendorStatus.ACTIVE && servesCompany(giftVendor, order)) {
+            return giftVendor;
+        }
+        return leastLoadedActiveVendorOf(order);
+    }
+
+    /** Only vendors mapped to the order's company are candidates: one company must not be able to route another's orders to a vendor of its own making. */
+    private Vendor leastLoadedActiveVendorOf(Order order) {
+        List<UUID> serving = companyVendorRepository.findVendorIdsByCompany(order.getCompany().getId());
+        return vendorRepository.findAllById(serving).stream()
+                .filter(vendor -> vendor.getStatus() == VendorStatus.ACTIVE)
                 .min(Comparator.comparingLong(v -> orderRepository.countByAssignedVendorIdAndStatusIn(v.getId(), IN_FLIGHT_STATUSES)))
                 .orElseThrow(NoAvailableVendorException::new);
+    }
+
+    private boolean servesCompany(Vendor vendor, Order order) {
+        return companyVendorRepository.existsByCompany_IdAndVendor_Id(order.getCompany().getId(), vendor.getId());
+    }
+
+    /** A hand-picked vendor must be active, serve the order's company, and the order must still be waiting on or in production. */
+    private void requireCanAssign(Order order, Vendor vendor) {
+        if (vendor.getStatus() != VendorStatus.ACTIVE) {
+            throw new ConflictException(vendor.getName() + " is suspended");
+        }
+        if (!servesCompany(vendor, order)) {
+            throw new ConflictException(vendor.getName() + " doesn't serve " + order.getCompany().getName() + " -- map the vendor to the company first");
+        }
+        if (order.getStatus() == OrderStatus.DISPATCHED || order.getStatus() == OrderStatus.DELIVERED || order.getStatus() == OrderStatus.CANCELLED) {
+            throw new ConflictException("This order is already " + order.getStatus().name().toLowerCase() + " and can't be reassigned");
+        }
     }
 
     private void applyAssignment(Order order, Vendor vendor, OrderAssignmentMode mode) {

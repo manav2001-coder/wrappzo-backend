@@ -99,7 +99,7 @@ public class GiftService {
         if (vendorIds.isEmpty()) {
             return List.of();
         }
-        return giftRepository.findByActiveTrueAndVendorIdIn(vendorIds).stream().map(this::toResponse).toList();
+        return giftRepository.findByActiveTrueAndVendorIdIn(vendorIds).stream().map(gift -> toResponse(gift).forCompany()).toList();
     }
 
     private List<UUID> visibleVendorIds(User caller) {
@@ -136,7 +136,7 @@ public class GiftService {
         if (!isInRoster(gift, user)) {
             throw new GiftNotFoundException(id);
         }
-        return toResponse(gift);
+        return toResponse(gift).forCompany();
     }
 
     /** The Gift Store's own rule, for a write path (placing an order) that already holds the gift. */
@@ -215,8 +215,10 @@ public class GiftService {
         Gift toSave = new Gift(request.name(), request.category(), request.description(), request.moq(), request.leadTimeDays(), vendor);
         toSave.setModules(new java.util.HashSet<>(ALL_MODULES));
         toSave.setPrice(request.price());
-        toSave.setMarkupFeePercentage(feeOrZero(request.markupFeePercentage()));
-        toSave.setCommissionFeePercentage(feeOrZero(request.commissionFeePercentage()));
+        // Markup and commission are the platform's: a vendor's gift starts on the terms set for that
+        // vendor, and the vendor's own request never changes them.
+        toSave.setMarkupFeePercentage(feeOrZero(vendor.getMarkupFees()));
+        toSave.setCommissionFeePercentage(feeOrZero(vendor.getCommission()));
         toSave.setPhotoRequired(request.photoRequired());
         toSave.setArtworkRequired(request.artworkRequired());
         // saveAndFlush -- giftNo is DB-generated and only readable after the physical
@@ -247,8 +249,7 @@ public class GiftService {
         gift.setMoq(request.moq());
         gift.setLeadTimeDays(request.leadTimeDays());
         gift.setPrice(request.price());
-        gift.setMarkupFeePercentage(feeOrZero(request.markupFeePercentage()));
-        gift.setCommissionFeePercentage(feeOrZero(request.commissionFeePercentage()));
+        // Markup and commission stay as the platform set them; they are not the vendor's to change.
         gift.setPhotoRequired(request.photoRequired());
         gift.setArtworkRequired(request.artworkRequired());
         return toResponse(gift);

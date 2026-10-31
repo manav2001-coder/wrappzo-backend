@@ -198,7 +198,7 @@ class AuthServiceIntegrationTest {
 
     @Test
     void effectivePermissionsCombineRoleTemplatesWithUserTemplatesAndFollowInclusions() {
-        accessControlCacheService.invalidateAll();
+        accessControlCacheService.invalidate(null);
         Set<String> initial = accessControlCacheService.resolveEffectiveKeys(user);
         assertThat(initial).containsExactly("test_reports.create");
 
@@ -206,13 +206,13 @@ class AuthServiceIntegrationTest {
         billing.getAccessControls().add(billingView);
         user.getTemplates().add(templateRepository.save(billing));
         userRepository.save(user);
-        accessControlCacheService.invalidateAll();
+        accessControlCacheService.invalidate(null);
 
         assertThat(accessControlCacheService.resolveEffectiveKeys(user)).containsExactlyInAnyOrder("test_reports.create", "billing.view");
 
         user.getRole().getTemplates().clear();
         roleRepository.save(user.getRole());
-        accessControlCacheService.invalidateAll();
+        accessControlCacheService.invalidate(null);
 
         assertThat(accessControlCacheService.resolveEffectiveKeys(user)).containsExactly("billing.view");
     }

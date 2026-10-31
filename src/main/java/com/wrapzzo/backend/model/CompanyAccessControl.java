@@ -8,6 +8,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.MapsId;
 import jakarta.persistence.Table;
+import java.time.Instant;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -35,6 +36,18 @@ public class CompanyAccessControl {
 
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
+
+    @Column(name = "added_on", nullable = false, updatable = false)
+    private Instant addedOn = Instant.now();
+
+    @Column(name = "added_by_name", length = 200)
+    private String addedByName;
+
+    @Column(name = "updated_on", nullable = false)
+    private Instant updatedOn = Instant.now();
+
+    @Column(name = "updated_by_name", length = 200)
+    private String updatedByName;
 
     public CompanyAccessControl(Company company, AccessControl accessControl) {
         this.company = company;

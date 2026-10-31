@@ -5,7 +5,25 @@ import com.wrapzzo.backend.model.CompanyStatus;
 import java.time.Instant;
 import java.util.UUID;
 
-public record CompanyResponse(UUID id, String displayId, String name, CompanyStatus status, String logoUrl, Instant createdAt) {
+public record CompanyResponse(
+        UUID id,
+        String displayId,
+        String name,
+        CompanyStatus status,
+        String logoUrl,
+        String contactPersonName,
+        String contactEmail,
+        String contactMobile,
+        String gstin,
+        String pan,
+        String registrationNumber,
+        String addressLine1,
+        String addressLine2,
+        String city,
+        String state,
+        String pincode,
+        String notes,
+        Instant createdAt) {
 
     public static CompanyResponse from(Company company, String logoUrl) {
         return new CompanyResponse(
@@ -14,6 +32,18 @@ public record CompanyResponse(UUID id, String displayId, String name, CompanySta
                 company.getName(),
                 company.getStatus(),
                 logoUrl,
+                company.getContactPersonName(),
+                company.getContactEmail(),
+                company.getContactMobile(),
+                company.getGstin(),
+                company.getPan(),
+                company.getRegistrationNumber(),
+                company.getAddressLine1(),
+                company.getAddressLine2(),
+                company.getCity(),
+                company.getState(),
+                company.getPincode(),
+                company.getNotes(),
                 company.getCreatedAt());
     }
 }

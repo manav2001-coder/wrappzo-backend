@@ -15,7 +15,8 @@ class PermissionTest {
     @Test
     void everyKeyIsModuleDotAction() {
         for (Permission permission : Permission.values()) {
-            assertThat(permission.key()).matches("[a-z_]+\\.[a-z_]+");
+            // The Access Control screens have a third level ("tbac.feature_master.view"): the action is everything after the module.
+            assertThat(permission.key()).matches("[a-z_]+(\\.[a-z_]+)+");
             assertThat(permission.key()).isEqualTo(permission.module() + "." + permission.action());
         }
     }

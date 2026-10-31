@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 class EndpointAuthorizationTest {
 
-    private static final Pattern KEY_IN_EXPRESSION = Pattern.compile("'([a-z_]+\\.[a-z_]+)'");
+    private static final Pattern KEY_IN_EXPRESSION = Pattern.compile("'([a-z_]+(?:\\.[a-z_]+)+)'");
 
     @Test
     void everyEndpointIsGuardedOrMarkedPublic() throws ClassNotFoundException {

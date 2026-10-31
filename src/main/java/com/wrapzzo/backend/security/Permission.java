@@ -51,14 +51,24 @@ public enum Permission {
     USER_EDIT(Keys.USER_EDIT, true),
     USER_DELETE(Keys.USER_DELETE, true),
 
-    ACCESS_VIEW(Keys.ACCESS_VIEW, true),
-    ACCESS_EDIT(Keys.ACCESS_EDIT, true),
-
     ROLE_VIEW(Keys.ROLE_VIEW, true),
     ROLE_EDIT(Keys.ROLE_EDIT, true),
 
-    TEMPLATE_VIEW(Keys.TEMPLATE_VIEW, true),
-    TEMPLATE_EDIT(Keys.TEMPLATE_EDIT, true),
+    TBAC_FEATURE_MASTER_VIEW(Keys.TBAC_FEATURE_MASTER_VIEW, true),
+    TBAC_FEATURE_MASTER_ADD(Keys.TBAC_FEATURE_MASTER_ADD, true),
+    TBAC_FEATURE_MASTER_EDIT(Keys.TBAC_FEATURE_MASTER_EDIT, true),
+    TBAC_TEMPLATE_MASTER_VIEW(Keys.TBAC_TEMPLATE_MASTER_VIEW, true),
+    TBAC_TEMPLATE_MASTER_ADD(Keys.TBAC_TEMPLATE_MASTER_ADD, true),
+    TBAC_TEMPLATE_MASTER_EDIT(Keys.TBAC_TEMPLATE_MASTER_EDIT, true),
+    TBAC_FEATURES_TO_TEMPLATE_MANAGE(Keys.TBAC_FEATURES_TO_TEMPLATE_MANAGE, true),
+    TBAC_FEATURES_TO_TEMPLATE_ASSIGNMENT(Keys.TBAC_FEATURES_TO_TEMPLATE_ASSIGNMENT, true),
+    TBAC_TEMPLATES_TO_TEMPLATE_MANAGE(Keys.TBAC_TEMPLATES_TO_TEMPLATE_MANAGE, true),
+    TBAC_TEMPLATES_TO_TEMPLATE_ASSIGNMENT(Keys.TBAC_TEMPLATES_TO_TEMPLATE_ASSIGNMENT, true),
+    TBAC_USER_TEMPLATE_MANAGE(Keys.TBAC_USER_TEMPLATE_MANAGE, true),
+    TBAC_USER_TEMPLATE_ASSIGNMENT(Keys.TBAC_USER_TEMPLATE_ASSIGNMENT, true),
+    TBAC_BULK_ASSIGN_USER_TEMPLATES(Keys.TBAC_BULK_ASSIGN_USER_TEMPLATES, true),
+    TBAC_ROLE_TEMPLATE_MANAGE(Keys.TBAC_ROLE_TEMPLATE_MANAGE, true),
+    TBAC_ROLE_TEMPLATE_ASSIGNMENT(Keys.TBAC_ROLE_TEMPLATE_ASSIGNMENT, true),
 
     COMPANY_VENDOR_VIEW(Keys.COMPANY_VENDOR_VIEW, true),
     COMPANY_VENDOR_ADD(Keys.COMPANY_VENDOR_ADD, true),
@@ -170,14 +180,24 @@ public enum Permission {
         public static final String USER_EDIT = "user.edit";
         public static final String USER_DELETE = "user.delete";
 
-        public static final String ACCESS_VIEW = "access.view";
-        public static final String ACCESS_EDIT = "access.edit";
-
         public static final String ROLE_VIEW = "role.view";
         public static final String ROLE_EDIT = "role.edit";
 
-        public static final String TEMPLATE_VIEW = "template.view";
-        public static final String TEMPLATE_EDIT = "template.edit";
+        public static final String TBAC_FEATURE_MASTER_VIEW = "tbac.feature_master.view";
+        public static final String TBAC_FEATURE_MASTER_ADD = "tbac.feature_master.add";
+        public static final String TBAC_FEATURE_MASTER_EDIT = "tbac.feature_master.edit";
+        public static final String TBAC_TEMPLATE_MASTER_VIEW = "tbac.template_master.view";
+        public static final String TBAC_TEMPLATE_MASTER_ADD = "tbac.template_master.add";
+        public static final String TBAC_TEMPLATE_MASTER_EDIT = "tbac.template_master.edit";
+        public static final String TBAC_FEATURES_TO_TEMPLATE_MANAGE = "tbac.features_to_template.manage";
+        public static final String TBAC_FEATURES_TO_TEMPLATE_ASSIGNMENT = "tbac.features_to_template.assignment";
+        public static final String TBAC_TEMPLATES_TO_TEMPLATE_MANAGE = "tbac.templates_to_template.manage";
+        public static final String TBAC_TEMPLATES_TO_TEMPLATE_ASSIGNMENT = "tbac.templates_to_template.assignment";
+        public static final String TBAC_USER_TEMPLATE_MANAGE = "tbac.user_template.manage";
+        public static final String TBAC_USER_TEMPLATE_ASSIGNMENT = "tbac.user_template.assignment";
+        public static final String TBAC_BULK_ASSIGN_USER_TEMPLATES = "tbac.bulk_assign_user_templates";
+        public static final String TBAC_ROLE_TEMPLATE_MANAGE = "tbac.role_template.manage";
+        public static final String TBAC_ROLE_TEMPLATE_ASSIGNMENT = "tbac.role_template.assignment";
 
         public static final String COMPANY_VENDOR_VIEW = "company_vendor.view";
         public static final String COMPANY_VENDOR_ADD = "company_vendor.add";

@@ -4,6 +4,5 @@ import jakarta.validation.constraints.NotEmpty;
 import java.util.Set;
 import java.util.UUID;
 
-/** Templates to add to another template's includes. */
-public record TemplateIdsAddRequest(@NotEmpty Set<UUID> templateIds) {
+public record AssignTemplatesRequest(@NotEmpty Set<UUID> templateIds) {
 }

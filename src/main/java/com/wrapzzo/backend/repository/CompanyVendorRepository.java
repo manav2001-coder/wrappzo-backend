@@ -11,6 +11,8 @@ public interface CompanyVendorRepository extends JpaRepository<CompanyVendor, UU
 
     List<CompanyVendor> findByCompany_IdOrderByCreatedAtDesc(UUID companyId);
 
+    List<CompanyVendor> findByVendor_Id(UUID vendorId);
+
     /** Company-wide (orgUnitId null) rows, plus any row scoped to one of the given org unit ids (the viewer's own unit and its ancestors). */
     @Query("""
             select cv.vendor.id from CompanyVendor cv
@@ -18,6 +20,11 @@ public interface CompanyVendorRepository extends JpaRepository<CompanyVendor, UU
               and (cv.orgUnit is null or cv.orgUnit.id in :orgUnitIds)
             """)
     List<UUID> findVendorIdsVisibleToOrgUnits(@Param("companyId") UUID companyId, @Param("orgUnitIds") List<UUID> orgUnitIds);
+
+    @Query("select distinct cv.vendor.id from CompanyVendor cv where cv.company.id = :companyId")
+    List<UUID> findVendorIdsByCompany(@Param("companyId") UUID companyId);
+
+    boolean existsByCompany_IdAndVendor_Id(UUID companyId, UUID vendorId);
 
     @Query("select cv.vendor.id from CompanyVendor cv where cv.company.id = :companyId and cv.orgUnit is null")
     List<UUID> findCompanyWideVendorIds(@Param("companyId") UUID companyId);

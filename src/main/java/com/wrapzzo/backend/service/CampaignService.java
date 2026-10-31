@@ -10,6 +10,9 @@ import com.wrapzzo.backend.dto.CreateCampaignRequest;
 import com.wrapzzo.backend.dto.UpdateCampaignRequest;
 import com.wrapzzo.backend.exception.CampaignAudienceRequiredException;
 import com.wrapzzo.backend.exception.CampaignFieldsLockedException;
+import com.wrapzzo.backend.exception.GiftNotFoundException;
+import com.wrapzzo.backend.exception.OrgUnitNotFoundException;
+import com.wrapzzo.backend.exception.UserNotFoundException;
 import com.wrapzzo.backend.exception.CampaignNotFoundException;
 import com.wrapzzo.backend.model.Campaign;
 import com.wrapzzo.backend.model.CampaignAudience;
@@ -37,6 +40,7 @@ import com.wrapzzo.backend.security.CurrentUser;
 import com.wrapzzo.backend.security.Permission;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -60,6 +64,7 @@ public class CampaignService {
     private final SubmissionRepository submissionRepository;
     private final OrderRepository orderRepository;
     private final AccessControlCacheService accessControlCacheService;
+    private final GiftService giftService;
 
     private record CampaignStats(long submissionCount, long pendingApprovalCount, long orderCount) {
         static final CampaignStats EMPTY = new CampaignStats(0, 0, 0);
@@ -69,7 +74,7 @@ public class CampaignService {
     public CampaignResponse create(CreateCampaignRequest request) {
         User creator = currentUser();
         Company company = creator.getCompany();
-        Set<Gift> gifts = new HashSet<>(giftRepository.findAllById(request.giftIds()));
+        Set<Gift> gifts = offeredGifts(creator, request.giftIds());
 
         Campaign toSave = new Campaign(
                 company, request.name(), request.purpose(), request.recipientCategory(), gifts, request.instructions(),
@@ -106,7 +111,7 @@ public class CampaignService {
         campaign.setName(request.name());
         campaign.setPurpose(request.purpose());
         campaign.setRecipientCategory(request.recipientCategory());
-        campaign.setGifts(new HashSet<>(giftRepository.findAllById(request.giftIds())));
+        campaign.setGifts(offeredGifts(currentUser(), request.giftIds()));
         campaign.setInstructions(request.instructions());
         campaign.setSubmissionDeadline(request.submissionDeadline());
         campaign.setUpdatedBy(currentUser());
@@ -155,11 +160,15 @@ public class CampaignService {
         Campaign campaign = getEntity(id);
         campaignAudienceRepository.deleteByCampaignId(id);
         for (CampaignAudienceRequest a : audiences) {
+            // Every id here comes from the request: it must be THIS company's, not just exist.
+            UUID companyId = campaign.getCompany().getId();
             OrgUnit orgUnit = a.orgUnitId() != null
-                    ? orgUnitRepository.findById(a.orgUnitId()).orElseThrow()
+                    ? orgUnitRepository.findById(a.orgUnitId())
+                            .filter(unit -> unit.getCompany().getId().equals(companyId))
+                            .orElseThrow(() -> new OrgUnitNotFoundException(a.orgUnitId()))
                     : null;
-            User anchorUser = a.anchorUserId() != null ? userRepository.findById(a.anchorUserId()).orElseThrow() : null;
-            User user = a.userId() != null ? userRepository.findById(a.userId()).orElseThrow() : null;
+            User anchorUser = a.anchorUserId() != null ? companyUser(a.anchorUserId(), companyId) : null;
+            User user = a.userId() != null ? companyUser(a.userId(), companyId) : null;
             campaignAudienceRepository.save(new CampaignAudience(campaign, a.type(), orgUnit, anchorUser, user));
         }
         campaign.setUpdatedBy(currentUser());
@@ -178,6 +187,25 @@ public class CampaignService {
                 .map(u -> new AudienceOptionsResponse.UserOption(u.getId(), u.getName(), u.getEmail()))
                 .toList();
         return new AudienceOptionsResponse(orgUnits, users);
+    }
+
+    private User companyUser(UUID userId, UUID companyId) {
+        return userRepository.findById(userId)
+                .filter(candidate -> candidate.getCompany() != null && candidate.getCompany().getId().equals(companyId))
+                .orElseThrow(() -> new UserNotFoundException(userId));
+    }
+
+    /** The gifts a campaign may offer: every one must exist and be in the caller's own Gift Store (the company's vendor roster). */
+    private Set<Gift> offeredGifts(User user, Collection<UUID> giftIds) {
+        Set<Gift> gifts = new HashSet<>();
+        for (UUID giftId : new HashSet<>(giftIds)) {
+            Gift gift = giftRepository.findById(giftId).orElseThrow(() -> new GiftNotFoundException(giftId));
+            if (!giftService.isInRoster(gift, user)) {
+                throw new GiftNotFoundException(giftId);
+            }
+            gifts.add(gift);
+        }
+        return gifts;
     }
 
     // --- Audience resolution, reused by SubmissionService for authorization checks. ---
