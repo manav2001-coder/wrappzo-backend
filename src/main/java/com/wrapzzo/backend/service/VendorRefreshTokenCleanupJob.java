@@ -3,23 +3,30 @@ package com.wrapzzo.backend.service;
 import com.wrapzzo.backend.repository.VendorRefreshTokenRepository;
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /** Keeps vendor_refresh_tokens from growing unbounded as sessions expire/rotate. */
 @Component
 @RequiredArgsConstructor
-@Slf4j
-public class VendorRefreshTokenCleanupJob {
+public class VendorRefreshTokenCleanupJob implements BackgroundJob {
 
     private final VendorRefreshTokenRepository vendorRefreshTokenRepository;
 
-    @Scheduled(cron = "0 5 3 * * *")
+    @Override
+    public String name() {
+        return "vendor-refresh-token-cleanup";
+    }
+
+    @Override
+    public String label() {
+        return "Vendor refresh token cleanup";
+    }
+
+    @Override
     @Transactional
-    public void purgeExpiredOrRevoked() {
+    public String run() {
         int deleted = vendorRefreshTokenRepository.deleteExpiredOrRevoked(Instant.now());
-        log.info("Purged {} expired/revoked vendor refresh tokens", deleted);
+        return "Purged " + deleted + " expired or revoked vendor refresh tokens";
     }
 }

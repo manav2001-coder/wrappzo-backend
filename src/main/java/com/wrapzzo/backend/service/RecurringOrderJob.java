@@ -5,7 +5,6 @@ import java.time.LocalDate;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -18,14 +17,25 @@ import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
 @Slf4j
-public class RecurringOrderJob {
+public class RecurringOrderJob implements BackgroundJob {
 
     private final RecurringOrderService recurringOrderService;
 
-    @Scheduled(cron = "0 15 6 * * *")
-    public void placeDueOrders() {
+    @Override
+    public String name() {
+        return "recurring-orders";
+    }
+
+    @Override
+    public String label() {
+        return "Recurring orders";
+    }
+
+    @Override
+    public String run() {
         List<DuePlan> due = recurringOrderService.findDue(LocalDate.now());
         int placed = 0;
+        int failed = 0;
         for (DuePlan plan : due) {
             SecurityContextHolder.getContext().setAuthentication(
                     new UsernamePasswordAuthenticationToken(plan.requesterId(), null, List.of()));
@@ -35,10 +45,12 @@ public class RecurringOrderJob {
             } catch (RuntimeException e) {
                 log.warn("Recurring order plan {} failed: {}", plan.planId(), e.getMessage());
                 recurringOrderService.recordFailure(plan.planId(), e.getMessage());
+                failed++;
             } finally {
                 SecurityContextHolder.clearContext();
             }
         }
         log.info("Recurring orders: {} of {} due plans placed", placed, due.size());
+        return placed + " of " + due.size() + " due plans placed" + (failed > 0 ? ", " + failed + " failed (see each plan)" : "");
     }
 }

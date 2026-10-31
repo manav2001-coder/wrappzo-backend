@@ -98,7 +98,10 @@ public enum Permission {
     PLATFORM_ORDER_VIEW(Keys.PLATFORM_ORDER_VIEW, false),
     PLATFORM_ORDER_MANAGE(Keys.PLATFORM_ORDER_MANAGE, false),
 
-    PLATFORM_DASHBOARD_VIEW(Keys.PLATFORM_DASHBOARD_VIEW, false);
+    PLATFORM_DASHBOARD_VIEW(Keys.PLATFORM_DASHBOARD_VIEW, false),
+
+    PLATFORM_JOBS_VIEW(Keys.PLATFORM_JOBS_VIEW, false),
+    PLATFORM_JOBS_MANAGE(Keys.PLATFORM_JOBS_MANAGE, false);
 
     /** The action every module that can be read at all is read with; granting any other action of a module implies it. */
     public static final String VIEW_ACTION = "view";
@@ -230,6 +233,9 @@ public enum Permission {
         public static final String PLATFORM_ORDER_MANAGE = "platform_order.manage";
 
         public static final String PLATFORM_DASHBOARD_VIEW = "platform_dashboard.view";
+
+        public static final String PLATFORM_JOBS_VIEW = "platform_jobs.view";
+        public static final String PLATFORM_JOBS_MANAGE = "platform_jobs.manage";
 
         private Keys() {
         }
