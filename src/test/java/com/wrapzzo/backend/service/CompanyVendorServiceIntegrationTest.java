@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.wrapzzo.backend.dto.CompanyVendorResponse;
+import com.wrapzzo.backend.dto.VendorCoverageRequest;
+import com.wrapzzo.backend.dto.VendorCoverageResponse;
 import com.wrapzzo.backend.exception.CompanyVendorNotFoundException;
 import com.wrapzzo.backend.exception.OrgUnitNotFoundException;
 import com.wrapzzo.backend.model.Company;
@@ -110,5 +112,42 @@ class CompanyVendorServiceIntegrationTest {
 
         assertThatThrownBy(() -> companyVendorService.unassign(beta.getId(), alphaMapping)).isInstanceOf(CompanyVendorNotFoundException.class);
         assertThat(companyVendorService.list(alpha.getId())).hasSize(1);
+    }
+
+    @Test
+    void replacingCoverageSetsWhereAVendorServesAndRemovesWhatIsNoLongerListed() {
+        Vendor vendor = vendor();
+        Company alpha = company("Alpha");
+        Company beta = company("Beta");
+        OrgUnit north = unit(alpha, "North");
+        OrgUnit south = unit(alpha, "South");
+        companyVendorService.assign(beta.getId(), vendor.getId(), null);
+
+        VendorCoverageResponse coverage = companyVendorService.replaceCoverage(vendor.getId(), new VendorCoverageRequest(List.of(
+                new VendorCoverageRequest.Entry(alpha.getId(), List.of(north.getId(), south.getId())))));
+
+        assertThat(coverage.companies()).hasSize(1);
+        assertThat(coverage.companies().get(0).orgUnitIds()).containsExactlyInAnyOrder(north.getId(), south.getId());
+        assertThat(companyVendorService.list(beta.getId())).isEmpty();
+
+        VendorCoverageResponse whole = companyVendorService.replaceCoverage(vendor.getId(), new VendorCoverageRequest(List.of(
+                new VendorCoverageRequest.Entry(alpha.getId(), List.of()), new VendorCoverageRequest.Entry(beta.getId(), List.of()))));
+
+        assertThat(whole.companies()).extracting(VendorCoverageResponse.CompanyCoverage::companyName).hasSize(2);
+        assertThat(whole.companies()).allMatch(entry -> entry.orgUnitIds().isEmpty());
+    }
+
+    @Test
+    void coverageRefusesAnOrgUnitOfAnotherCompanyAndACompanyListedTwice() {
+        Vendor vendor = vendor();
+        Company alpha = company("Alpha");
+        OrgUnit betaUnit = unit(company("Beta"), "Elsewhere");
+
+        assertThatThrownBy(() -> companyVendorService.replaceCoverage(vendor.getId(), new VendorCoverageRequest(List.of(
+                new VendorCoverageRequest.Entry(alpha.getId(), List.of(betaUnit.getId()))))))
+                .isInstanceOf(OrgUnitNotFoundException.class);
+        assertThatThrownBy(() -> companyVendorService.replaceCoverage(vendor.getId(), new VendorCoverageRequest(List.of(
+                new VendorCoverageRequest.Entry(alpha.getId(), List.of()), new VendorCoverageRequest.Entry(alpha.getId(), List.of())))))
+                .isInstanceOf(com.wrapzzo.backend.exception.ConflictException.class);
     }
 }

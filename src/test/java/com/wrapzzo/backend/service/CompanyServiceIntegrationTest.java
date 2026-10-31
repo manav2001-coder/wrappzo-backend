@@ -3,6 +3,7 @@ package com.wrapzzo.backend.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.wrapzzo.backend.dto.CompanyRequest;
 import com.wrapzzo.backend.dto.CompanyResponse;
 import com.wrapzzo.backend.dto.PresignLogoUploadResponse;
 import com.wrapzzo.backend.exception.CompanyNotFoundException;
@@ -36,7 +37,7 @@ class CompanyServiceIntegrationTest {
 
     @Test
     void createSeedsADefaultCompanyAdminRoleWithTheRightGrants() {
-        CompanyResponse company = companyService.create("Alembic Pharma");
+        CompanyResponse company = companyService.create(CompanyRequest.named("Alembic Pharma"));
 
         assertThat(company.status()).isEqualTo(CompanyStatus.ACTIVE);
         assertThat(company.logoUrl()).isNull();
@@ -59,9 +60,9 @@ class CompanyServiceIntegrationTest {
 
     @Test
     void updateChangesTheName() {
-        CompanyResponse company = companyService.create("Old Name");
+        CompanyResponse company = companyService.create(CompanyRequest.named("Old Name"));
 
-        CompanyResponse updated = companyService.update(company.id(), "New Name");
+        CompanyResponse updated = companyService.update(company.id(), CompanyRequest.named("New Name"));
 
         assertThat(updated.name()).isEqualTo("New Name");
         assertThat(companyService.get(company.id()).name()).isEqualTo("New Name");
@@ -69,7 +70,7 @@ class CompanyServiceIntegrationTest {
 
     @Test
     void activateAndDeactivateToggleStatus() {
-        CompanyResponse company = companyService.create("Toggle Co");
+        CompanyResponse company = companyService.create(CompanyRequest.named("Toggle Co"));
 
         companyService.setStatus(company.id(), CompanyStatus.INACTIVE);
         assertThat(companyService.get(company.id()).status()).isEqualTo(CompanyStatus.INACTIVE);
@@ -85,14 +86,14 @@ class CompanyServiceIntegrationTest {
 
     @Test
     void listIncludesCreatedCompanies() {
-        CompanyResponse company = companyService.create("Listed Co");
+        CompanyResponse company = companyService.create(CompanyRequest.named("Listed Co"));
 
         assertThat(companyService.list()).extracting(CompanyResponse::id).contains(company.id());
     }
 
     @Test
     void presignLogoUploadReturnsAKeyScopedToTheCompanyAndAWorkingUrl() {
-        CompanyResponse company = companyService.create("Logo Co");
+        CompanyResponse company = companyService.create(CompanyRequest.named("Logo Co"));
 
         PresignLogoUploadResponse presigned = companyService.presignLogoUpload(company.id(), "image/png");
 
@@ -102,7 +103,7 @@ class CompanyServiceIntegrationTest {
 
     @Test
     void attachLogoSetsTheLogoUrlAndReplacingItDeletesThePreviousObject() {
-        CompanyResponse company = companyService.create("Rebrand Co");
+        CompanyResponse company = companyService.create(CompanyRequest.named("Rebrand Co"));
         PresignLogoUploadResponse firstUpload = companyService.presignLogoUpload(company.id(), "image/png");
 
         CompanyResponse withLogo = companyService.attachLogo(company.id(), firstUpload.key());
@@ -111,5 +112,23 @@ class CompanyServiceIntegrationTest {
         PresignLogoUploadResponse secondUpload = companyService.presignLogoUpload(company.id(), "image/png");
         CompanyResponse withNewLogo = companyService.attachLogo(company.id(), secondUpload.key());
         assertThat(withNewLogo.logoUrl()).contains(secondUpload.key());
+    }
+
+    @Test
+    void aCompanysProfileIsKeptAndCanBeEdited() {
+        CompanyResponse created = companyService.create(new CompanyRequest(
+                "Profile Co", "Asha Rao", "asha@profile.example", "+91 98765 43210", "27ABCDE1234F1Z5", "ABCDE1234F", "U12345MH2020PTC000001",
+                "12 MG Road", "Floor 3", "Pune", "Maharashtra", "411001", "Key account"));
+
+        assertThat(created.contactPersonName()).isEqualTo("Asha Rao");
+        assertThat(created.gstin()).isEqualTo("27ABCDE1234F1Z5");
+        assertThat(created.city()).isEqualTo("Pune");
+
+        CompanyResponse edited = companyService.update(created.id(), new CompanyRequest(
+                "Profile Co", "", null, null, "", null, null, null, null, "Mumbai", null, null, null));
+
+        assertThat(edited.contactPersonName()).isNull();
+        assertThat(edited.gstin()).isNull();
+        assertThat(edited.city()).isEqualTo("Mumbai");
     }
 }

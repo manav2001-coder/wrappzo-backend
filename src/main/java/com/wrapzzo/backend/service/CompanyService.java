@@ -1,5 +1,6 @@
 package com.wrapzzo.backend.service;
 
+import com.wrapzzo.backend.dto.CompanyRequest;
 import com.wrapzzo.backend.dto.CompanyResponse;
 import com.wrapzzo.backend.dto.PresignLogoUploadResponse;
 import com.wrapzzo.backend.exception.CompanyNotFoundException;
@@ -37,11 +38,13 @@ public class CompanyService {
     private final FileStorageService fileStorageService;
 
     @Transactional
-    public CompanyResponse create(String name) {
+    public CompanyResponse create(CompanyRequest request) {
         // saveAndFlush, not save -- companyNo is DB-generated (@Generated INSERT) and only
         // becomes readable on this entity once the physical INSERT actually runs, which a
         // plain save() defers until transaction commit, after the response below is built.
-        Company company = companyRepository.saveAndFlush(new Company(name));
+        Company company = new Company(request.name().trim());
+        applyProfile(company, request);
+        company = companyRepository.saveAndFlush(company);
         seedDefaultRoles(company);
         featureService.registerAll(company);
         return toResponse(company);
@@ -56,10 +59,30 @@ public class CompanyService {
     }
 
     @Transactional
-    public CompanyResponse update(UUID id, String name) {
+    public CompanyResponse update(UUID id, CompanyRequest request) {
         Company company = getEntity(id);
-        company.setName(name);
+        company.setName(request.name().trim());
+        applyProfile(company, request);
         return toResponse(company);
+    }
+
+    private static void applyProfile(Company company, CompanyRequest request) {
+        company.setContactPersonName(blankToNull(request.contactPersonName()));
+        company.setContactEmail(blankToNull(request.contactEmail()));
+        company.setContactMobile(blankToNull(request.contactMobile()));
+        company.setGstin(blankToNull(request.gstin()));
+        company.setPan(blankToNull(request.pan()));
+        company.setRegistrationNumber(blankToNull(request.registrationNumber()));
+        company.setAddressLine1(blankToNull(request.addressLine1()));
+        company.setAddressLine2(blankToNull(request.addressLine2()));
+        company.setCity(blankToNull(request.city()));
+        company.setState(blankToNull(request.state()));
+        company.setPincode(blankToNull(request.pincode()));
+        company.setNotes(blankToNull(request.notes()));
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     @Transactional

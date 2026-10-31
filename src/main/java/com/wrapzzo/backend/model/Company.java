@@ -45,6 +45,43 @@ public class Company {
     @Column(name = "logo_key", length = 500)
     private String logoKey;
 
+    @Column(name = "contact_person_name", length = 160)
+    private String contactPersonName;
+
+    @Column(name = "contact_email", length = 254)
+    private String contactEmail;
+
+    @Column(name = "contact_mobile", length = 20)
+    private String contactMobile;
+
+    @Column(length = 15)
+    private String gstin;
+
+    @Column(length = 10)
+    private String pan;
+
+    /** The company registration (CIN) number. */
+    @Column(name = "registration_number", length = 60)
+    private String registrationNumber;
+
+    @Column(name = "address_line1", length = 200)
+    private String addressLine1;
+
+    @Column(name = "address_line2", length = 200)
+    private String addressLine2;
+
+    @Column(length = 100)
+    private String city;
+
+    @Column(length = 100)
+    private String state;
+
+    @Column(length = 10)
+    private String pincode;
+
+    @Column(columnDefinition = "text")
+    private String notes;
+
     /** With Senior Artwork Approval on: how many managers above the MR sign off on artwork, 1-5 (V44). */
     @Column(name = "artwork_approval_levels", nullable = false)
     private int artworkApprovalLevels = 1;

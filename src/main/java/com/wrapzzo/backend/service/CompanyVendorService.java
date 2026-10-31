@@ -3,6 +3,15 @@ package com.wrapzzo.backend.service;
 import com.wrapzzo.backend.dto.AddCompanyVendorRequest;
 import com.wrapzzo.backend.dto.AddVendorRequest;
 import com.wrapzzo.backend.dto.CompanyVendorResponse;
+import com.wrapzzo.backend.dto.VendorCoverageRequest;
+import com.wrapzzo.backend.dto.VendorCoverageResponse;
+import com.wrapzzo.backend.exception.ConflictException;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Set;
+
 import com.wrapzzo.backend.exception.CompanyNotFoundException;
 import com.wrapzzo.backend.exception.CompanyVendorNotFoundException;
 import com.wrapzzo.backend.exception.OrgUnitNotFoundException;
@@ -65,6 +74,82 @@ public class CompanyVendorService {
             // Already mapped this exact way (same vendor, same org-unit scope) -- idempotent, not an error.
         }
         return list(companyId);
+    }
+
+    // --- the vendor's side: where it serves ---
+
+    /** The companies a vendor serves and, for each, the org units it is limited to (none = the whole company). */
+    @Transactional(readOnly = true)
+    public VendorCoverageResponse coverage(UUID vendorId) {
+        vendorRepository.findById(vendorId).orElseThrow(() -> new VendorNotFoundException(vendorId));
+        Map<UUID, VendorCoverageResponse.CompanyCoverage> byCompany = new LinkedHashMap<>();
+        for (CompanyVendor mapping : companyVendorRepository.findByVendor_Id(vendorId)) {
+            VendorCoverageResponse.CompanyCoverage entry = byCompany.computeIfAbsent(
+                    mapping.getCompany().getId(),
+                    id -> new VendorCoverageResponse.CompanyCoverage(id, mapping.getCompany().getName(), new ArrayList<>()));
+            if (mapping.getOrgUnit() != null) {
+                entry.orgUnitIds().add(mapping.getOrgUnit().getId());
+            }
+        }
+        // A company-wide mapping makes the company served in whole, whatever units are also listed.
+        for (CompanyVendor mapping : companyVendorRepository.findByVendor_Id(vendorId)) {
+            if (mapping.getOrgUnit() == null) {
+                byCompany.get(mapping.getCompany().getId()).orgUnitIds().clear();
+            }
+        }
+        return new VendorCoverageResponse(List.copyOf(byCompany.values()));
+    }
+
+    /**
+     * Replaces where a vendor serves: the companies listed, each whole or limited to the org units
+     * named. Anything the vendor served that is no longer listed is removed; nothing else is touched.
+     */
+    @Transactional
+    public VendorCoverageResponse replaceCoverage(UUID vendorId, VendorCoverageRequest request) {
+        Vendor vendor = vendorRepository.findById(vendorId).orElseThrow(() -> new VendorNotFoundException(vendorId));
+        Set<String> wanted = new HashSet<>();
+        Set<UUID> seenCompanies = new HashSet<>();
+        for (VendorCoverageRequest.Entry entry : request.companies()) {
+            if (!seenCompanies.add(entry.companyId())) {
+                throw new ConflictException("A company is listed twice");
+            }
+            Company company = requireCompany(entry.companyId());
+            List<UUID> unitIds = entry.orgUnitIds() == null ? List.of() : entry.orgUnitIds();
+            if (unitIds.isEmpty()) {
+                wanted.add(key(company.getId(), null));
+            }
+            for (UUID unitId : unitIds) {
+                orgUnitRepository.findById(unitId)
+                        .filter(unit -> unit.getCompany().getId().equals(company.getId()))
+                        .orElseThrow(() -> new OrgUnitNotFoundException(unitId));
+                wanted.add(key(company.getId(), unitId));
+            }
+        }
+        Set<String> have = new HashSet<>();
+        for (CompanyVendor mapping : companyVendorRepository.findByVendor_Id(vendorId)) {
+            String mappingKey = key(mapping.getCompany().getId(), mapping.getOrgUnit() != null ? mapping.getOrgUnit().getId() : null);
+            if (wanted.contains(mappingKey)) {
+                have.add(mappingKey);
+            } else {
+                companyVendorRepository.delete(mapping);
+            }
+        }
+        companyVendorRepository.flush();
+        for (VendorCoverageRequest.Entry entry : request.companies()) {
+            Company company = requireCompany(entry.companyId());
+            List<UUID> unitIds = entry.orgUnitIds() == null || entry.orgUnitIds().isEmpty() ? java.util.Collections.singletonList(null) : entry.orgUnitIds();
+            for (UUID unitId : unitIds) {
+                if (!have.contains(key(company.getId(), unitId))) {
+                    OrgUnit unit = unitId != null ? orgUnitRepository.findById(unitId).orElseThrow(() -> new OrgUnitNotFoundException(unitId)) : null;
+                    companyVendorRepository.save(new CompanyVendor(company, vendor, unit));
+                }
+            }
+        }
+        return coverage(vendorId);
+    }
+
+    private static String key(UUID companyId, UUID orgUnitId) {
+        return companyId + ":" + (orgUnitId != null ? orgUnitId : "all");
     }
 
     /** Removes one mapping -- a vendor serving the whole company, or one org unit -- leaving its other mappings. */

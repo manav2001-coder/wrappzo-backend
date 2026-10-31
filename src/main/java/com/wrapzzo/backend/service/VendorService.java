@@ -10,6 +10,7 @@ import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.model.Vendor;
 import com.wrapzzo.backend.model.VendorInviteToken;
 import com.wrapzzo.backend.model.VendorStatus;
+import com.wrapzzo.backend.repository.CompanyVendorRepository;
 import com.wrapzzo.backend.repository.UserRepository;
 import com.wrapzzo.backend.repository.VendorInviteTokenRepository;
 import com.wrapzzo.backend.repository.VendorRepository;
@@ -32,6 +33,7 @@ public class VendorService {
 
     private final VendorRepository vendorRepository;
     private final VendorInviteTokenRepository vendorInviteTokenRepository;
+    private final CompanyVendorRepository companyVendorRepository;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final EmailSender emailSender;
@@ -41,6 +43,7 @@ public class VendorService {
     public VendorService(
             VendorRepository vendorRepository,
             VendorInviteTokenRepository vendorInviteTokenRepository,
+            CompanyVendorRepository companyVendorRepository,
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,
             EmailSender emailSender,
@@ -48,6 +51,7 @@ public class VendorService {
             @Value("${app.frontend-base-url}") String frontendBaseUrl) {
         this.vendorRepository = vendorRepository;
         this.vendorInviteTokenRepository = vendorInviteTokenRepository;
+        this.companyVendorRepository = companyVendorRepository;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.emailSender = emailSender;
@@ -75,8 +79,12 @@ public class VendorService {
         return VendorResponse.from(vendor);
     }
 
-    public List<VendorResponse> list() {
-        return vendorRepository.findAll().stream().map(VendorResponse::from).toList();
+    /** Every vendor; with a company, only those serving it (in whole or in any of its org units). */
+    public List<VendorResponse> list(UUID companyId) {
+        List<Vendor> vendors = companyId == null
+                ? vendorRepository.findAll()
+                : vendorRepository.findAllById(companyVendorRepository.findVendorIdsByCompany(companyId));
+        return vendors.stream().map(VendorResponse::from).toList();
     }
 
     public VendorResponse view(UUID id) {

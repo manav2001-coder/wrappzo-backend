@@ -2,10 +2,9 @@ package com.wrapzzo.backend.controller;
 
 import com.wrapzzo.backend.dto.AttachLogoRequest;
 import com.wrapzzo.backend.dto.CompanyResponse;
-import com.wrapzzo.backend.dto.CreateCompanyRequest;
+import com.wrapzzo.backend.dto.CompanyRequest;
 import com.wrapzzo.backend.dto.PresignLogoUploadRequest;
 import com.wrapzzo.backend.dto.PresignLogoUploadResponse;
-import com.wrapzzo.backend.dto.UpdateCompanyRequest;
 import com.wrapzzo.backend.model.CompanyStatus;
 import com.wrapzzo.backend.security.Permission.Keys;
 import com.wrapzzo.backend.security.RequiresPermission;
@@ -30,8 +29,8 @@ public class CompanyController {
 
     @PostMapping("/add")
     @RequiresPermission(Keys.PLATFORM_COMPANY_CREATE)
-    public CompanyResponse add(@Valid @RequestBody CreateCompanyRequest request) {
-        return companyService.create(request.name());
+    public CompanyResponse add(@Valid @RequestBody CompanyRequest request) {
+        return companyService.create(request);
     }
 
     @GetMapping("/list")
@@ -48,8 +47,8 @@ public class CompanyController {
 
     @PostMapping("/edit/{id}")
     @RequiresPermission(Keys.PLATFORM_COMPANY_EDIT)
-    public CompanyResponse edit(@PathVariable UUID id, @Valid @RequestBody UpdateCompanyRequest request) {
-        return companyService.update(id, request.name());
+    public CompanyResponse edit(@PathVariable UUID id, @Valid @RequestBody CompanyRequest request) {
+        return companyService.update(id, request);
     }
 
     @PostMapping("/activate/{id}")
