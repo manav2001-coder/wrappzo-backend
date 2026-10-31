@@ -48,6 +48,23 @@ public class Template {
     @Column
     private String description;
 
+    /** Derived once from the owner and the name; never re-derived on rename. */
+    @Column(name = "template_key", nullable = false)
+    private String templateKey;
+
+    /** UI hints. */
+    @Column(length = 50)
+    private String icon;
+
+    @Column(length = 255)
+    private String path;
+
+    @Column(name = "created_by_name", length = 200)
+    private String createdByName;
+
+    @Column(name = "updated_by_name", length = 200)
+    private String updatedByName;
+
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
 
@@ -77,6 +94,13 @@ public class Template {
         this.company = company;
         this.name = name;
         this.description = description;
+        this.templateKey = deriveKey(company, name);
+    }
+
+    /** {@code c<company number>_<snake_cased name>}, or {@code system_...}: set once, never re-derived on rename. */
+    private static String deriveKey(Company company, String name) {
+        String owner = company == null ? "system" : "c" + company.getCompanyNo();
+        return owner + "_" + name.trim().toLowerCase().replaceAll("[^a-z0-9]+", "_").replaceAll("^_+|_+$", "");
     }
 
     public boolean isSystem() {

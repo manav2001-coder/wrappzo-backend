@@ -2,6 +2,7 @@ package com.wrapzzo.backend.service;
 
 import com.wrapzzo.backend.model.AccessControl;
 import com.wrapzzo.backend.model.AccessControlType;
+import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.repository.AccessControlRepository;
 import com.wrapzzo.backend.repository.CompanyAccessControlRepository;
@@ -32,7 +33,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  * {@link TemplateGraph}). The platform Super Admin role instead holds every FUNCTIONAL key.
  *
  * <p>Cached in Redis per user. Invalidation is generational, like VisibilityService: the
- * generation is part of every cache key and {@link #invalidateAfterCommit()} bumps it, so any change to a
+ * generation is part of every cache key and {@link #invalidateAfterCommit(UUID)} bumps it, so any change to a
  * template, a mapping or a user's role refreshes everyone without tracking who it touches. Old
  * generations expire on their own. If Redis is unavailable the keys are computed directly.
  */
@@ -57,10 +58,13 @@ public class AccessControlCacheService {
     public Set<String> resolveEffectiveKeys(UUID userId) {
         String cacheKey = null;
         try {
-            cacheKey = KEY_PREFIX + generation() + ":" + userId;
+            cacheKey = KEY_PREFIX + generation(GENERATION_KEY) + ":" + userId;
             String cached = redisTemplate.opsForValue().get(cacheKey);
             if (cached != null) {
-                return decode(cached);
+                Set<String> keys = decodeIfFresh(cached);
+                if (keys != null) {
+                    return keys;
+                }
             }
         } catch (RuntimeException e) {
             log.warn("Permission cache unavailable, computing directly: {}", e.getMessage());
@@ -68,14 +72,28 @@ public class AccessControlCacheService {
         }
         User user = userRepository.findById(userId).orElse(null);
         Set<String> keys = user == null ? Set.of() : compute(user);
-        if (cacheKey != null) {
+        if (cacheKey != null && user != null) {
             try {
-                redisTemplate.opsForValue().set(cacheKey, String.join(",", keys), CACHE_TTL);
+                String companyId = user.getCompany() != null ? user.getCompany().getId().toString() : "";
+                String companyGeneration = user.getCompany() != null ? generation(companyGenerationKey(user.getCompany().getId())) : "";
+                redisTemplate.opsForValue().set(cacheKey, companyId + "|" + companyGeneration + "|" + String.join(",", keys), CACHE_TTL);
             } catch (RuntimeException e) {
                 log.warn("Could not cache permissions: {}", e.getMessage());
             }
         }
         return keys;
+    }
+
+    /** The cached keys, unless their company's generation has moved on since they were stored. */
+    private Set<String> decodeIfFresh(String cached) {
+        String[] parts = cached.split("\\|", 3);
+        if (parts.length < 3) {
+            return null;
+        }
+        if (!parts[0].isEmpty() && !parts[1].equals(generation(companyGenerationKey(UUID.fromString(parts[0]))))) {
+            return null;
+        }
+        return decode(parts[2]);
     }
 
     /** For call sites that already hold the user. */
@@ -118,23 +136,28 @@ public class AccessControlCacheService {
         return new TemplateGraph(edges, directKeys);
     }
 
-    /** Refreshes everyone's keys once the surrounding transaction commits (at once when there is none). */
-    public void invalidateAfterCommit() {
+    /** Refreshes one company's keys once the surrounding transaction commits; no company (a system template) means everyone's. */
+    public void invalidateAfterCommit(Company company) {
+        invalidateAfterCommit(company != null ? company.getId() : null);
+    }
+
+    public void invalidateAfterCommit(UUID companyId) {
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    invalidateAll();
+                    invalidate(companyId);
                 }
             });
         } else {
-            invalidateAll();
+            invalidate(companyId);
         }
     }
 
-    public void invalidateAll() {
+    /** Bumps one company's generation (or the global one for {@code null}), orphaning its cached entries. */
+    public void invalidate(UUID companyId) {
         try {
-            redisTemplate.opsForValue().increment(GENERATION_KEY);
+            redisTemplate.opsForValue().increment(companyId == null ? GENERATION_KEY : companyGenerationKey(companyId));
         } catch (RuntimeException e) {
             log.warn("Could not invalidate cached permissions: {}", e.getMessage());
         }
@@ -145,7 +168,7 @@ public class AccessControlCacheService {
      * migrations change grants straight in Postgres, bypassing the invalidation above.
      */
     public long clearAll() {
-        invalidateAll();
+        invalidate(null);
         List<String> keys = new ArrayList<>();
         try (Cursor<String> cursor = redisTemplate.scan(ScanOptions.scanOptions().match(KEY_PREFIX + "*").count(500).build())) {
             cursor.forEachRemaining(keys::add);
@@ -157,9 +180,13 @@ public class AccessControlCacheService {
         return deleted != null ? deleted : 0;
     }
 
-    private String generation() {
-        String generation = redisTemplate.opsForValue().get(GENERATION_KEY);
+    private String generation(String key) {
+        String generation = redisTemplate.opsForValue().get(key);
         return generation != null ? generation : "0";
+    }
+
+    private static String companyGenerationKey(UUID companyId) {
+        return GENERATION_KEY + ":" + companyId;
     }
 
     private static Set<String> decode(String encoded) {

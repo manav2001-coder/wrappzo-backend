@@ -7,13 +7,11 @@ import com.wrapzzo.backend.exception.ConflictException;
 import com.wrapzzo.backend.exception.RoleNotFoundException;
 import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.Role;
-import com.wrapzzo.backend.model.Template;
 import com.wrapzzo.backend.repository.CompanyRepository;
 import com.wrapzzo.backend.repository.RoleRepository;
 import com.wrapzzo.backend.repository.UserRepository;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -35,7 +33,6 @@ public class RoleService {
     private final UserRepository userRepository;
     private final CompanyRepository companyRepository;
     private final CompanyAccessGuard companyAccessGuard;
-    private final TemplateService templateService;
     private final AccessControlCacheService accessControlCacheService;
 
     @Transactional(readOnly = true)
@@ -47,6 +44,17 @@ public class RoleService {
                 .toList();
     }
 
+    /** A role of the caller's company (platform staff: any), with its users and templates. */
+    @Transactional(readOnly = true)
+    public RoleResponse get(UUID roleId) {
+        Role role = roleRepository.findById(roleId).orElseThrow(() -> new RoleNotFoundException(roleId));
+        if (role.getCompany() == null) {
+            throw new RoleNotFoundException(roleId);
+        }
+        companyAccessGuard.requireOwnCompanyOrPlatformStaff(role.getCompany().getId());
+        return toResponse(role);
+    }
+
     @Transactional
     public RoleResponse create(UUID companyId, RoleRequest request) {
         companyAccessGuard.requireOwnCompanyOrPlatformStaff(companyId);
@@ -55,13 +63,8 @@ public class RoleService {
         requireNameFree(companyId, name, null);
         Role role = new Role(company, name);
         role.setDescription(blankToNull(request.description()));
-        if (request.templateIds() != null) {
-            List<Template> wanted = templateService.requireAssignable(companyId, request.templateIds());
-            templateService.requireGrantable(wanted);
-            role.getTemplates().addAll(wanted);
-        }
         roleRepository.save(role);
-        accessControlCacheService.invalidateAfterCommit();
+        accessControlCacheService.invalidateAfterCommit(companyId);
         return toResponse(role);
     }
 
@@ -81,24 +84,7 @@ public class RoleService {
         role.setName(name);
         role.setDescription(blankToNull(request.description()));
         role.setActive(active);
-        accessControlCacheService.invalidateAfterCommit();
-        return toResponse(role);
-    }
-
-    @Transactional
-    public RoleResponse replaceTemplates(UUID companyId, UUID roleId, Set<UUID> templateIds) {
-        companyAccessGuard.requireOwnCompanyOrPlatformStaff(companyId);
-        Role role = getEntity(companyId, roleId);
-        List<Template> wanted = templateService.requireAssignable(companyId, templateIds);
-        if (isProtected(role) && wanted.isEmpty()) {
-            // Company Admin repairs access for everyone; emptying it would lock the company out of that.
-            throw new ConflictException("\"" + role.getName() + "\" must keep at least one template");
-        }
-        Set<UUID> already = role.getTemplates().stream().map(Template::getId).collect(java.util.stream.Collectors.toSet());
-        templateService.requireGrantable(wanted.stream().filter(template -> !already.contains(template.getId())).toList());
-        role.getTemplates().clear();
-        role.getTemplates().addAll(wanted);
-        accessControlCacheService.invalidateAfterCommit();
+        accessControlCacheService.invalidateAfterCommit(companyId);
         return toResponse(role);
     }
 
@@ -113,7 +99,7 @@ public class RoleService {
             throw new ConflictException("Move this role's users to another role before removing it");
         }
         roleRepository.delete(role);
-        accessControlCacheService.invalidateAfterCommit();
+        accessControlCacheService.invalidateAfterCommit(companyId);
     }
 
     /** A role of the company, or 404 -- another company's role id is never confirmed to exist. */

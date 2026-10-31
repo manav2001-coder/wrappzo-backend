@@ -2,7 +2,6 @@ package com.wrapzzo.backend.controller;
 
 import com.wrapzzo.backend.dto.RoleRequest;
 import com.wrapzzo.backend.dto.RoleResponse;
-import com.wrapzzo.backend.dto.TemplateIdsRequest;
 import com.wrapzzo.backend.security.Permission.Keys;
 import com.wrapzzo.backend.security.RequiresPermission;
 import com.wrapzzo.backend.service.RoleService;
@@ -46,12 +45,6 @@ public class RoleController {
     @RequiresPermission(Keys.ROLE_EDIT)
     public RoleResponse update(@PathVariable UUID companyId, @PathVariable UUID roleId, @Valid @RequestBody RoleRequest request) {
         return roleService.update(companyId, roleId, request);
-    }
-
-    @PutMapping("/{roleId}/templates")
-    @RequiresPermission(Keys.ROLE_EDIT)
-    public RoleResponse replaceTemplates(@PathVariable UUID companyId, @PathVariable UUID roleId, @Valid @RequestBody TemplateIdsRequest request) {
-        return roleService.replaceTemplates(companyId, roleId, request.templateIds());
     }
 
     @DeleteMapping("/{roleId}")

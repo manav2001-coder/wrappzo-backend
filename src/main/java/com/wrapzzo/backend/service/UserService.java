@@ -194,7 +194,7 @@ public class UserService {
         // one delete into the point where all of this batch's write cost actually lands.
         userRepository.saveAll(toSave);
         userRepository.flush();
-        accessControlCacheService.invalidateAfterCommit();
+        accessControlCacheService.invalidateAfterCommit(companyId);
 
         for (BulkImportUserRow row : rows) {
             String reportsToEmail = blankToNull(row.reportsToEmail());
@@ -213,6 +213,20 @@ public class UserService {
 
         List<UserResponse> responses = rows.stream().map(row -> UserResponse.from(byEmail.get(normalizedEmail(row.email())))).toList();
         return new BulkImportUsersResponse(createdCount, updatedCount, responses);
+    }
+
+    /** One user of the caller's company that the caller can see (platform staff: any company's). */
+    @Transactional(readOnly = true)
+    public UserResponse get(UUID userId) {
+        User user = userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException(userId));
+        if (user.getCompany() == null) {
+            throw new UserNotFoundException(userId);
+        }
+        companyAccessGuard.requireOwnCompanyOrPlatformStaff(user.getCompany().getId());
+        if (!visibilityService.resolve(currentUser()).canSeeUser(user)) {
+            throw new UserNotFoundException(userId);
+        }
+        return UserResponse.from(user);
     }
 
     @Transactional(readOnly = true)
@@ -289,7 +303,7 @@ public class UserService {
         user.setCompanyWide(true);
         userRepository.save(user);
         eventPublisher.publishEvent(new CompanyStructureChangedEvent(companyId));
-        accessControlCacheService.invalidateAfterCommit();
+        accessControlCacheService.invalidateAfterCommit(companyId);
         return UserResponse.from(user);
     }
 
@@ -312,7 +326,7 @@ public class UserService {
         user.setRole(role);
         userRepository.save(user);
         eventPublisher.publishEvent(new CompanyStructureChangedEvent(companyId));
-        accessControlCacheService.invalidateAfterCommit();
+        accessControlCacheService.invalidateAfterCommit(companyId);
         return UserResponse.from(user);
     }
 
@@ -341,7 +355,7 @@ public class UserService {
 
         user.setRole(role);
         userRepository.save(user);
-        accessControlCacheService.invalidateAfterCommit();
+        accessControlCacheService.invalidateAfterCommit(companyId);
         return UserResponse.from(user);
     }
 

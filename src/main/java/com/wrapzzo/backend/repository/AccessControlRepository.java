@@ -11,6 +11,8 @@ public interface AccessControlRepository extends JpaRepository<AccessControl, UU
 
     Optional<AccessControl> findByKey(String key);
 
+    List<AccessControl> findByKeyIn(java.util.Collection<String> keys);
+
     /** Super Admin's blanket-access set (see AccessControlCacheService) -- every FUNCTIONAL key, dynamically. */
     List<AccessControl> findByType(AccessControlType type);
 
