@@ -232,10 +232,13 @@ public class UserService {
     @Transactional(readOnly = true)
     public List<UserResponse> listByCompany(UUID companyId) {
         companyAccessGuard.requireOwnCompanyOrPlatformStaff(companyId);
-        Visibility visibility = visibilityService.resolve(currentUser());
+        User caller = currentUser();
+        Visibility visibility = visibilityService.resolve(caller);
+        // The caller owns themselves for visibility, but the Users list is "the people I look after".
         return userRepository
                 .findVisibleInCompany(companyId, visibility.companyWide(), visibility.peopleForQuery(), visibility.orgUnitsForQuery())
                 .stream()
+                .filter(user -> !user.getId().equals(caller.getId()))
                 .map(UserResponse::from)
                 .toList();
     }
