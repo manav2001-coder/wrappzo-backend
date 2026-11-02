@@ -72,7 +72,10 @@ public class AccessControlCacheService {
         }
         User user = userRepository.findById(userId).orElse(null);
         Set<String> keys = user == null ? Set.of() : compute(user);
-        if (cacheKey != null && user != null) {
+        // An empty set is never cached: it is what a user holds before their role is given any
+        // templates, and caching it would hide a later grant (made outside the app's own
+        // invalidation) for the full TTL. Recomputing an empty set is cheap.
+        if (cacheKey != null && user != null && !keys.isEmpty()) {
             try {
                 String companyId = user.getCompany() != null ? user.getCompany().getId().toString() : "";
                 String companyGeneration = user.getCompany() != null ? generation(companyGenerationKey(user.getCompany().getId())) : "";
