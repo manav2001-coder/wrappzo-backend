@@ -1,5 +1,7 @@
 package com.wrapzzo.backend.service;
 
+import com.wrapzzo.backend.dto.BulkDoctorRow;
+import com.wrapzzo.backend.dto.BulkDoctorsResponse;
 import com.wrapzzo.backend.dto.CreateRecipientRequest;
 import com.wrapzzo.backend.dto.DoctorDetails;
 import com.wrapzzo.backend.dto.RecipientResponse;
@@ -9,6 +11,7 @@ import com.wrapzzo.backend.exception.RecipientAlreadyExistsException;
 import com.wrapzzo.backend.exception.RecipientNotFoundException;
 import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.Recipient;
+import com.wrapzzo.backend.model.RecipientAssignment;
 import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.repository.RecipientAssignmentRepository;
 import com.wrapzzo.backend.repository.RecipientRepository;
@@ -81,7 +84,10 @@ public class RecipientService {
 
     @Transactional
     public RecipientResponse create(CreateRecipientRequest request) {
-        User user = currentUser();
+        return RecipientResponse.from(createEntity(currentUser(), request));
+    }
+
+    private Recipient createEntity(User user, CreateRecipientRequest request) {
         Company company = user.getCompany();
         String email = blankToNull(request.email());
         DoctorDetails doctor = DoctorDetails.orEmpty(request.doctor());
@@ -93,7 +99,91 @@ public class RecipientService {
         Recipient recipient = new Recipient(
                 company, request.name().trim(), request.phone().trim(), email, blankToNull(request.address()), request.dateOfBirth(), user);
         applyDoctorDetails(recipient, doctor);
-        return RecipientResponse.from(recipientRepository.save(recipient));
+        return recipientRepository.save(recipient);
+    }
+
+    /**
+     * An MR adds a doctor to their own list -- no approval. A doctor already in the directory under
+     * the same registration number is the same doctor: they join this MR's list rather than
+     * becoming a duplicate (which the V36 unique index would also refuse).
+     */
+    @Transactional
+    public RecipientResponse createMine(CreateRecipientRequest request) {
+        User user = currentUser();
+        DoctorDetails doctor = DoctorDetails.orEmpty(request.doctor());
+        Recipient recipient = doctor.registrationNumber() == null
+                ? null
+                : recipientRepository
+                        .findFirstByCompany_IdAndRegistrationNumberIgnoreCase(user.getCompany().getId(), doctor.registrationNumber())
+                        .orElse(null);
+        if (recipient == null) {
+            recipient = createEntity(user, request);
+        }
+        if (!recipientAssignmentRepository.existsByRecipient_IdAndMrUser_Id(recipient.getId(), user.getId())) {
+            recipientAssignmentRepository.save(new RecipientAssignment(recipient, user));
+        }
+        return RecipientResponse.from(recipient);
+    }
+
+    /**
+     * Adds a whole sheet of doctors to the caller's list, all or none. A row that matches a doctor
+     * already in the company (same registration number, or same name + phone + email) is that
+     * doctor: it joins the list instead of becoming a duplicate.
+     */
+    @Transactional
+    public BulkDoctorsResponse bulkCreateMine(List<BulkDoctorRow> rows) {
+        User user = currentUser();
+        UUID companyId = user.getCompany().getId();
+        int created = 0;
+        int joined = 0;
+        int unchanged = 0;
+        for (BulkDoctorRow row : rows) {
+            String email = blankToNull(row.email());
+            DoctorDetails doctor = DoctorDetails.orEmpty(row.doctor());
+            Recipient recipient = doctor.registrationNumber() == null
+                    ? null
+                    : recipientRepository.findFirstByCompany_IdAndRegistrationNumberIgnoreCase(companyId, doctor.registrationNumber()).orElse(null);
+            if (recipient == null) {
+                recipient = recipientRepository
+                        .findMatch(companyId, normalizedName(row.name()), row.phone().trim(), normalizedEmail(email))
+                        .orElse(null);
+            }
+            boolean isNew = recipient == null;
+            if (isNew) {
+                recipient = new Recipient(
+                        user.getCompany(), row.name().trim(), row.phone().trim(), email, blankToNull(row.address()), row.dateOfBirth(), user);
+                applyDoctorDetails(recipient, doctor);
+                recipient = recipientRepository.save(recipient);
+            }
+            if (recipientAssignmentRepository.existsByRecipient_IdAndMrUser_Id(recipient.getId(), user.getId())) {
+                unchanged++;
+                continue;
+            }
+            recipientAssignmentRepository.save(new RecipientAssignment(recipient, user));
+            if (isNew) {
+                created++;
+            } else {
+                joined++;
+            }
+        }
+        return new BulkDoctorsResponse(created, joined, unchanged);
+    }
+
+    /** Edits a doctor on the caller's own list. Anything not on it is a 404, like a doctor that doesn't exist. */
+    @Transactional
+    public RecipientResponse updateMine(UUID id, UpdateRecipientRequest request) {
+        User user = currentUser();
+        RecipientAssignment assignment = recipientAssignmentRepository
+                .findByRecipient_IdAndMrUser_Id(id, user.getId())
+                .orElseThrow(() -> new RecipientNotFoundException(id));
+        return RecipientResponse.from(applyUpdate(assignment.getRecipient(), request));
+    }
+
+    /** Takes a doctor off the caller's list; the doctor stays in the directory, so past orders keep pointing at them. */
+    @Transactional
+    public void removeMine(UUID id) {
+        User user = currentUser();
+        recipientAssignmentRepository.findByRecipient_IdAndMrUser_Id(id, user.getId()).ifPresent(recipientAssignmentRepository::delete);
     }
 
     /** Trusted server-side lookup for "an existing doctor was picked" flows (e.g. Quick Gift) -- never trust client-typed fields for an id the client only chose, not typed. */
@@ -104,7 +194,11 @@ public class RecipientService {
 
     @Transactional
     public RecipientResponse update(UUID id, UpdateRecipientRequest request) {
-        Recipient recipient = getEntity(id);
+        return RecipientResponse.from(applyUpdate(getEntity(id), request));
+    }
+
+    private Recipient applyUpdate(Recipient recipient, UpdateRecipientRequest request) {
+        UUID id = recipient.getId();
         String email = blankToNull(request.email());
         recipientRepository
                 .findMatchExcluding(recipient.getCompany().getId(), id, normalizedName(request.name()), request.phone().trim(), normalizedEmail(email))
@@ -122,7 +216,7 @@ public class RecipientService {
             rejectDuplicateRegistration(recipient.getCompany().getId(), doctor, id);
             applyDoctorDetails(recipient, doctor);
         }
-        return RecipientResponse.from(recipient);
+        return recipient;
     }
 
     private void rejectDuplicateRegistration(UUID companyId, DoctorDetails doctor, UUID excludeId) {

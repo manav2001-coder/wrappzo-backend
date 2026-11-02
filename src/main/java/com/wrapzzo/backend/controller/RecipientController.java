@@ -1,5 +1,7 @@
 package com.wrapzzo.backend.controller;
 
+import com.wrapzzo.backend.dto.BulkDoctorsRequest;
+import com.wrapzzo.backend.dto.BulkDoctorsResponse;
 import com.wrapzzo.backend.dto.CreateRecipientRequest;
 import com.wrapzzo.backend.dto.RecipientResponse;
 import com.wrapzzo.backend.dto.UpcomingBirthdayResponse;
@@ -12,6 +14,9 @@ import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -47,6 +52,33 @@ public class RecipientController {
     @PreAuthorize("hasAnyAuthority('" + Keys.RECIPIENT_LIST_MANAGE + "', '" + Keys.REQUEST_CREATE + "')")
     public List<RecipientResponse> mine() {
         return recipientService.listMine();
+    }
+
+    /** An MR adds a doctor to their own list -- no approval step. */
+    @PostMapping("/mine")
+    @RequiresPermission(Keys.RECIPIENT_LIST_MANAGE)
+    public RecipientResponse createMine(@Valid @RequestBody CreateRecipientRequest request) {
+        return recipientService.createMine(request);
+    }
+
+    /** A sheet of doctors onto the caller's own list, all or none. */
+    @PostMapping("/mine/bulk")
+    @RequiresPermission(Keys.RECIPIENT_LIST_MANAGE)
+    public BulkDoctorsResponse bulkCreateMine(@Valid @RequestBody BulkDoctorsRequest request) {
+        return recipientService.bulkCreateMine(request.rows());
+    }
+
+    @PutMapping("/mine/{id}")
+    @RequiresPermission(Keys.RECIPIENT_LIST_MANAGE)
+    public RecipientResponse updateMine(@PathVariable UUID id, @Valid @RequestBody UpdateRecipientRequest request) {
+        return recipientService.updateMine(id, request);
+    }
+
+    @DeleteMapping("/mine/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @RequiresPermission(Keys.RECIPIENT_LIST_MANAGE)
+    public void removeMine(@PathVariable UUID id) {
+        recipientService.removeMine(id);
     }
 
     @PostMapping
