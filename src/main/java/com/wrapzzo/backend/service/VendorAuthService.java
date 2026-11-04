@@ -60,7 +60,7 @@ public class VendorAuthService {
 
     @Transactional
     public TokenPair login(String contactEmail, String rawPassword) {
-        Vendor vendor = vendorRepository.findByContactEmail(contactEmail).orElseThrow(InvalidCredentialsException::new);
+        Vendor vendor = vendorRepository.findByContactEmailIgnoreCase(contactEmail.trim()).orElseThrow(InvalidCredentialsException::new);
 
         if (vendor.getLockedUntil() != null && vendor.getLockedUntil().isAfter(Instant.now())) {
             throw new AccountLockedException(vendor.getLockedUntil());

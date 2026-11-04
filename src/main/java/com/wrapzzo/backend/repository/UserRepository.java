@@ -13,6 +13,9 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     Optional<User> findByEmail(String email);
 
+    /** Sign-in: an address matches whatever capitals it was stored or typed with. */
+    Optional<User> findByEmailIgnoreCase(String email);
+
     List<User> findByCompanyId(UUID companyId);
 
 

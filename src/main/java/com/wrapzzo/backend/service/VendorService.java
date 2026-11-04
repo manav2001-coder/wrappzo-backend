@@ -61,7 +61,7 @@ public class VendorService {
 
     @Transactional
     public VendorResponse add(AddVendorRequest request) {
-        if (vendorRepository.findByContactEmail(request.contactEmail()).isPresent()) {
+        if (vendorRepository.findByContactEmailIgnoreCase(request.contactEmail().trim()).isPresent()) {
             throw new VendorEmailAlreadyExistsException(request.contactEmail());
         }
 

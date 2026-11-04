@@ -11,5 +11,8 @@ public interface VendorRepository extends JpaRepository<Vendor, UUID> {
 
     Optional<Vendor> findByContactEmail(String contactEmail);
 
+    /** Sign-in and the duplicate check: an address matches whatever capitals it was stored or typed with. */
+    Optional<Vendor> findByContactEmailIgnoreCase(String contactEmail);
+
     List<Vendor> findByStatus(VendorStatus status);
 }

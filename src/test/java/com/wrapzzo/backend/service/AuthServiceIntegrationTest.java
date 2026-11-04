@@ -119,6 +119,11 @@ class AuthServiceIntegrationTest {
     }
 
     @Test
+    void loginIgnoresCapitalsAndStraySpacesInTheEmail() {
+        assertThat(authService.login("  " + user.getEmail().toUpperCase() + "  ", RAW_PASSWORD)).isNotNull();
+    }
+
+    @Test
     void loginWithWrongPasswordFails() {
         assertThatThrownBy(() -> authService.login(user.getEmail(), "wrong-password"))
                 .isInstanceOf(InvalidCredentialsException.class);

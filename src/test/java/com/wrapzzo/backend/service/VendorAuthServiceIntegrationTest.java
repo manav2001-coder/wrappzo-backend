@@ -91,6 +91,11 @@ class VendorAuthServiceIntegrationTest {
     }
 
     @Test
+    void loginIgnoresCapitalsAndStraySpacesInTheEmail() {
+        assertThat(vendorAuthService.login(" " + vendor.getContactEmail().toUpperCase() + " ", RAW_PASSWORD)).isNotNull();
+    }
+
+    @Test
     void loginWithWrongPasswordFails() {
         assertThatThrownBy(() -> vendorAuthService.login(vendor.getContactEmail(), "wrong"))
                 .isInstanceOf(InvalidCredentialsException.class);

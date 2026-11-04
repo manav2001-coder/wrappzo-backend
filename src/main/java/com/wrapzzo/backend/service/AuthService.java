@@ -79,7 +79,7 @@ public class AuthService {
 
     @Transactional
     public TokenPair login(String email, String rawPassword) {
-        User user = userRepository.findByEmail(email).orElseThrow(InvalidCredentialsException::new);
+        User user = userRepository.findByEmailIgnoreCase(email.trim()).orElseThrow(InvalidCredentialsException::new);
 
         if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(Instant.now())) {
             throw new AccountLockedException(user.getLockedUntil());
