@@ -27,9 +27,12 @@ public record VendorOrderResponse(
         String recipientPhone,
         /** The doctor's pcode -- printed on a personalised pad; null for a campaign order. */
         String recipientPcode,
-        /** The AM who raised the order, and their employee code (null if they have none) -- for the dispatch label. */
+        /** The AM who raised the order, and their employee code (null if they have none) -- for the dispatch label: the parcel goes to the AM, who hands it to the doctor. */
         String amName,
         String amCode,
+        String amMobile,
+        /** The AM's own org unit (zone / area) -- helps the warehouse route the parcel to them. Null if none. */
+        String amArea,
         /** Null until the recipient uploads one -- shown so the vendor can produce a personalized gift correctly. */
         String recipientPhotoUrl,
         /** The gift's raw price -- no markup, no commission. Null if the gift has no price set. */
@@ -75,6 +78,8 @@ public record VendorOrderResponse(
                 request != null ? request.getRecipientPcode() : null,
                 order.getOwner().getName(),
                 order.getOwner().getEmployeeCode(),
+                order.getOwner().getMobile(),
+                order.getOwner().getOrgUnit() != null ? order.getOwner().getOrgUnit().getName() : null,
                 recipientPhotoUrl,
                 order.getGift() != null ? order.getGift().getPrice() : null,
                 order.getQuantity(),

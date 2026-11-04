@@ -103,6 +103,7 @@ class OrderServiceIntegrationTest {
         // The dispatch label names the AM who raised the order.
         assertThat(orders.get(0).amName()).isEqualTo(mine.getOwner().getName());
         assertThat(orders.get(0).amCode()).isEqualTo(mine.getOwner().getEmployeeCode());
+        assertThat(orders.get(0).amMobile()).isEqualTo(mine.getOwner().getMobile());
     }
 
     @Test
