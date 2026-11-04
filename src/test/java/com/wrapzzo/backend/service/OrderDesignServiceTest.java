@@ -23,6 +23,7 @@ import com.wrapzzo.backend.model.Vendor;
 import com.wrapzzo.backend.repository.OrderDesignApprovalRepository;
 import com.wrapzzo.backend.repository.OrderDesignRepository;
 import com.wrapzzo.backend.repository.OrderRepository;
+import com.wrapzzo.backend.repository.QuickGiftRequestRepository;
 import com.wrapzzo.backend.repository.UserRepository;
 import com.wrapzzo.backend.repository.VendorRepository;
 import java.util.ArrayList;
@@ -54,7 +55,7 @@ class OrderDesignServiceTest {
     private final FileStorageService files = mock(FileStorageService.class);
 
     private final OrderDesignService service = new OrderDesignService(designs, approvals, orders,
-            mock(VendorRepository.class), users, files, visibility, flags, keys);
+            mock(QuickGiftRequestRepository.class), mock(VendorRepository.class), users, files, visibility, flags, keys);
 
     private final List<OrderDesignApproval> trail = new ArrayList<>();
     private final Company company = new Company();

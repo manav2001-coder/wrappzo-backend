@@ -360,6 +360,11 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
     }
 
+    @ExceptionHandler(InvalidArtworkFileException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidArtworkFile(InvalidArtworkFileException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+    }
+
     @ExceptionHandler(RecipientNotFoundException.class)
     public ResponseEntity<Map<String, String>> handleRecipientNotFound(RecipientNotFoundException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));

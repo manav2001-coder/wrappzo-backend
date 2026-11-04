@@ -5,6 +5,8 @@ import com.wrapzzo.backend.dto.ArtworkApprovalStep;
 import com.wrapzzo.backend.dto.OrderDesignResponse;
 import com.wrapzzo.backend.dto.PendingArtworkApprovalResponse;
 import com.wrapzzo.backend.dto.PresignOrderDesignResponse;
+import com.wrapzzo.backend.exception.ConflictException;
+import com.wrapzzo.backend.exception.InvalidArtworkFileException;
 import com.wrapzzo.backend.exception.OrderDesignAlreadyReviewedException;
 import com.wrapzzo.backend.exception.OrderDesignNotFoundException;
 import com.wrapzzo.backend.exception.OrderNotFoundException;
@@ -14,10 +16,12 @@ import com.wrapzzo.backend.model.OrderDesign;
 import com.wrapzzo.backend.model.OrderDesignApproval;
 import com.wrapzzo.backend.model.OrderDesignDecision;
 import com.wrapzzo.backend.model.OrderDesignStatus;
+import com.wrapzzo.backend.model.QuickGiftRequest;
 import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.model.Vendor;
 import com.wrapzzo.backend.repository.OrderDesignApprovalRepository;
 import com.wrapzzo.backend.repository.OrderDesignRepository;
+import com.wrapzzo.backend.repository.QuickGiftRequestRepository;
 import com.wrapzzo.backend.repository.OrderRepository;
 import com.wrapzzo.backend.repository.UserRepository;
 import com.wrapzzo.backend.repository.VendorRepository;
@@ -56,6 +60,7 @@ public class OrderDesignService {
     private final OrderDesignRepository orderDesignRepository;
     private final OrderDesignApprovalRepository orderDesignApprovalRepository;
     private final OrderRepository orderRepository;
+    private final QuickGiftRequestRepository quickGiftRequestRepository;
     private final VendorRepository vendorRepository;
     private final UserRepository userRepository;
     private final FileStorageService fileStorageService;
@@ -63,22 +68,58 @@ public class OrderDesignService {
     private final CompanyFeatureFlagService companyFeatureFlagService;
     private final AccessControlCacheService accessControlCacheService;
 
+    private static final String PDF_CONTENT_TYPE = "application/pdf";
+
     // --- Vendor side: only orders assigned to them. ---
 
+    /** Proofs are PDFs, named PCODE_AMCODE_vN.pdf: the doctor's pcode, the ordering AM's code (their name if they have none), the version. */
     public PresignOrderDesignResponse presignForVendor(UUID orderId, UUID vendorId, String contentType) {
+        String type = contentType == null ? "" : contentType.split(";")[0].trim();
+        if (!PDF_CONTENT_TYPE.equalsIgnoreCase(type)) {
+            throw new InvalidArtworkFileException("Artwork must be a PDF.");
+        }
         Order order = getEntityForVendor(orderId, vendorId);
-        String key = "order-designs/%s/%s".formatted(order.getId(), UUID.randomUUID());
-        String uploadUrl = fileStorageService.presignUpload(key, contentType, UPLOAD_URL_EXPIRY);
-        return new PresignOrderDesignResponse(uploadUrl, key);
+        String fileName = artworkFileName(order, orderDesignRepository.countByOrder_Id(order.getId()) + 1);
+        String key = "%s%s/%s".formatted(keyPrefix(order), UUID.randomUUID(), fileName);
+        String uploadUrl = fileStorageService.presignUpload(key, PDF_CONTENT_TYPE, UPLOAD_URL_EXPIRY);
+        return new PresignOrderDesignResponse(uploadUrl, key, fileName);
     }
 
+    /** The file name is the server's, never the vendor's: it is the last part of the key this order's presign handed out. */
     @Transactional
-    public OrderDesignResponse uploadForVendor(UUID orderId, UUID vendorId, String fileKey, String fileName) {
+    public OrderDesignResponse uploadForVendor(UUID orderId, UUID vendorId, String fileKey) {
         Order order = getEntityForVendor(orderId, vendorId);
         Vendor vendor = vendorRepository.findById(vendorId).orElseThrow(() -> new OrderNotFoundException(orderId));
         int nextVersion = orderDesignRepository.countByOrder_Id(order.getId()) + 1;
+        String fileName = fileKey.substring(fileKey.lastIndexOf('/') + 1);
+        if (!fileKey.startsWith(keyPrefix(order)) || !fileName.toLowerCase().endsWith(".pdf")) {
+            throw new InvalidArtworkFileException("That is not a PDF uploaded for this order.");
+        }
+        if (!fileName.equals(artworkFileName(order, nextVersion))) {
+            throw new ConflictException("Another version was uploaded in the meantime -- upload this one again.");
+        }
         OrderDesign design = orderDesignRepository.save(new OrderDesign(order, nextVersion, fileKey, fileName, vendor));
         return toVendorResponse(design);
+    }
+
+    private static String keyPrefix(Order order) {
+        return "order-designs/%s/".formatted(order.getId());
+    }
+
+    /** PCODE_AMCODE_vN.pdf -- falls back to the order's own id where there is no doctor pcode (a campaign order). */
+    private String artworkFileName(Order order, int version) {
+        QuickGiftRequest request = quickGiftRequestRepository.findByOrderId(order.getId()).orElse(null);
+        String pcode = request != null ? request.getRecipientPcode() : null;
+        User am = order.getOwner();
+        String amCode = am.getEmployeeCode() != null && !am.getEmployeeCode().isBlank() ? am.getEmployeeCode() : am.getName();
+        return "%s_%s_v%d.pdf".formatted(
+                fileNamePart(pcode != null && !pcode.isBlank() ? pcode : "ORD-" + order.getOrderNo()), fileNamePart(amCode), version);
+    }
+
+    /** Letters and digits only, runs of anything else collapsed to one hyphen: safe in a key, a URL and a download. */
+    private static String fileNamePart(String value) {
+        String part = value.trim().replaceAll("[^A-Za-z0-9]+", "-").replaceAll("^-+|-+$", "");
+        return part.isEmpty() ? "NA" : part;
     }
 
     @Transactional(readOnly = true)

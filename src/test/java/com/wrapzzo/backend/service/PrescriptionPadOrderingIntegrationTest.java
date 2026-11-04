@@ -9,12 +9,15 @@ import com.wrapzzo.backend.dto.CreateRecipientRequest;
 import com.wrapzzo.backend.dto.DoctorDetails;
 import com.wrapzzo.backend.dto.OrderResponse;
 import com.wrapzzo.backend.dto.PendingArtworkApprovalResponse;
+import com.wrapzzo.backend.dto.PresignOrderDesignResponse;
 import com.wrapzzo.backend.dto.QuickGiftRequestResponse;
 import com.wrapzzo.backend.dto.VendorOrderResponse;
 import com.wrapzzo.backend.exception.ArtworkNotApprovedException;
 import com.wrapzzo.backend.exception.GiftNotAvailableForQuickGiftException;
 import com.wrapzzo.backend.exception.OrderNotFoundException;
 import com.wrapzzo.backend.exception.QuickGiftRequestNotFoundException;
+import com.wrapzzo.backend.exception.ConflictException;
+import com.wrapzzo.backend.exception.InvalidArtworkFileException;
 import com.wrapzzo.backend.exception.RecipientAlreadyExistsException;
 import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.CompanyFeature;
@@ -302,6 +305,35 @@ class PrescriptionPadOrderingIntegrationTest {
 
         assertThatThrownBy(() -> recipientService.create(new CreateRecipientRequest("Asha Shah", "9800000002", "mh-777", null, null, null, null)))
                 .isInstanceOf(RecipientAlreadyExistsException.class);
+    }
+
+    @Test
+    void aProofIsAPdfNamedAfterTheDoctorTheAmAndTheVersion() {
+        enableDirectOrdering();
+        mrNorth.setEmployeeCode("AM-PATNA-SM");
+        userRepository.save(mrNorth);
+        actAs(mrNorth);
+        UUID orderId = quickGiftService.create(padOrder(pad, 5)).orderId();
+
+        actAsVendor(printer);
+        PresignOrderDesignResponse first = orderDesignService.presignForVendor(orderId, printer.getId(), "application/pdf");
+        assertThat(first.fileName()).isEqualTo("PC-ASHA_AM-PATNA-SM_v1.pdf");
+        // The name is the key's own last part, so a download carries it too.
+        assertThat(first.key()).startsWith("order-designs/" + orderId + "/").endsWith("/PC-ASHA_AM-PATNA-SM_v1.pdf");
+        assertThat(orderDesignService.uploadForVendor(orderId, printer.getId(), first.key()).fileName()).isEqualTo("PC-ASHA_AM-PATNA-SM_v1.pdf");
+
+        assertThat(orderDesignService.presignForVendor(orderId, printer.getId(), "application/pdf").fileName())
+                .isEqualTo("PC-ASHA_AM-PATNA-SM_v2.pdf");
+
+        assertThatThrownBy(() -> orderDesignService.presignForVendor(orderId, printer.getId(), "image/png"))
+                .isInstanceOf(InvalidArtworkFileException.class);
+        assertThatThrownBy(() -> orderDesignService.uploadForVendor(orderId, printer.getId(), "order-designs/someone-else/x/proof.pdf"))
+                .isInstanceOf(InvalidArtworkFileException.class);
+        assertThatThrownBy(() -> orderDesignService.uploadForVendor(orderId, printer.getId(), "order-designs/" + orderId + "/x/proof.png"))
+                .isInstanceOf(InvalidArtworkFileException.class);
+        // A presign that is no longer the next version is refused rather than saved under the wrong number.
+        assertThatThrownBy(() -> orderDesignService.uploadForVendor(orderId, printer.getId(), first.key()))
+                .isInstanceOf(ConflictException.class);
     }
 
     /** Senior artwork approval on, the MR reporting to the North zonal manager, and one proof uploaded. */

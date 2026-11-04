@@ -34,7 +34,7 @@ public class VendorOrderDesignController {
 
     @PostMapping
     public OrderDesignResponse upload(@PathVariable UUID orderId, @Valid @RequestBody UploadOrderDesignRequest request) {
-        return orderDesignService.uploadForVendor(orderId, CurrentVendor.id(), request.key(), request.fileName());
+        return orderDesignService.uploadForVendor(orderId, CurrentVendor.id(), request.key());
     }
 
     @GetMapping
