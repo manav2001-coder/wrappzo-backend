@@ -7,6 +7,7 @@ import com.wrapzzo.backend.dto.QuickGiftRequestResponse;
 import com.wrapzzo.backend.dto.RecipientResponse;
 import com.wrapzzo.backend.exception.GiftNotAvailableForQuickGiftException;
 import com.wrapzzo.backend.exception.GiftNotFoundException;
+import com.wrapzzo.backend.exception.PcodeRequiredException;
 import com.wrapzzo.backend.exception.PhotoOrEmailRequiredException;
 import com.wrapzzo.backend.exception.QuantityBelowMinimumException;
 import com.wrapzzo.backend.exception.QuickGiftAlreadyReviewedException;
@@ -96,6 +97,10 @@ public class QuickGiftService {
         String address = request.deliveryAddress();
         LocalDate dob = request.recipientDob();
         DoctorDetails doctor = DoctorDetails.orEmpty(request.doctor());
+        String pcode = request.recipientPcode();
+        if (request.recipientId() == null && (pcode == null || pcode.isBlank())) {
+            throw new PcodeRequiredException();
+        }
         if (request.recipientId() != null) {
             RecipientResponse recipient = recipientService.get(request.recipientId());
             name = recipient.name();
@@ -104,6 +109,7 @@ public class QuickGiftService {
             address = recipient.address() != null ? recipient.address() : request.deliveryAddress();
             dob = recipient.dateOfBirth();
             doctor = DoctorDetails.orEmpty(recipient.doctor());
+            pcode = recipient.pcode();
         }
 
         boolean hasEmail = email != null && !email.isBlank();
@@ -126,7 +132,7 @@ public class QuickGiftService {
             quickGift.setPhotoContentType(request.photo().contentType());
         }
         quickGift = quickGiftRequestRepository.saveAndFlush(quickGift);
-        recipientService.upsertFromSubmission(company, name, phone, email, address, dob, doctor, requester);
+        recipientService.upsertFromSubmission(company, name, phone, email, address, dob, pcode, doctor, requester);
 
         if (companyFeatureFlagService.isEnabled(company.getId(), CompanyFeature.DIRECT_VENDOR_ORDERING)) {
             Order order = placeOrder(quickGift, requester);

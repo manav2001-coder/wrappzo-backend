@@ -141,7 +141,7 @@ class PrescriptionPadOrderingIntegrationTest {
 
     private CreateQuickGiftRequest padOrder(Gift gift, int quantity) {
         return new CreateQuickGiftRequest(
-                gift.getId(), null, "Dr. Asha Shah", "9800000001", null, "12 MG Road, Pune", null, null, null, null,
+                gift.getId(), null, "Dr. Asha Shah", "9800000001", "PC-ASHA", null, "12 MG Road, Pune", null, null, null, null,
                 new DoctorDetails("MBBS, MD", "MH-12345", "Cardiology", "Shah Heart Clinic"), quantity);
     }
 
@@ -297,10 +297,10 @@ class PrescriptionPadOrderingIntegrationTest {
     @Test
     void aRegistrationNumberIdentifiesTheSameDoctor() {
         actAs(mrNorth);
-        recipientService.create(new CreateRecipientRequest("Dr. A. Shah", "9800000001", null, null, null,
+        recipientService.create(new CreateRecipientRequest("Dr. A. Shah", "9800000001", "PC-A", null, null, null,
                 new DoctorDetails("MBBS", "MH-777", null, null)));
 
-        assertThatThrownBy(() -> recipientService.create(new CreateRecipientRequest("Asha Shah", "9800000002", null, null, null,
+        assertThatThrownBy(() -> recipientService.create(new CreateRecipientRequest("Asha Shah", "9800000002", "PC-B", null, null, null,
                 new DoctorDetails(null, "mh-777", null, null))))
                 .isInstanceOf(RecipientAlreadyExistsException.class);
     }

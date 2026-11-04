@@ -355,6 +355,11 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
     }
 
+    @ExceptionHandler(PcodeRequiredException.class)
+    public ResponseEntity<Map<String, String>> handlePcodeRequired(PcodeRequiredException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+    }
+
     @ExceptionHandler(RecipientNotFoundException.class)
     public ResponseEntity<Map<String, String>> handleRecipientNotFound(RecipientNotFoundException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));

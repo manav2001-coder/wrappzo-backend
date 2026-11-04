@@ -142,7 +142,7 @@ class WarehouseAndRecurringOrderIntegrationTest {
     }
 
     private CreateQuickGiftRequest padRequest(String doctor) {
-        return new CreateQuickGiftRequest(pad.getId(), null, doctor, "98000" + (int) (Math.random() * 100000), null, "Clinic Road", null,
+        return new CreateQuickGiftRequest(pad.getId(), null, doctor, "98000" + (int) (Math.random() * 100000), "PC" + (int) (Math.random() * 1000000), null, "Clinic Road", null,
                 null, null, null, null, 200);
     }
 

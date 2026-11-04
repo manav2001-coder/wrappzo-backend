@@ -6,6 +6,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.wrapzzo.backend.dto.CreateDoctorChangeRequest;
 import com.wrapzzo.backend.dto.CreateQuickGiftRequest;
 import com.wrapzzo.backend.dto.CreateRecipientRequest;
+import com.wrapzzo.backend.exception.RecipientAlreadyExistsException;
+import com.wrapzzo.backend.dto.UpdateRecipientRequest;
 import com.wrapzzo.backend.dto.DashboardDrilldownResponse;
 import com.wrapzzo.backend.dto.DashboardResponse;
 import com.wrapzzo.backend.dto.DoctorChangeRequestResponse;
@@ -18,6 +20,7 @@ import com.wrapzzo.backend.model.CompanyFeature;
 import com.wrapzzo.backend.model.CompanyVendor;
 import com.wrapzzo.backend.model.DoctorChangeAction;
 import com.wrapzzo.backend.model.DoctorChangeStatus;
+import com.wrapzzo.backend.exception.PcodeRequiredException;
 import com.wrapzzo.backend.exception.QuantityBelowMinimumException;
 import com.wrapzzo.backend.model.Gift;
 import com.wrapzzo.backend.model.GiftModule;
@@ -163,7 +166,7 @@ class OrgScopeAndDoctorChangeIntegrationTest {
     private UUID placeOrder(User mr) {
         actAs(mr);
         return quickGiftService.create(new CreateQuickGiftRequest(
-                pad.getId(), null, "Dr. " + mr.getName(), "98000" + (int) (Math.random() * 100000), null, "Somewhere", null, null, null, null,
+                pad.getId(), null, "Dr. " + mr.getName(), "98000" + (int) (Math.random() * 100000), "PC" + (int) (Math.random() * 1000000), null, "Somewhere", null, null, null, null,
                 null, 1)).orderId();
     }
 
@@ -185,6 +188,44 @@ class OrgScopeAndDoctorChangeIntegrationTest {
     }
 
     @Test
+    void aDoctorIsFoundByTheirPcode_andThePcodeIdentifiesThem() {
+        actAs(mrNorth);
+        RecipientResponse added = recipientService.createMine(new CreateRecipientRequest(
+                "Dr. Meera Iyer", "9800000077", "P-48213", null, "Clinic Road", null, null));
+        assertThat(added.pcode()).isEqualTo("P-48213");
+
+        // Searching by the pcode alone finds them -- in any case, and by part of it.
+        assertThat(recipientService.search("p-48213")).extracting(RecipientResponse::id).containsExactly(added.id());
+        assertThat(recipientService.search("48213")).extracting(RecipientResponse::id).containsExactly(added.id());
+
+        // The same pcode is the same doctor: a colleague who adds it gets the one entry, not a duplicate.
+        actAs(manager);
+        RecipientResponse again = recipientService.createMine(new CreateRecipientRequest(
+                "Meera Iyer (typed differently)", "9111111111", "p-48213", null, null, null, null));
+        assertThat(again.id()).isEqualTo(added.id());
+        assertThat(again.inMyList()).isTrue();
+
+        // And no other doctor may take it.
+        actAs(mrNorth);
+        RecipientResponse other = recipientService.createMine(new CreateRecipientRequest(
+                "Dr. Other", "9800000088", "P-99999", null, null, null, null));
+        assertThatThrownBy(() -> recipientService.update(other.id(),
+                new UpdateRecipientRequest("Dr. Other", "9800000088", "P-48213", null, null, null, null)))
+                .isInstanceOf(RecipientAlreadyExistsException.class);
+    }
+
+    @Test
+    void aNewDoctorNeedsAPcode_whetherAddedByRequestOrThroughAQuickGift() {
+        actAs(mrNorth);
+        assertThatThrownBy(() -> doctorChangeRequestService.create(new CreateDoctorChangeRequest(
+                DoctorChangeAction.ADD, null, "Dr. No Code", "9800000011", null, null, null, null, null)))
+                .isInstanceOf(PcodeRequiredException.class);
+        assertThatThrownBy(() -> quickGiftService.create(new CreateQuickGiftRequest(
+                pad.getId(), null, "Dr. No Code", "9800000012", null, null, "Somewhere", null, null, null, null, null, 50)))
+                .isInstanceOf(PcodeRequiredException.class);
+    }
+
+    @Test
     void theDashboardStaysInsideTheViewersOrgScope() {
         UUID northOrder = placeOrder(mrNorth);
         UUID southOrder = placeOrder(mrSouth);
@@ -198,7 +239,7 @@ class OrgScopeAndDoctorChangeIntegrationTest {
     void aFieldUserSeesTheirOwnListAndTheirManagerSeesTheirTeamsDoctors() {
         actAs(mrNorth);
         RecipientResponse added = recipientService.createMine(new CreateRecipientRequest(
-                "Dr. Meera Iyer", "9800000077", null, "Clinic Road", null, new DoctorDetails(null, "TN-777", null, null)));
+                "Dr. Meera Iyer", "9800000077", "PC-777", null, "Clinic Road", null, new DoctorDetails(null, "TN-777", null, null)));
         assertThat(added.inMyList()).isTrue();
         assertThat(recipientService.list()).extracting(RecipientResponse::id).contains(added.id());
 
@@ -250,7 +291,7 @@ class OrgScopeAndDoctorChangeIntegrationTest {
     void anApprovedDoctorAdditionCarriesThePrintDetails() {
         actAs(mrNorth);
         DoctorChangeRequestResponse request = doctorChangeRequestService.create(new CreateDoctorChangeRequest(
-                DoctorChangeAction.ADD, null, "Dr. Meera Iyer", "9800000003", null, "Clinic Road", null,
+                DoctorChangeAction.ADD, null, "Dr. Meera Iyer", "9800000003", "PC-555", null, "Clinic Road", null,
                 new DoctorDetails("MBBS, DNB", "TN-555", "Paediatrics", "Iyer Child Care")));
         assertThat(request.proposedDoctor().registrationNumber()).isEqualTo("TN-555");
 
@@ -271,7 +312,7 @@ class OrgScopeAndDoctorChangeIntegrationTest {
 
         actAs(mrNorth);
         DoctorChangeRequestResponse request = doctorChangeRequestService.create(new CreateDoctorChangeRequest(
-                DoctorChangeAction.ADD, null, "Asha Shah", "9800000099", null, null, null, new DoctorDetails(null, "mh-12345", null, null)));
+                DoctorChangeAction.ADD, null, "Asha Shah", "9800000099", "PC-273", null, null, null, new DoctorDetails(null, "mh-12345", null, null)));
 
         actAs(manager);
         DoctorChangeRequestResponse approved = doctorChangeRequestService.approve(request.id());
@@ -284,7 +325,7 @@ class OrgScopeAndDoctorChangeIntegrationTest {
     private DoctorChangeRequestResponse requestNewDoctor(User mr, String registration) {
         actAs(mr);
         return doctorChangeRequestService.create(new CreateDoctorChangeRequest(
-                DoctorChangeAction.ADD, null, "Dr. New", "9800000077", null, "Clinic Road", null,
+                DoctorChangeAction.ADD, null, "Dr. New", "9800000077", "PC-" + registration, null, "Clinic Road", null,
                 new DoctorDetails(null, registration, null, null)));
     }
 
@@ -320,10 +361,10 @@ class OrgScopeAndDoctorChangeIntegrationTest {
 
         actAs(mrNorth);
         assertThatThrownBy(() -> quickGiftService.create(new CreateQuickGiftRequest(
-                pad.getId(), null, "Dr. Few", "9800000055", null, "Somewhere", null, null, null, null, null, 5)))
+                pad.getId(), null, "Dr. Few", "9800000055", "PC-55", null, "Somewhere", null, null, null, null, null, 5)))
                 .isInstanceOf(QuantityBelowMinimumException.class);
         assertThat(quickGiftService.create(new CreateQuickGiftRequest(
-                pad.getId(), null, "Dr. Enough", "9800000056", null, "Somewhere", null, null, null, null, null, 50)).orderId())
+                pad.getId(), null, "Dr. Enough", "9800000056", "PC-56", null, "Somewhere", null, null, null, null, null, 50)).orderId())
                 .isNotNull();
     }
 

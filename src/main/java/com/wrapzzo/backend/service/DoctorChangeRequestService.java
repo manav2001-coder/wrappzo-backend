@@ -6,6 +6,7 @@ import com.wrapzzo.backend.dto.DoctorChangeRequestResponse;
 import com.wrapzzo.backend.dto.DoctorDetails;
 import com.wrapzzo.backend.exception.DoctorChangeRequestAlreadyReviewedException;
 import com.wrapzzo.backend.exception.DoctorChangeRequestNotFoundException;
+import com.wrapzzo.backend.exception.PcodeRequiredException;
 import com.wrapzzo.backend.exception.RecipientAlreadyExistsException;
 import com.wrapzzo.backend.exception.RecipientNotFoundException;
 import com.wrapzzo.backend.model.Company;
@@ -64,6 +65,10 @@ public class DoctorChangeRequestService {
         DoctorChangeRequest entity = new DoctorChangeRequest(company, requester, request.action(), recipient);
         entity.setProposedName(request.proposedName());
         entity.setProposedPhone(request.proposedPhone());
+        if (request.action() == DoctorChangeAction.ADD && (request.proposedPcode() == null || request.proposedPcode().isBlank())) {
+            throw new PcodeRequiredException();
+        }
+        entity.setProposedPcode(request.proposedPcode() == null || request.proposedPcode().isBlank() ? null : request.proposedPcode().trim());
         entity.setProposedEmail(request.proposedEmail());
         entity.setProposedAddress(request.proposedAddress());
         entity.setProposedDob(request.proposedDob());
@@ -144,11 +149,14 @@ public class DoctorChangeRequestService {
      * also refuse).
      */
     private void applyAdd(DoctorChangeRequest entity) {
-        Recipient recipient = entity.getProposedRegistrationNumber() == null
+        Recipient recipient = entity.getProposedPcode() == null
                 ? null
-                : recipientRepository
-                        .findFirstByCompany_IdAndRegistrationNumberIgnoreCase(entity.getCompany().getId(), entity.getProposedRegistrationNumber())
-                        .orElse(null);
+                : recipientRepository.findFirstByCompany_IdAndPcodeIgnoreCase(entity.getCompany().getId(), entity.getProposedPcode()).orElse(null);
+        if (recipient == null && entity.getProposedRegistrationNumber() != null) {
+            recipient = recipientRepository
+                    .findFirstByCompany_IdAndRegistrationNumberIgnoreCase(entity.getCompany().getId(), entity.getProposedRegistrationNumber())
+                    .orElse(null);
+        }
         if (recipient == null) {
             recipient = new Recipient(
                     entity.getCompany(),
@@ -158,6 +166,7 @@ public class DoctorChangeRequestService {
                     entity.getProposedAddress(),
                     entity.getProposedDob(),
                     entity.getRequestedBy());
+            recipient.setPcode(entity.getProposedPcode());
             recipient.setQualification(entity.getProposedQualification());
             recipient.setRegistrationNumber(entity.getProposedRegistrationNumber());
             recipient.setSpeciality(entity.getProposedSpeciality());
@@ -180,6 +189,15 @@ public class DoctorChangeRequestService {
         if (entity.getProposedQualification() != null) recipient.setQualification(entity.getProposedQualification());
         if (entity.getProposedSpeciality() != null) recipient.setSpeciality(entity.getProposedSpeciality());
         if (entity.getProposedClinicName() != null) recipient.setClinicName(entity.getProposedClinicName());
+        String pcode = entity.getProposedPcode();
+        if (pcode != null) {
+            recipientRepository.findFirstByCompany_IdAndPcodeIgnoreCase(recipient.getCompany().getId(), pcode)
+                    .filter(other -> !other.getId().equals(recipient.getId()))
+                    .ifPresent(other -> {
+                        throw RecipientAlreadyExistsException.pcode(pcode, other.getName());
+                    });
+            recipient.setPcode(pcode);
+        }
         String registration = entity.getProposedRegistrationNumber();
         if (registration != null) {
             recipientRepository.findFirstByCompany_IdAndRegistrationNumberIgnoreCase(recipient.getCompany().getId(), registration)

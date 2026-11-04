@@ -109,27 +109,30 @@ public class RecipientService {
                 .ifPresent(r -> {
                     throw new RecipientAlreadyExistsException(r.getName());
                 });
+        String pcode = request.pcode().trim();
+        rejectDuplicatePcode(company.getId(), pcode, null);
         rejectDuplicateRegistration(company.getId(), doctor, null);
         Recipient recipient = new Recipient(
                 company, request.name().trim(), request.phone().trim(), email, blankToNull(request.address()), request.dateOfBirth(), user);
+        recipient.setPcode(pcode);
         applyDoctorDetails(recipient, doctor);
         return recipientRepository.save(recipient);
     }
 
     /**
      * An MR adds a doctor to their own list -- no approval. A doctor already in the directory under
-     * the same registration number is the same doctor: they join this MR's list rather than
-     * becoming a duplicate (which the V36 unique index would also refuse).
+     * the same pcode (or registration number) is the same doctor: they join this MR's list rather than
+     * becoming a duplicate (which the unique indexes would also refuse).
      */
     @Transactional
     public RecipientResponse createMine(CreateRecipientRequest request) {
         User user = currentUser();
         DoctorDetails doctor = DoctorDetails.orEmpty(request.doctor());
-        Recipient recipient = doctor.registrationNumber() == null
-                ? null
-                : recipientRepository
-                        .findFirstByCompany_IdAndRegistrationNumberIgnoreCase(user.getCompany().getId(), doctor.registrationNumber())
-                        .orElse(null);
+        UUID companyId = user.getCompany().getId();
+        Recipient recipient = recipientRepository.findFirstByCompany_IdAndPcodeIgnoreCase(companyId, request.pcode().trim()).orElse(null);
+        if (recipient == null && doctor.registrationNumber() != null) {
+            recipient = recipientRepository.findFirstByCompany_IdAndRegistrationNumberIgnoreCase(companyId, doctor.registrationNumber()).orElse(null);
+        }
         if (recipient == null) {
             recipient = createEntity(user, request);
         }
@@ -141,8 +144,9 @@ public class RecipientService {
 
     /**
      * Adds a whole sheet of doctors to the caller's list, all or none. A row that matches a doctor
-     * already in the company (same registration number, or same name + phone + email) is that
-     * doctor: it joins the list instead of becoming a duplicate.
+     * already in the company (same pcode or registration number, or same name + phone + email) is that
+     * doctor: it joins the list instead of becoming a duplicate -- and a doctor that predates pcodes
+     * gets the row's pcode.
      */
     @Transactional
     public BulkDoctorsResponse bulkCreateMine(List<BulkDoctorRow> rows) {
@@ -154,9 +158,11 @@ public class RecipientService {
         for (BulkDoctorRow row : rows) {
             String email = blankToNull(row.email());
             DoctorDetails doctor = DoctorDetails.orEmpty(row.doctor());
-            Recipient recipient = doctor.registrationNumber() == null
-                    ? null
-                    : recipientRepository.findFirstByCompany_IdAndRegistrationNumberIgnoreCase(companyId, doctor.registrationNumber()).orElse(null);
+            String pcode = row.pcode().trim();
+            Recipient recipient = recipientRepository.findFirstByCompany_IdAndPcodeIgnoreCase(companyId, pcode).orElse(null);
+            if (recipient == null && doctor.registrationNumber() != null) {
+                recipient = recipientRepository.findFirstByCompany_IdAndRegistrationNumberIgnoreCase(companyId, doctor.registrationNumber()).orElse(null);
+            }
             if (recipient == null) {
                 recipient = recipientRepository
                         .findMatch(companyId, normalizedName(row.name()), row.phone().trim(), normalizedEmail(email))
@@ -166,8 +172,11 @@ public class RecipientService {
             if (isNew) {
                 recipient = new Recipient(
                         user.getCompany(), row.name().trim(), row.phone().trim(), email, blankToNull(row.address()), row.dateOfBirth(), user);
+                recipient.setPcode(pcode);
                 applyDoctorDetails(recipient, doctor);
                 recipient = recipientRepository.save(recipient);
+            } else if (recipient.getPcode() == null) {
+                recipient.setPcode(pcode);
             }
             if (recipientAssignmentRepository.existsByRecipient_IdAndMrUser_Id(recipient.getId(), user.getId())) {
                 unchanged++;
@@ -210,6 +219,9 @@ public class RecipientService {
                 .ifPresent(r -> {
                     throw new RecipientAlreadyExistsException(r.getName());
                 });
+        String pcode = request.pcode().trim();
+        rejectDuplicatePcode(recipient.getCompany().getId(), pcode, id);
+        recipient.setPcode(pcode);
         recipient.setName(request.name().trim());
         recipient.setPhone(request.phone().trim());
         recipient.setEmail(email);
@@ -222,6 +234,14 @@ public class RecipientService {
             applyDoctorDetails(recipient, doctor);
         }
         return recipient;
+    }
+
+    private void rejectDuplicatePcode(UUID companyId, String pcode, UUID excludeId) {
+        recipientRepository.findFirstByCompany_IdAndPcodeIgnoreCase(companyId, pcode)
+                .filter(r -> !r.getId().equals(excludeId))
+                .ifPresent(r -> {
+                    throw RecipientAlreadyExistsException.pcode(pcode, r.getName());
+                });
     }
 
     private void rejectDuplicateRegistration(UUID companyId, DoctorDetails doctor, UUID excludeId) {
@@ -265,14 +285,20 @@ public class RecipientService {
     @Transactional
     public void upsertFromSubmission(Company company, String name, String phone, String email, String address, LocalDate dateOfBirth,
             User createdBy) {
-        upsertFromSubmission(company, name, phone, email, address, dateOfBirth, DoctorDetails.EMPTY, createdBy);
+        upsertFromSubmission(company, name, phone, email, address, dateOfBirth, null, DoctorDetails.EMPTY, createdBy);
     }
 
-    /** Same, carrying a doctor's print details -- a known registration number counts as "already there" too. */
+    /**
+     * Same, carrying a doctor's pcode and print details -- a known pcode or registration number counts as "already there" too.
+     * A doctor needs a pcode, so without one nothing is added to the directory (the caller's own record is unaffected).
+     */
     @Transactional
     public void upsertFromSubmission(Company company, String name, String phone, String email, String address, LocalDate dateOfBirth,
-            DoctorDetails doctor, User createdBy) {
-        if (name == null || name.isBlank() || phone == null || phone.isBlank()) {
+            String pcode, DoctorDetails doctor, User createdBy) {
+        if (name == null || name.isBlank() || phone == null || phone.isBlank() || pcode == null || pcode.isBlank()) {
+            return;
+        }
+        if (recipientRepository.findFirstByCompany_IdAndPcodeIgnoreCase(company.getId(), pcode.trim()).isPresent()) {
             return;
         }
         String cleanEmail = blankToNull(email);
@@ -284,6 +310,7 @@ public class RecipientService {
             return;
         }
         Recipient recipient = new Recipient(company, name.trim(), phone.trim(), cleanEmail, blankToNull(address), dateOfBirth, createdBy);
+        recipient.setPcode(pcode.trim());
         applyDoctorDetails(recipient, doctor);
         recipientRepository.save(recipient);
         // A doctor you add -- here, through a Quick Gift or a campaign entry -- is on your list, like one added on the Doctors screen.

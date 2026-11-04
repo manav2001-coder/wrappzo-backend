@@ -3,6 +3,7 @@ package com.wrapzzo.backend.dto;
 import com.wrapzzo.backend.model.DoctorChangeAction;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -17,6 +18,8 @@ public record CreateDoctorChangeRequest(
         UUID recipientId,
         String proposedName,
         String proposedPhone,
+        /** Required for ADD; for EDIT a blank one keeps the doctor's current pcode. */
+        @Size(max = 50) String proposedPcode,
         String proposedEmail,
         String proposedAddress,
         LocalDate proposedDob,

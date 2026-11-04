@@ -69,6 +69,9 @@ public class DoctorChangeRequest {
     @Column(name = "proposed_dob")
     private LocalDate proposedDob;
 
+    @Column(name = "proposed_pcode")
+    private String proposedPcode;
+
     // The prescription-pad print details proposed for the doctor (V37) -- see Recipient.
     @Column(name = "proposed_qualification")
     private String proposedQualification;

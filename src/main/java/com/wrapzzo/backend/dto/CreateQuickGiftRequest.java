@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -18,6 +19,8 @@ public record CreateQuickGiftRequest(
         UUID recipientId,
         @NotBlank String recipientName,
         @NotBlank String recipientPhone,
+        /** A new doctor's pcode -- required when recipientId is null; ignored when an existing doctor is picked. */
+        @Size(max = 50) String recipientPcode,
         String recipientEmail,
         @NotBlank String deliveryAddress,
         LocalDate recipientDob,

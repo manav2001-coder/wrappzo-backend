@@ -43,6 +43,9 @@ public interface RecipientRepository extends JpaRepository<Recipient, UUID> {
     Optional<Recipient> findMatchExcluding(@Param("companyId") UUID companyId, @Param("excludeId") UUID excludeId,
             @Param("name") String name, @Param("phone") String phone, @Param("email") String email);
 
+    /** The doctor's unique identifier within a company, ignoring case. */
+    Optional<Recipient> findFirstByCompany_IdAndPcodeIgnoreCase(UUID companyId, String pcode);
+
     /** The doctor-directory dedupe: the same registration number in a company is the same doctor, whatever the name/phone say. */
     Optional<Recipient> findFirstByCompany_IdAndRegistrationNumberIgnoreCase(UUID companyId, String registrationNumber);
 
@@ -65,6 +68,7 @@ public interface RecipientRepository extends JpaRepository<Recipient, UUID> {
             select r from Recipient r left join r.createdBy creator
             where r.company.id = :companyId
               and (lower(r.name) like lower(concat('%', :query, '%')) or r.phone like concat('%', :query, '%')
+                   or lower(r.pcode) like lower(concat('%', :query, '%'))
                    or lower(r.registrationNumber) like lower(concat('%', :query, '%')))
               and (:companyWide = true
                    or creator.id in :people or creator.orgUnit.id in :orgUnits

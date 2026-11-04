@@ -9,6 +9,8 @@ public record RecipientResponse(
         UUID id,
         String name,
         String phone,
+        /** Null only for a doctor that predates pcodes. */
+        String pcode,
         String email,
         String address,
         LocalDate dateOfBirth,
@@ -27,6 +29,7 @@ public record RecipientResponse(
                 r.getId(),
                 r.getName(),
                 r.getPhone(),
+                r.getPcode(),
                 r.getEmail(),
                 r.getAddress(),
                 r.getDateOfBirth(),
