@@ -5,7 +5,6 @@ import com.wrapzzo.backend.dto.DoctorChangeRequestResponse;
 import com.wrapzzo.backend.dto.RejectDoctorChangeRequest;
 import com.wrapzzo.backend.security.Permission.Keys;
 import com.wrapzzo.backend.security.RequiresPermission;
-import com.wrapzzo.backend.security.SignedInUser;
 import com.wrapzzo.backend.service.DoctorChangeRequestService;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -19,11 +18,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * MR doctor-change requests. Creating/listing-mine needs the same baseline as sending a
- * gift (quickgift.create) or full directory access (recipient.manage) -- not a new,
- * separate key just to propose a change. The review endpoints have no key requirement of
- * their own: DoctorChangeRequestService enforces that the caller is either the requester's
- * direct manager or a recipient.approve holder, and simply returns nothing for anyone else.
+ * MR doctor-change requests. Creating/listing-mine needs the same baseline as managing your own
+ * doctor list (my_doctors.manage). Reviewing needs my_doctors.approve; whose requests a reviewer
+ * then sees is visibility, not access, and stays in DoctorChangeRequestService (the requester's
+ * direct manager, or everyone's for a company-wide approver).
  */
 @RestController
 @RequestMapping("/api/doctor-requests")
@@ -33,31 +31,31 @@ public class DoctorChangeRequestController {
     private final DoctorChangeRequestService doctorChangeRequestService;
 
     @PostMapping
-    @RequiresPermission(Keys.RECIPIENT_LIST_MANAGE)
+    @RequiresPermission(Keys.MY_DOCTORS_MANAGE)
     public DoctorChangeRequestResponse create(@Valid @RequestBody CreateDoctorChangeRequest request) {
         return doctorChangeRequestService.create(request);
     }
 
     @GetMapping("/mine")
-    @RequiresPermission(Keys.RECIPIENT_LIST_MANAGE)
+    @RequiresPermission(Keys.MY_DOCTORS_MANAGE)
     public List<DoctorChangeRequestResponse> mine() {
         return doctorChangeRequestService.listMine();
     }
 
     @GetMapping("/pending-review")
-    @SignedInUser
+    @RequiresPermission(Keys.MY_DOCTORS_APPROVE)
     public List<DoctorChangeRequestResponse> pendingReview() {
         return doctorChangeRequestService.listPendingForReviewer();
     }
 
     @PostMapping("/{id}/approve")
-    @SignedInUser
+    @RequiresPermission(Keys.MY_DOCTORS_APPROVE)
     public DoctorChangeRequestResponse approve(@PathVariable UUID id) {
         return doctorChangeRequestService.approve(id);
     }
 
     @PostMapping("/{id}/reject")
-    @SignedInUser
+    @RequiresPermission(Keys.MY_DOCTORS_APPROVE)
     public DoctorChangeRequestResponse reject(@PathVariable UUID id, @Valid @RequestBody RejectDoctorChangeRequest request) {
         return doctorChangeRequestService.reject(id, request.reason());
     }

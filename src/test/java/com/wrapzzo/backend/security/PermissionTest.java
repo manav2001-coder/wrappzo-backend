@@ -15,7 +15,7 @@ class PermissionTest {
     @Test
     void everyKeyIsModuleDotAction() {
         for (Permission permission : Permission.values()) {
-            // The Access Control screens have a third level ("tbac.feature_master.view"): the action is everything after the module.
+            // The Access Control screens have a third level ("feature_master.view"): the action is everything after the module.
             assertThat(permission.key()).matches("[a-z_]+(\\.[a-z_]+)+");
             assertThat(permission.key()).isEqualTo(permission.module() + "." + permission.action());
         }
@@ -37,12 +37,20 @@ class PermissionTest {
     }
 
     @Test
+    void everyKeyIsFeatureDotAction() {
+        for (Permission permission : Permission.values()) {
+            assertThat(permission.key()).as(permission.key()).matches("[a-z_]+\\.[a-z_]+");
+            assertThat(permission.key()).isEqualTo(permission.module() + "." + permission.action());
+        }
+    }
+
+    @Test
     void anyActionImpliesItsModulesView() {
         assertThat(Permission.CAMPAIGN_EDIT.impliedView()).contains(Permission.CAMPAIGN_VIEW);
-        assertThat(Permission.ORDER_ARTWORK_FINAL.impliedView()).contains(Permission.ORDER_VIEW);
+        assertThat(Permission.ARTWORK_FINAL_APPROVE.impliedView()).contains(Permission.ORDER_VIEW);
         assertThat(Permission.CAMPAIGN_VIEW.impliedView()).isEmpty();
         // A module without a view action implies nothing.
-        assertThat(Permission.REQUEST_APPROVE.impliedView()).isEmpty();
+        assertThat(Permission.QUICK_GIFT_APPROVE.impliedView()).isEmpty();
     }
 
     @Test

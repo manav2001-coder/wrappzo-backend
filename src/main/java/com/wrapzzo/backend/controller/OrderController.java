@@ -38,8 +38,9 @@ public class OrderController {
         return orderService.get(id);
     }
 
-    /** Same visibility as list()/get() -- anyone who can already see this order can chase a missing photo. */
+    /** Same visibility as list()/get(), but sending the link is an action of its own: order.request_photo. */
     @PostMapping("/{id}/requestPhotoLink")
+    @RequiresPermission(Keys.ORDER_REQUEST_PHOTO)
     public RequestPhotoLinkResponse requestPhotoLink(@PathVariable UUID id) {
         return new RequestPhotoLinkResponse(orderService.requestPhotoLink(id));
     }

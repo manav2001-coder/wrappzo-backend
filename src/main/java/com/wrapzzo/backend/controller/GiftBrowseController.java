@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/gifts")
 @RequiredArgsConstructor
-@RequiresPermission(Keys.PRODUCT_VIEW)
+@RequiresPermission(Keys.GIFT_STORE_VIEW)
 public class GiftBrowseController {
 
     private final GiftService giftService;

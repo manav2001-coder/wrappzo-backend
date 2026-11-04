@@ -10,20 +10,20 @@ import com.wrapzzo.backend.security.Permission.Keys;
  */
 public final class TbacAccess {
 
-    public static final String TEMPLATE_READ = "hasAnyAuthority('" + Keys.TBAC_TEMPLATE_MASTER_VIEW + "','"
-            + Keys.TBAC_FEATURES_TO_TEMPLATE_MANAGE + "','" + Keys.TBAC_TEMPLATES_TO_TEMPLATE_MANAGE + "','"
-            + Keys.TBAC_USER_TEMPLATE_MANAGE + "','" + Keys.TBAC_USER_TEMPLATE_ASSIGNMENT + "','"
-            + Keys.TBAC_BULK_ASSIGN_USER_TEMPLATES + "','" + Keys.TBAC_ROLE_TEMPLATE_MANAGE + "','"
-            + Keys.TBAC_ROLE_TEMPLATE_ASSIGNMENT + "')";
+    public static final String TEMPLATE_READ = "hasAnyAuthority('" + Keys.TEMPLATE_MASTER_VIEW + "','"
+            + Keys.FEATURES_TO_TEMPLATE_VIEW + "','" + Keys.TEMPLATES_TO_TEMPLATE_VIEW + "','"
+            + Keys.USER_TEMPLATE_VIEW + "','" + Keys.USER_TEMPLATE_ASSIGN + "','"
+            + Keys.USER_TEMPLATE_BULK_ASSIGN + "','" + Keys.ROLE_TEMPLATE_VIEW + "','"
+            + Keys.ROLE_TEMPLATE_ASSIGN + "')";
 
-    public static final String FEATURE_READ = "hasAnyAuthority('" + Keys.TBAC_FEATURE_MASTER_VIEW + "','"
-            + Keys.TBAC_FEATURES_TO_TEMPLATE_MANAGE + "','" + Keys.TBAC_FEATURES_TO_TEMPLATE_ASSIGNMENT + "')";
+    public static final String FEATURE_READ = "hasAnyAuthority('" + Keys.FEATURE_MASTER_VIEW + "','"
+            + Keys.FEATURES_TO_TEMPLATE_VIEW + "','" + Keys.FEATURES_TO_TEMPLATE_ASSIGN + "')";
 
-    public static final String REFERENCES_READ = "hasAnyAuthority('" + Keys.TBAC_TEMPLATES_TO_TEMPLATE_MANAGE + "','"
-            + Keys.TBAC_TEMPLATE_MASTER_VIEW + "')";
+    public static final String REFERENCES_READ = "hasAnyAuthority('" + Keys.TEMPLATES_TO_TEMPLATE_VIEW + "','"
+            + Keys.TEMPLATE_MASTER_VIEW + "')";
 
-    public static final String USER_READ = "hasAnyAuthority('" + Keys.TBAC_USER_TEMPLATE_MANAGE + "','"
-            + Keys.TBAC_BULK_ASSIGN_USER_TEMPLATES + "')";
+    public static final String USER_READ = "hasAnyAuthority('" + Keys.USER_TEMPLATE_VIEW + "','"
+            + Keys.USER_TEMPLATE_BULK_ASSIGN + "')";
 
     private TbacAccess() {
     }

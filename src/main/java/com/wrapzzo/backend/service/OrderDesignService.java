@@ -49,7 +49,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class OrderDesignService {
 
     /** Granted to Company Admin by default (V42): sign any management level on artwork, as cover for the manager it waits on. */
-    public static final String FINAL_APPROVAL_KEY = Permission.ORDER_ARTWORK_FINAL.key();
+    public static final String FINAL_APPROVAL_KEY = Permission.ARTWORK_FINAL_APPROVE.key();
 
     private static final Duration UPLOAD_URL_EXPIRY = Duration.ofMinutes(5);
 

@@ -56,19 +56,19 @@ public class TbacTemplateController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @RequiresPermission(Keys.TBAC_TEMPLATE_MASTER_ADD)
+    @RequiresPermission(Keys.TEMPLATE_MASTER_ADD)
     public TbacTemplateResponse create(@RequestParam(required = false) UUID companyId, @Valid @RequestBody TemplateWriteRequest request) {
         return templateService.create(companyId, request);
     }
 
     @PutMapping("/{templateId}")
-    @RequiresPermission(Keys.TBAC_TEMPLATE_MASTER_EDIT)
+    @RequiresPermission(Keys.TEMPLATE_MASTER_EDIT)
     public TbacTemplateResponse update(@PathVariable UUID templateId, @Valid @RequestBody TemplateWriteRequest request) {
         return templateService.update(templateId, request);
     }
 
     @DeleteMapping("/{templateId}")
-    @RequiresPermission(Keys.TBAC_TEMPLATE_MASTER_EDIT)
+    @RequiresPermission(Keys.TEMPLATE_MASTER_EDIT)
     public TbacTemplateResponse deactivate(@PathVariable UUID templateId) {
         return templateService.deactivate(templateId);
     }
@@ -80,14 +80,14 @@ public class TbacTemplateController {
     }
 
     @PostMapping("/{templateId}/features")
-    @RequiresPermission(Keys.TBAC_FEATURES_TO_TEMPLATE_ASSIGNMENT)
+    @RequiresPermission(Keys.FEATURES_TO_TEMPLATE_ASSIGN)
     public AddFeaturesResponse addFeatures(@PathVariable UUID templateId, @Valid @RequestBody FeatureIdsRequest request) {
         return templateService.addFeatures(templateId, request.featureIds());
     }
 
     @DeleteMapping("/{templateId}/features/{featureId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @RequiresPermission(Keys.TBAC_FEATURES_TO_TEMPLATE_ASSIGNMENT)
+    @RequiresPermission(Keys.FEATURES_TO_TEMPLATE_ASSIGN)
     public void removeFeature(@PathVariable UUID templateId, @PathVariable UUID featureId) {
         templateService.removeFeature(templateId, featureId);
     }
@@ -99,14 +99,14 @@ public class TbacTemplateController {
     }
 
     @PostMapping("/{templateId}/references")
-    @RequiresPermission(Keys.TBAC_TEMPLATES_TO_TEMPLATE_ASSIGNMENT)
+    @RequiresPermission(Keys.TEMPLATES_TO_TEMPLATE_ASSIGN)
     public AddReferencesResponse addReferences(@PathVariable UUID templateId, @Valid @RequestBody ReferencesRequest request) {
         return templateService.addReferences(templateId, request.referencedTemplateIds());
     }
 
     @DeleteMapping("/{templateId}/references/{referencedId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @RequiresPermission(Keys.TBAC_TEMPLATES_TO_TEMPLATE_ASSIGNMENT)
+    @RequiresPermission(Keys.TEMPLATES_TO_TEMPLATE_ASSIGN)
     public void removeReference(@PathVariable UUID templateId, @PathVariable UUID referencedId) {
         templateService.removeReference(templateId, referencedId);
     }

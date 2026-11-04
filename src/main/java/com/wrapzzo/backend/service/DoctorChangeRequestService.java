@@ -42,7 +42,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class DoctorChangeRequestService {
 
     /** Granted to Company Admin by default (V39): review any MR's request in the company. */
-    public static final String APPROVE_ANY_KEY = Permission.RECIPIENT_LIST_APPROVE.key();
+    public static final String APPROVE_ANY_KEY = Permission.MY_DOCTORS_APPROVE.key();
 
     private final DoctorChangeRequestRepository doctorChangeRequestRepository;
     private final RecipientRepository recipientRepository;
@@ -85,7 +85,7 @@ public class DoctorChangeRequestService {
 
     /**
      * A manager's own approval queue: their direct reports' pending requests -- and, with
-     * recipient_list.approve, every other pending request they can see (see Visibility).
+     * my_doctors.approve, every other pending request they can see (see Visibility).
      */
     @Transactional(readOnly = true)
     public List<DoctorChangeRequestResponse> listPendingForReviewer() {

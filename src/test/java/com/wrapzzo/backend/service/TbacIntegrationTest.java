@@ -147,7 +147,7 @@ class TbacIntegrationTest {
 
     @Test
     void theKeysThatRunTheAccessScreensCannotBeSwitchedOff() {
-        UUID feature = accessControlRepository.findByKey("tbac.template_master.view").orElseThrow().getId();
+        UUID feature = accessControlRepository.findByKey("template_master.view").orElseThrow().getId();
 
         assertThatThrownBy(() -> featureService.setActive(company.getId(), feature, false)).isInstanceOf(ConflictException.class);
     }

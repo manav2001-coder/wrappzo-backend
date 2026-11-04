@@ -98,7 +98,7 @@ class OrgScopeAndDoctorChangeIntegrationTest {
         Role member = roleRepository.save(new Role(company, "Member"));
         managerRole = roleRepository.save(new Role(company, "Zonal Manager"));
         grant(managerRole, "order.view");
-        grant(managerRole, "recipient.view");
+        grant(managerRole, "doctor.view");
 
         OrgUnit division = orgUnitRepository.save(new OrgUnit(company, null, "Division", "Division"));
         north = orgUnitRepository.save(new OrgUnit(company, division, "North", "Zone"));
@@ -231,7 +231,7 @@ class OrgScopeAndDoctorChangeIntegrationTest {
     @Test
     void aPeerMrCannotReviewAnotherMrsDoctorRequest() {
         // Every real Member manages their own list -- it must not make them a reviewer.
-        grant(mrSouth.getRole(), "recipient_list.manage");
+        grant(mrSouth.getRole(), "my_doctors.manage");
         DoctorChangeRequestResponse request = requestNewDoctor(mrNorth, "PEER-1");
 
         actAs(mrSouth);

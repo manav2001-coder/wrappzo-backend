@@ -64,7 +64,7 @@ class RequiresPermissionTest {
             signInWith("ROLE_USER", Permission.Keys.ORDER_VIEW);
             assertThat(guarded.viewOrders()).isEqualTo("ok");
 
-            signInWith("ROLE_USER", Permission.Keys.ORDER_ARTWORK_REVIEW);
+            signInWith("ROLE_USER", Permission.Keys.ARTWORK_REVIEW);
             assertThatThrownBy(guarded::viewOrders).isInstanceOfAny(AccessDeniedException.class, AuthorizationDeniedException.class);
         }
     }

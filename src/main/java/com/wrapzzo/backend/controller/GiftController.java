@@ -30,56 +30,56 @@ public class GiftController {
     private final GiftService giftService;
 
     @PostMapping("/add")
-    @RequiresPermission(Keys.PLATFORM_PRODUCT_CREATE)
+    @RequiresPermission(Keys.PLATFORM_GIFT_CREATE)
     public GiftResponse add(@Valid @RequestBody CreateGiftRequest request) {
         return giftService.create(request);
     }
 
     @GetMapping("/list")
-    @RequiresPermission(Keys.PLATFORM_PRODUCT_VIEW)
+    @RequiresPermission(Keys.PLATFORM_GIFT_VIEW)
     public List<GiftResponse> list() {
         return giftService.list();
     }
 
     @GetMapping("/view/{id}")
-    @RequiresPermission(Keys.PLATFORM_PRODUCT_VIEW)
+    @RequiresPermission(Keys.PLATFORM_GIFT_VIEW)
     public GiftResponse view(@PathVariable UUID id) {
         return giftService.get(id);
     }
 
     @PostMapping("/edit/{id}")
-    @RequiresPermission(Keys.PLATFORM_PRODUCT_EDIT)
+    @RequiresPermission(Keys.PLATFORM_GIFT_EDIT)
     public GiftResponse edit(@PathVariable UUID id, @Valid @RequestBody UpdateGiftRequest request) {
         return giftService.update(id, request);
     }
 
     @PostMapping("/activate/{id}")
-    @RequiresPermission(Keys.PLATFORM_PRODUCT_STATUS)
+    @RequiresPermission(Keys.PLATFORM_GIFT_STATUS)
     public GiftResponse activate(@PathVariable UUID id) {
         return giftService.setActive(id, true);
     }
 
     @PostMapping("/deactivate/{id}")
-    @RequiresPermission(Keys.PLATFORM_PRODUCT_STATUS)
+    @RequiresPermission(Keys.PLATFORM_GIFT_STATUS)
     public GiftResponse deactivate(@PathVariable UUID id) {
         return giftService.setActive(id, false);
     }
 
     @PostMapping("/presignImage/{id}")
-    @RequiresPermission(Keys.PLATFORM_PRODUCT_EDIT)
+    @RequiresPermission(Keys.PLATFORM_GIFT_EDIT)
     public PresignGiftImageUploadResponse presignImage(
             @PathVariable UUID id, @Valid @RequestBody PresignGiftImageUploadRequest request) {
         return giftService.presignImageUpload(id, request.contentType());
     }
 
     @PostMapping("/addImage/{id}")
-    @RequiresPermission(Keys.PLATFORM_PRODUCT_EDIT)
+    @RequiresPermission(Keys.PLATFORM_GIFT_EDIT)
     public GiftResponse addImage(@PathVariable UUID id, @Valid @RequestBody AttachGiftImageRequest request) {
         return giftService.attachImage(id, request.key(), request.displayOrder());
     }
 
     @DeleteMapping("/removeImage/{id}/{imageId}")
-    @RequiresPermission(Keys.PLATFORM_PRODUCT_EDIT)
+    @RequiresPermission(Keys.PLATFORM_GIFT_EDIT)
     public GiftResponse removeImage(@PathVariable UUID id, @PathVariable UUID imageId) {
         return giftService.deleteImage(id, imageId);
     }

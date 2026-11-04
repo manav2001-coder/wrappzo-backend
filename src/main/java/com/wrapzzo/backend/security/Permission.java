@@ -30,21 +30,22 @@ public enum Permission {
     CAMPAIGN_ENTRY_SUBMIT(Keys.CAMPAIGN_ENTRY_SUBMIT, true),
     CAMPAIGN_ENTRY_VIEW(Keys.CAMPAIGN_ENTRY_VIEW, true),
 
-    REQUEST_CREATE(Keys.REQUEST_CREATE, true),
-    REQUEST_APPROVE(Keys.REQUEST_APPROVE, true),
+    QUICK_GIFT_CREATE(Keys.QUICK_GIFT_CREATE, true),
+    QUICK_GIFT_APPROVE(Keys.QUICK_GIFT_APPROVE, true),
 
-    PRODUCT_VIEW(Keys.PRODUCT_VIEW, true),
+    GIFT_STORE_VIEW(Keys.GIFT_STORE_VIEW, true),
 
     ORDER_VIEW(Keys.ORDER_VIEW, true),
-    ORDER_ARTWORK_REVIEW(Keys.ORDER_ARTWORK_REVIEW, true),
-    ORDER_ARTWORK_FINAL(Keys.ORDER_ARTWORK_FINAL, true),
+    ORDER_REQUEST_PHOTO(Keys.ORDER_REQUEST_PHOTO, true),
+    ARTWORK_REVIEW(Keys.ARTWORK_REVIEW, true),
+    ARTWORK_FINAL_APPROVE(Keys.ARTWORK_FINAL_APPROVE, true),
 
-    RECIPIENT_VIEW(Keys.RECIPIENT_VIEW, true),
-    RECIPIENT_CREATE(Keys.RECIPIENT_CREATE, true),
-    RECIPIENT_EDIT(Keys.RECIPIENT_EDIT, true),
+    DOCTOR_VIEW(Keys.DOCTOR_VIEW, true),
+    DOCTOR_CREATE(Keys.DOCTOR_CREATE, true),
+    DOCTOR_EDIT(Keys.DOCTOR_EDIT, true),
 
-    RECIPIENT_LIST_MANAGE(Keys.RECIPIENT_LIST_MANAGE, true),
-    RECIPIENT_LIST_APPROVE(Keys.RECIPIENT_LIST_APPROVE, true),
+    MY_DOCTORS_MANAGE(Keys.MY_DOCTORS_MANAGE, true),
+    MY_DOCTORS_APPROVE(Keys.MY_DOCTORS_APPROVE, true),
 
     USER_VIEW(Keys.USER_VIEW, true),
     USER_CREATE(Keys.USER_CREATE, true),
@@ -54,21 +55,21 @@ public enum Permission {
     ROLE_VIEW(Keys.ROLE_VIEW, true),
     ROLE_EDIT(Keys.ROLE_EDIT, true),
 
-    TBAC_FEATURE_MASTER_VIEW(Keys.TBAC_FEATURE_MASTER_VIEW, true),
-    TBAC_FEATURE_MASTER_ADD(Keys.TBAC_FEATURE_MASTER_ADD, true),
-    TBAC_FEATURE_MASTER_EDIT(Keys.TBAC_FEATURE_MASTER_EDIT, true),
-    TBAC_TEMPLATE_MASTER_VIEW(Keys.TBAC_TEMPLATE_MASTER_VIEW, true),
-    TBAC_TEMPLATE_MASTER_ADD(Keys.TBAC_TEMPLATE_MASTER_ADD, true),
-    TBAC_TEMPLATE_MASTER_EDIT(Keys.TBAC_TEMPLATE_MASTER_EDIT, true),
-    TBAC_FEATURES_TO_TEMPLATE_MANAGE(Keys.TBAC_FEATURES_TO_TEMPLATE_MANAGE, true),
-    TBAC_FEATURES_TO_TEMPLATE_ASSIGNMENT(Keys.TBAC_FEATURES_TO_TEMPLATE_ASSIGNMENT, true),
-    TBAC_TEMPLATES_TO_TEMPLATE_MANAGE(Keys.TBAC_TEMPLATES_TO_TEMPLATE_MANAGE, true),
-    TBAC_TEMPLATES_TO_TEMPLATE_ASSIGNMENT(Keys.TBAC_TEMPLATES_TO_TEMPLATE_ASSIGNMENT, true),
-    TBAC_USER_TEMPLATE_MANAGE(Keys.TBAC_USER_TEMPLATE_MANAGE, true),
-    TBAC_USER_TEMPLATE_ASSIGNMENT(Keys.TBAC_USER_TEMPLATE_ASSIGNMENT, true),
-    TBAC_BULK_ASSIGN_USER_TEMPLATES(Keys.TBAC_BULK_ASSIGN_USER_TEMPLATES, true),
-    TBAC_ROLE_TEMPLATE_MANAGE(Keys.TBAC_ROLE_TEMPLATE_MANAGE, true),
-    TBAC_ROLE_TEMPLATE_ASSIGNMENT(Keys.TBAC_ROLE_TEMPLATE_ASSIGNMENT, true),
+    FEATURE_MASTER_VIEW(Keys.FEATURE_MASTER_VIEW, true),
+    FEATURE_MASTER_ADD(Keys.FEATURE_MASTER_ADD, true),
+    FEATURE_MASTER_EDIT(Keys.FEATURE_MASTER_EDIT, true),
+    TEMPLATE_MASTER_VIEW(Keys.TEMPLATE_MASTER_VIEW, true),
+    TEMPLATE_MASTER_ADD(Keys.TEMPLATE_MASTER_ADD, true),
+    TEMPLATE_MASTER_EDIT(Keys.TEMPLATE_MASTER_EDIT, true),
+    FEATURES_TO_TEMPLATE_VIEW(Keys.FEATURES_TO_TEMPLATE_VIEW, true),
+    FEATURES_TO_TEMPLATE_ASSIGN(Keys.FEATURES_TO_TEMPLATE_ASSIGN, true),
+    TEMPLATES_TO_TEMPLATE_VIEW(Keys.TEMPLATES_TO_TEMPLATE_VIEW, true),
+    TEMPLATES_TO_TEMPLATE_ASSIGN(Keys.TEMPLATES_TO_TEMPLATE_ASSIGN, true),
+    USER_TEMPLATE_VIEW(Keys.USER_TEMPLATE_VIEW, true),
+    USER_TEMPLATE_ASSIGN(Keys.USER_TEMPLATE_ASSIGN, true),
+    USER_TEMPLATE_BULK_ASSIGN(Keys.USER_TEMPLATE_BULK_ASSIGN, true),
+    ROLE_TEMPLATE_VIEW(Keys.ROLE_TEMPLATE_VIEW, true),
+    ROLE_TEMPLATE_ASSIGN(Keys.ROLE_TEMPLATE_ASSIGN, true),
 
     COMPANY_VENDOR_VIEW(Keys.COMPANY_VENDOR_VIEW, true),
     COMPANY_VENDOR_ADD(Keys.COMPANY_VENDOR_ADD, true),
@@ -88,10 +89,10 @@ public enum Permission {
     PLATFORM_VENDOR_EDIT(Keys.PLATFORM_VENDOR_EDIT, false),
     PLATFORM_VENDOR_STATUS(Keys.PLATFORM_VENDOR_STATUS, false),
 
-    PLATFORM_PRODUCT_VIEW(Keys.PLATFORM_PRODUCT_VIEW, false),
-    PLATFORM_PRODUCT_CREATE(Keys.PLATFORM_PRODUCT_CREATE, false),
-    PLATFORM_PRODUCT_EDIT(Keys.PLATFORM_PRODUCT_EDIT, false),
-    PLATFORM_PRODUCT_STATUS(Keys.PLATFORM_PRODUCT_STATUS, false),
+    PLATFORM_GIFT_VIEW(Keys.PLATFORM_GIFT_VIEW, false),
+    PLATFORM_GIFT_CREATE(Keys.PLATFORM_GIFT_CREATE, false),
+    PLATFORM_GIFT_EDIT(Keys.PLATFORM_GIFT_EDIT, false),
+    PLATFORM_GIFT_STATUS(Keys.PLATFORM_GIFT_STATUS, false),
 
     PLATFORM_ORDER_VIEW(Keys.PLATFORM_ORDER_VIEW, false),
     PLATFORM_ORDER_MANAGE(Keys.PLATFORM_ORDER_MANAGE, false),
@@ -106,6 +107,9 @@ public enum Permission {
 
     /** The action every module that can be read at all is read with; granting any other action of a module implies it. */
     public static final String VIEW_ACTION = "view";
+
+    /** Modules whose actions are done on another module's records: artwork is reviewed on an order, so it implies seeing orders. */
+    private static final Map<String, String> VIEW_OF_MODULE = Map.of("artwork", ORDER_VIEW.key);
 
     private static final Map<String, Permission> BY_KEY =
             Arrays.stream(values()).collect(Collectors.toUnmodifiableMap(Permission::key, Function.identity()));
@@ -149,7 +153,7 @@ public enum Permission {
 
     /** The module's view permission, if it has one -- what granting any of its other actions also grants. */
     public Optional<Permission> impliedView() {
-        return VIEW_ACTION.equals(action) ? Optional.empty() : fromKey(module + "." + VIEW_ACTION);
+        return VIEW_ACTION.equals(action) ? Optional.empty() : fromKey(VIEW_OF_MODULE.getOrDefault(module, module + "." + VIEW_ACTION));
     }
 
     /** Compile-time constants for annotations ({@code @RequiresPermission(Keys.ORDER_VIEW)}). */
@@ -165,21 +169,22 @@ public enum Permission {
         public static final String CAMPAIGN_ENTRY_SUBMIT = "campaign_entry.submit";
         public static final String CAMPAIGN_ENTRY_VIEW = "campaign_entry.view";
 
-        public static final String REQUEST_CREATE = "request.create";
-        public static final String REQUEST_APPROVE = "request.approve";
+        public static final String QUICK_GIFT_CREATE = "quick_gift.create";
+        public static final String QUICK_GIFT_APPROVE = "quick_gift.approve";
 
-        public static final String PRODUCT_VIEW = "product.view";
+        public static final String GIFT_STORE_VIEW = "gift_store.view";
 
         public static final String ORDER_VIEW = "order.view";
-        public static final String ORDER_ARTWORK_REVIEW = "order.artwork_review";
-        public static final String ORDER_ARTWORK_FINAL = "order.artwork_final";
+        public static final String ORDER_REQUEST_PHOTO = "order.request_photo";
+        public static final String ARTWORK_REVIEW = "artwork.review";
+        public static final String ARTWORK_FINAL_APPROVE = "artwork.final_approve";
 
-        public static final String RECIPIENT_VIEW = "recipient.view";
-        public static final String RECIPIENT_CREATE = "recipient.create";
-        public static final String RECIPIENT_EDIT = "recipient.edit";
+        public static final String DOCTOR_VIEW = "doctor.view";
+        public static final String DOCTOR_CREATE = "doctor.create";
+        public static final String DOCTOR_EDIT = "doctor.edit";
 
-        public static final String RECIPIENT_LIST_MANAGE = "recipient_list.manage";
-        public static final String RECIPIENT_LIST_APPROVE = "recipient_list.approve";
+        public static final String MY_DOCTORS_MANAGE = "my_doctors.manage";
+        public static final String MY_DOCTORS_APPROVE = "my_doctors.approve";
 
         public static final String USER_VIEW = "user.view";
         public static final String USER_CREATE = "user.create";
@@ -189,21 +194,21 @@ public enum Permission {
         public static final String ROLE_VIEW = "role.view";
         public static final String ROLE_EDIT = "role.edit";
 
-        public static final String TBAC_FEATURE_MASTER_VIEW = "tbac.feature_master.view";
-        public static final String TBAC_FEATURE_MASTER_ADD = "tbac.feature_master.add";
-        public static final String TBAC_FEATURE_MASTER_EDIT = "tbac.feature_master.edit";
-        public static final String TBAC_TEMPLATE_MASTER_VIEW = "tbac.template_master.view";
-        public static final String TBAC_TEMPLATE_MASTER_ADD = "tbac.template_master.add";
-        public static final String TBAC_TEMPLATE_MASTER_EDIT = "tbac.template_master.edit";
-        public static final String TBAC_FEATURES_TO_TEMPLATE_MANAGE = "tbac.features_to_template.manage";
-        public static final String TBAC_FEATURES_TO_TEMPLATE_ASSIGNMENT = "tbac.features_to_template.assignment";
-        public static final String TBAC_TEMPLATES_TO_TEMPLATE_MANAGE = "tbac.templates_to_template.manage";
-        public static final String TBAC_TEMPLATES_TO_TEMPLATE_ASSIGNMENT = "tbac.templates_to_template.assignment";
-        public static final String TBAC_USER_TEMPLATE_MANAGE = "tbac.user_template.manage";
-        public static final String TBAC_USER_TEMPLATE_ASSIGNMENT = "tbac.user_template.assignment";
-        public static final String TBAC_BULK_ASSIGN_USER_TEMPLATES = "tbac.bulk_assign_user_templates";
-        public static final String TBAC_ROLE_TEMPLATE_MANAGE = "tbac.role_template.manage";
-        public static final String TBAC_ROLE_TEMPLATE_ASSIGNMENT = "tbac.role_template.assignment";
+        public static final String FEATURE_MASTER_VIEW = "feature_master.view";
+        public static final String FEATURE_MASTER_ADD = "feature_master.add";
+        public static final String FEATURE_MASTER_EDIT = "feature_master.edit";
+        public static final String TEMPLATE_MASTER_VIEW = "template_master.view";
+        public static final String TEMPLATE_MASTER_ADD = "template_master.add";
+        public static final String TEMPLATE_MASTER_EDIT = "template_master.edit";
+        public static final String FEATURES_TO_TEMPLATE_VIEW = "features_to_template.view";
+        public static final String FEATURES_TO_TEMPLATE_ASSIGN = "features_to_template.assign";
+        public static final String TEMPLATES_TO_TEMPLATE_VIEW = "templates_to_template.view";
+        public static final String TEMPLATES_TO_TEMPLATE_ASSIGN = "templates_to_template.assign";
+        public static final String USER_TEMPLATE_VIEW = "user_template.view";
+        public static final String USER_TEMPLATE_ASSIGN = "user_template.assign";
+        public static final String USER_TEMPLATE_BULK_ASSIGN = "user_template.bulk_assign";
+        public static final String ROLE_TEMPLATE_VIEW = "role_template.view";
+        public static final String ROLE_TEMPLATE_ASSIGN = "role_template.assign";
 
         public static final String COMPANY_VENDOR_VIEW = "company_vendor.view";
         public static final String COMPANY_VENDOR_ADD = "company_vendor.add";
@@ -223,10 +228,10 @@ public enum Permission {
         public static final String PLATFORM_VENDOR_EDIT = "platform_vendor.edit";
         public static final String PLATFORM_VENDOR_STATUS = "platform_vendor.status";
 
-        public static final String PLATFORM_PRODUCT_VIEW = "platform_product.view";
-        public static final String PLATFORM_PRODUCT_CREATE = "platform_product.create";
-        public static final String PLATFORM_PRODUCT_EDIT = "platform_product.edit";
-        public static final String PLATFORM_PRODUCT_STATUS = "platform_product.status";
+        public static final String PLATFORM_GIFT_VIEW = "platform_gift.view";
+        public static final String PLATFORM_GIFT_CREATE = "platform_gift.create";
+        public static final String PLATFORM_GIFT_EDIT = "platform_gift.edit";
+        public static final String PLATFORM_GIFT_STATUS = "platform_gift.status";
 
         public static final String PLATFORM_ORDER_VIEW = "platform_order.view";
         public static final String PLATFORM_ORDER_MANAGE = "platform_order.manage";

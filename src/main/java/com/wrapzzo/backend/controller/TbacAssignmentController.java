@@ -47,33 +47,33 @@ public class TbacAssignmentController {
     // --- roles ---
 
     @GetMapping("/roles")
-    @RequiresPermission(Keys.TBAC_ROLE_TEMPLATE_MANAGE)
+    @RequiresPermission(Keys.ROLE_TEMPLATE_VIEW)
     public List<RoleResponse> roles(@RequestParam(required = false) UUID companyId) {
         return roleService.list(templateService.requireCompanyScope(companyId));
     }
 
     @GetMapping("/roles/{roleId}")
-    @RequiresPermission(Keys.TBAC_ROLE_TEMPLATE_MANAGE)
+    @RequiresPermission(Keys.ROLE_TEMPLATE_VIEW)
     public RoleResponse role(@PathVariable UUID roleId) {
         return roleService.get(roleId);
     }
 
     @GetMapping("/roles/{roleId}/templates")
-    @RequiresPermission(Keys.TBAC_ROLE_TEMPLATE_MANAGE)
+    @RequiresPermission(Keys.ROLE_TEMPLATE_VIEW)
     public IdListResponse<TbacTemplateResponse> roleTemplates(@PathVariable UUID roleId) {
         return new IdListResponse<>(templateService.roleTemplates(roleId));
     }
 
     @PostMapping("/roles/{roleId}/templates")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @RequiresPermission(Keys.TBAC_ROLE_TEMPLATE_ASSIGNMENT)
+    @RequiresPermission(Keys.ROLE_TEMPLATE_ASSIGN)
     public void assignRoleTemplates(@PathVariable UUID roleId, @Valid @RequestBody AssignTemplatesRequest request) {
         templateService.assignRoleTemplates(roleId, request.templateIds());
     }
 
     @DeleteMapping("/roles/{roleId}/templates/{templateId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @RequiresPermission(Keys.TBAC_ROLE_TEMPLATE_ASSIGNMENT)
+    @RequiresPermission(Keys.ROLE_TEMPLATE_ASSIGN)
     public void removeRoleTemplate(@PathVariable UUID roleId, @PathVariable UUID templateId) {
         templateService.removeRoleTemplate(roleId, templateId);
     }
@@ -100,20 +100,20 @@ public class TbacAssignmentController {
 
     @PostMapping("/users/{userId}/templates")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @RequiresPermission(Keys.TBAC_USER_TEMPLATE_ASSIGNMENT)
+    @RequiresPermission(Keys.USER_TEMPLATE_ASSIGN)
     public void assignUserTemplates(@PathVariable UUID userId, @Valid @RequestBody AssignTemplatesRequest request) {
         templateService.assignUserTemplates(userId, request.templateIds());
     }
 
     @DeleteMapping("/users/{userId}/templates/{templateId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @RequiresPermission(Keys.TBAC_USER_TEMPLATE_ASSIGNMENT)
+    @RequiresPermission(Keys.USER_TEMPLATE_ASSIGN)
     public void removeUserTemplate(@PathVariable UUID userId, @PathVariable UUID templateId) {
         templateService.removeUserTemplate(userId, templateId);
     }
 
     @PostMapping("/users/templates/bulk-assign")
-    @RequiresPermission(Keys.TBAC_BULK_ASSIGN_USER_TEMPLATES)
+    @RequiresPermission(Keys.USER_TEMPLATE_BULK_ASSIGN)
     public BulkAssignUserTemplatesResponse bulkAssign(@Valid @RequestBody BulkUserTemplatesRequest request) {
         return templateService.bulkAssignUserTemplates(request.userIds(), request.templateIds());
     }

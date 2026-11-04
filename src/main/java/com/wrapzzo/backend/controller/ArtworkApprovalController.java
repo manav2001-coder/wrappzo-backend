@@ -24,7 +24,7 @@ public class ArtworkApprovalController {
     private final OrderDesignService orderDesignService;
 
     @GetMapping("/pending")
-    @PreAuthorize("hasAnyAuthority('" + Keys.ORDER_ARTWORK_REVIEW + "', '" + Keys.ORDER_ARTWORK_FINAL + "')")
+    @PreAuthorize("hasAnyAuthority('" + Keys.ARTWORK_REVIEW + "', '" + Keys.ARTWORK_FINAL_APPROVE + "')")
     public List<PendingArtworkApprovalResponse> pending() {
         return orderDesignService.listPendingFinalApproval();
     }

@@ -42,20 +42,20 @@ public class TbacFeatureController {
     }
 
     @GetMapping("/catalogue")
-    @RequiresPermission(Keys.TBAC_FEATURE_MASTER_ADD)
+    @RequiresPermission(Keys.FEATURE_MASTER_ADD)
     public List<TbacCatalogueEntry> catalogue() {
         return featureService.catalogue();
     }
 
     @PostMapping("/bulk-register")
-    @RequiresPermission(Keys.TBAC_FEATURE_MASTER_ADD)
+    @RequiresPermission(Keys.FEATURE_MASTER_ADD)
     public BulkRegisterFeaturesResponse bulkRegister(
             @RequestParam(required = false) UUID companyId, @Valid @RequestBody BulkRegisterFeaturesRequest request) {
         return featureService.register(companyId, request.features().stream().map(BulkRegisterFeaturesRequest.Entry::key).toList());
     }
 
     @PutMapping("/{featureId}")
-    @RequiresPermission(Keys.TBAC_FEATURE_MASTER_EDIT)
+    @RequiresPermission(Keys.FEATURE_MASTER_EDIT)
     public TbacFeatureResponse setActive(
             @RequestParam(required = false) UUID companyId, @PathVariable UUID featureId, @Valid @RequestBody SetActiveRequest request) {
         return featureService.setActive(companyId, featureId, request.active());

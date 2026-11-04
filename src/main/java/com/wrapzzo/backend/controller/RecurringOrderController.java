@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/recurring-orders")
 @RequiredArgsConstructor
-@RequiresPermission(Keys.REQUEST_CREATE)
+@RequiresPermission(Keys.QUICK_GIFT_CREATE)
 public class RecurringOrderController {
 
     private final RecurringOrderService recurringOrderService;

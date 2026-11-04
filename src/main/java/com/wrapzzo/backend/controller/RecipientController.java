@@ -35,66 +35,66 @@ public class RecipientController {
     private final RecipientService recipientService;
 
     @GetMapping
-    @RequiresPermission(Keys.RECIPIENT_VIEW)
+    @RequiresPermission(Keys.DOCTOR_VIEW)
     public List<RecipientResponse> list() {
         return recipientService.list();
     }
 
     /** "Pick an existing doctor" for the Quick Gift form -- anyone who can send a gift can search, not just recipient.manage holders. */
     @GetMapping("/search")
-    @PreAuthorize("hasAnyAuthority('" + Keys.RECIPIENT_VIEW + "', '" + Keys.REQUEST_CREATE + "', '" + Keys.RECIPIENT_LIST_MANAGE + "')")
+    @PreAuthorize("hasAnyAuthority('" + Keys.DOCTOR_VIEW + "', '" + Keys.QUICK_GIFT_CREATE + "', '" + Keys.MY_DOCTORS_MANAGE + "')")
     public List<RecipientResponse> search(@RequestParam String q) {
         return recipientService.search(q);
     }
 
     /** An MR's own working list (recipient_assignments) -- not the full shared directory. */
     @GetMapping("/mine")
-    @PreAuthorize("hasAnyAuthority('" + Keys.RECIPIENT_LIST_MANAGE + "', '" + Keys.REQUEST_CREATE + "')")
+    @PreAuthorize("hasAnyAuthority('" + Keys.MY_DOCTORS_MANAGE + "', '" + Keys.QUICK_GIFT_CREATE + "')")
     public List<RecipientResponse> mine() {
         return recipientService.listMine();
     }
 
     /** An MR adds a doctor to their own list -- no approval step. */
     @PostMapping("/mine")
-    @RequiresPermission(Keys.RECIPIENT_LIST_MANAGE)
+    @RequiresPermission(Keys.MY_DOCTORS_MANAGE)
     public RecipientResponse createMine(@Valid @RequestBody CreateRecipientRequest request) {
         return recipientService.createMine(request);
     }
 
     /** A sheet of doctors onto the caller's own list, all or none. */
     @PostMapping("/mine/bulk")
-    @RequiresPermission(Keys.RECIPIENT_LIST_MANAGE)
+    @RequiresPermission(Keys.MY_DOCTORS_MANAGE)
     public BulkDoctorsResponse bulkCreateMine(@Valid @RequestBody BulkDoctorsRequest request) {
         return recipientService.bulkCreateMine(request.rows());
     }
 
     @PutMapping("/mine/{id}")
-    @RequiresPermission(Keys.RECIPIENT_LIST_MANAGE)
+    @RequiresPermission(Keys.MY_DOCTORS_MANAGE)
     public RecipientResponse updateMine(@PathVariable UUID id, @Valid @RequestBody UpdateRecipientRequest request) {
         return recipientService.updateMine(id, request);
     }
 
     @DeleteMapping("/mine/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @RequiresPermission(Keys.RECIPIENT_LIST_MANAGE)
+    @RequiresPermission(Keys.MY_DOCTORS_MANAGE)
     public void removeMine(@PathVariable UUID id) {
         recipientService.removeMine(id);
     }
 
     @PostMapping
-    @RequiresPermission(Keys.RECIPIENT_CREATE)
+    @RequiresPermission(Keys.DOCTOR_CREATE)
     public RecipientResponse create(@Valid @RequestBody CreateRecipientRequest request) {
         return recipientService.create(request);
     }
 
     @PutMapping("/{id}")
-    @RequiresPermission(Keys.RECIPIENT_EDIT)
+    @RequiresPermission(Keys.DOCTOR_EDIT)
     public RecipientResponse update(@PathVariable UUID id, @Valid @RequestBody UpdateRecipientRequest request) {
         return recipientService.update(id, request);
     }
 
     @GetMapping("/upcoming-birthdays")
-    @RequiresPermission(Keys.RECIPIENT_VIEW)
+    @RequiresPermission(Keys.DOCTOR_VIEW)
     public List<UpcomingBirthdayResponse> upcomingBirthdays(@RequestParam(defaultValue = "30") int days) {
         return recipientService.upcomingBirthdays(days);
     }

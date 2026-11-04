@@ -40,7 +40,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class FeatureService {
 
     /** Modules that run the access screens themselves: switching one off would lock the company out of repairing access. */
-    private static final Set<String> ALWAYS_ON_PREFIXES = Set.of("tbac.", "role.");
+    private static final Set<String> ALWAYS_ON_PREFIXES = Set.of(
+            "feature_master.", "template_master.", "features_to_template.", "templates_to_template.", "user_template.", "role_template.", "role.");
 
     private final AccessControlRepository accessControlRepository;
     private final CompanyAccessControlRepository companyAccessControlRepository;

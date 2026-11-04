@@ -30,49 +30,49 @@ public class QuickGiftController {
     private final QuickGiftService quickGiftService;
 
     @PostMapping("/presignPhoto")
-    @RequiresPermission(Keys.REQUEST_CREATE)
+    @RequiresPermission(Keys.QUICK_GIFT_CREATE)
     public PresignQuickGiftPhotoResponse presignPhoto(@Valid @RequestBody PresignQuickGiftPhotoRequest request) {
         return quickGiftService.presignPhoto(request.contentType());
     }
 
     @PostMapping
-    @RequiresPermission(Keys.REQUEST_CREATE)
+    @RequiresPermission(Keys.QUICK_GIFT_CREATE)
     public QuickGiftRequestResponse create(@Valid @RequestBody CreateQuickGiftRequest request) {
         return quickGiftService.create(request);
     }
 
     @GetMapping("/mine")
-    @RequiresPermission(Keys.REQUEST_CREATE)
+    @RequiresPermission(Keys.QUICK_GIFT_CREATE)
     public List<QuickGiftRequestResponse> mine() {
         return quickGiftService.listMine();
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyAuthority('" + Keys.REQUEST_CREATE + "', '" + Keys.REQUEST_APPROVE + "')")
+    @PreAuthorize("hasAnyAuthority('" + Keys.QUICK_GIFT_CREATE + "', '" + Keys.QUICK_GIFT_APPROVE + "')")
     public QuickGiftRequestResponse get(@PathVariable UUID id) {
         return quickGiftService.get(id);
     }
 
     @PostMapping("/{id}/requestPhotoLink")
-    @RequiresPermission(Keys.REQUEST_CREATE)
+    @RequiresPermission(Keys.QUICK_GIFT_CREATE)
     public RequestPhotoLinkResponse requestPhotoLink(@PathVariable UUID id) {
         return new RequestPhotoLinkResponse(quickGiftService.requestPhotoLinkAgain(id));
     }
 
     @GetMapping("/pending-approval")
-    @RequiresPermission(Keys.REQUEST_APPROVE)
+    @RequiresPermission(Keys.QUICK_GIFT_APPROVE)
     public List<QuickGiftRequestResponse> pendingApproval() {
         return quickGiftService.listPendingApproval();
     }
 
     @PostMapping("/{id}/approve")
-    @RequiresPermission(Keys.REQUEST_APPROVE)
+    @RequiresPermission(Keys.QUICK_GIFT_APPROVE)
     public QuickGiftRequestResponse approve(@PathVariable UUID id) {
         return quickGiftService.approve(id);
     }
 
     @PostMapping("/{id}/reject")
-    @RequiresPermission(Keys.REQUEST_APPROVE)
+    @RequiresPermission(Keys.QUICK_GIFT_APPROVE)
     public QuickGiftRequestResponse reject(@PathVariable UUID id, @Valid @RequestBody RejectQuickGiftRequest request) {
         return quickGiftService.reject(id, request.reason());
     }
