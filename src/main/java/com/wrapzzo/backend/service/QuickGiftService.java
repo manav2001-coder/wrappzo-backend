@@ -121,7 +121,7 @@ public class QuickGiftService {
                 new QuickGiftRequest(company, gift, requester, name, phone, email, address, request.giftMessage(), request.internalNotes());
         quickGift.setRecipientDob(dob);
         quickGift.setRecipientQualification(doctor.qualification());
-        quickGift.setRecipientRegistrationNumber(doctor.registrationNumber());
+        quickGift.setRecipientPcode(pcode == null ? null : pcode.trim());
         quickGift.setRecipientSpeciality(doctor.speciality());
         quickGift.setRecipientClinicName(doctor.clinicName());
         quickGift.setQuantity(quantity);

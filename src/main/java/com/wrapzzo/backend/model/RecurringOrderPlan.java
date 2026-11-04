@@ -68,8 +68,8 @@ public class RecurringOrderPlan {
     @Column(name = "recipient_qualification")
     private String recipientQualification;
 
-    @Column(name = "recipient_registration_number")
-    private String recipientRegistrationNumber;
+    @Column(name = "recipient_pcode")
+    private String recipientPcode;
 
     @Column(name = "recipient_speciality")
     private String recipientSpeciality;

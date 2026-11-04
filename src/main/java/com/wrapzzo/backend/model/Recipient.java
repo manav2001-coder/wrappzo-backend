@@ -57,13 +57,9 @@ public class Recipient {
     @Column
     private String qualification;
 
-    /** The doctor's unique identifier in the company (V59) -- what they are found by. Null only for doctors that predate it. */
-    @Column
+    /** The doctor's unique identifier in the company (V59) -- the doctor's natural key, and what they are found by. */
+    @Column(nullable = false)
     private String pcode;
-
-    /** Medical-council registration number -- unique per company when set (V36), the doctor's natural key. */
-    @Column(name = "registration_number")
-    private String registrationNumber;
 
     @Column
     private String speciality;

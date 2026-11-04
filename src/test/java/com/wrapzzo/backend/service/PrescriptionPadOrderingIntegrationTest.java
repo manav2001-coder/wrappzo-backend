@@ -142,7 +142,7 @@ class PrescriptionPadOrderingIntegrationTest {
     private CreateQuickGiftRequest padOrder(Gift gift, int quantity) {
         return new CreateQuickGiftRequest(
                 gift.getId(), null, "Dr. Asha Shah", "9800000001", "PC-ASHA", null, "12 MG Road, Pune", null, null, null, null,
-                new DoctorDetails("MBBS, MD", "MH-12345", "Cardiology", "Shah Heart Clinic"), quantity);
+                new DoctorDetails("MBBS, MD", "Cardiology", "Shah Heart Clinic"), quantity);
     }
 
     private void enableDirectOrdering() {
@@ -159,7 +159,7 @@ class PrescriptionPadOrderingIntegrationTest {
         assertThat(placed.status()).isEqualTo(QuickGiftStatus.APPROVED);
         assertThat(placed.orderId()).isNotNull();
         assertThat(placed.quantity()).isEqualTo(5);
-        assertThat(placed.doctor().registrationNumber()).isEqualTo("MH-12345");
+        assertThat(placed.recipientPcode()).isEqualTo("PC-ASHA");
 
         Order order = orderRepository.findById(placed.orderId()).orElseThrow();
         assertThat(order.getAssignedVendor().getId()).isEqualTo(printer.getId());
@@ -243,7 +243,7 @@ class PrescriptionPadOrderingIntegrationTest {
         assertThat(after.designVersions()).isEqualTo(2);
         assertThat(after.latestDesignStatus()).isEqualTo(OrderDesignStatus.PENDING_REVIEW);
         assertThat(after.artworkApproved()).isFalse();
-        assertThat(after.doctor().registrationNumber()).isEqualTo("MH-12345");
+        assertThat(after.recipientPcode()).isEqualTo("PC-ASHA");
 
         VendorOrderResponse single = orderService.getForVendor(orderId, printer.getId());
         assertThat(single.designVersions()).isEqualTo(2);
@@ -295,13 +295,12 @@ class PrescriptionPadOrderingIntegrationTest {
     }
 
     @Test
-    void aRegistrationNumberIdentifiesTheSameDoctor() {
+    void aPcodeIdentifiesTheSameDoctor() {
         actAs(mrNorth);
-        recipientService.create(new CreateRecipientRequest("Dr. A. Shah", "9800000001", "PC-A", null, null, null,
-                new DoctorDetails("MBBS", "MH-777", null, null)));
+        recipientService.create(new CreateRecipientRequest("Dr. A. Shah", "9800000001", "MH-777", null, null, null,
+                new DoctorDetails("MBBS", null, null)));
 
-        assertThatThrownBy(() -> recipientService.create(new CreateRecipientRequest("Asha Shah", "9800000002", "PC-B", null, null, null,
-                new DoctorDetails(null, "mh-777", null, null))))
+        assertThatThrownBy(() -> recipientService.create(new CreateRecipientRequest("Asha Shah", "9800000002", "mh-777", null, null, null, null)))
                 .isInstanceOf(RecipientAlreadyExistsException.class);
     }
 

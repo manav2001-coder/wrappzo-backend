@@ -50,13 +50,13 @@ public class RecurringOrderService {
         // A typed new doctor was added to the directory by the first order, under their pcode: later runs go through that entry.
         plan.setRecipient(request.recipientId() != null
                 ? recipientRepository.findById(request.recipientId()).orElse(null)
-                : recipientRepository.findFirstByCompany_IdAndPcodeIgnoreCase(placed.getCompany().getId(), request.recipientPcode().trim()).orElse(null));
+                : recipientRepository.findFirstByCompany_IdAndPcodeIgnoreCase(placed.getCompany().getId(), placed.getRecipientPcode()).orElse(null));
         plan.setRecipientName(placed.getRecipientName());
         plan.setRecipientPhone(placed.getRecipientPhone());
         plan.setRecipientEmail(placed.getRecipientEmail());
         plan.setDeliveryAddress(placed.getDeliveryAddress());
         plan.setRecipientQualification(placed.getRecipientQualification());
-        plan.setRecipientRegistrationNumber(placed.getRecipientRegistrationNumber());
+        plan.setRecipientPcode(placed.getRecipientPcode());
         plan.setRecipientSpeciality(placed.getRecipientSpeciality());
         plan.setRecipientClinicName(placed.getRecipientClinicName());
         plan.setGiftMessage(placed.getGiftMessage());
@@ -132,10 +132,9 @@ public class RecurringOrderService {
     private void placeAndAdvance(RecurringOrderPlan plan) {
         UUID recipientId = plan.getRecipient() != null ? plan.getRecipient().getId() : null;
         quickGiftService.create(new CreateQuickGiftRequest(
-                plan.getGift().getId(), recipientId, plan.getRecipientName(), plan.getRecipientPhone(), null, plan.getRecipientEmail(),
+                plan.getGift().getId(), recipientId, plan.getRecipientName(), plan.getRecipientPhone(), plan.getRecipientPcode(), plan.getRecipientEmail(),
                 plan.getDeliveryAddress(), null, plan.getGiftMessage(), "Recurring order", null,
-                new DoctorDetails(plan.getRecipientQualification(), plan.getRecipientRegistrationNumber(),
-                        plan.getRecipientSpeciality(), plan.getRecipientClinicName()),
+                new DoctorDetails(plan.getRecipientQualification(), plan.getRecipientSpeciality(), plan.getRecipientClinicName()),
                 plan.getQuantity()));
         LocalDate next = plan.getNextRunOn().plusMonths(1);
         // Never queue a backlog -- after downtime, the next run is a month from today, not a string of catch-up orders.

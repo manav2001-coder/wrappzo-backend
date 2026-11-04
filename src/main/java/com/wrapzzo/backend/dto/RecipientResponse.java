@@ -33,7 +33,7 @@ public record RecipientResponse(
                 r.getEmail(),
                 r.getAddress(),
                 r.getDateOfBirth(),
-                new DoctorDetails(r.getQualification(), r.getRegistrationNumber(), r.getSpeciality(), r.getClinicName()),
+                new DoctorDetails(r.getQualification(), r.getSpeciality(), r.getClinicName()),
                 r.getCreatedBy() != null ? r.getCreatedBy().getName() : null,
                 r.getCreatedAt(),
                 inMyList);

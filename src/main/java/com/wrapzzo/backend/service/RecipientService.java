@@ -111,7 +111,6 @@ public class RecipientService {
                 });
         String pcode = request.pcode().trim();
         rejectDuplicatePcode(company.getId(), pcode, null);
-        rejectDuplicateRegistration(company.getId(), doctor, null);
         Recipient recipient = new Recipient(
                 company, request.name().trim(), request.phone().trim(), email, blankToNull(request.address()), request.dateOfBirth(), user);
         recipient.setPcode(pcode);
@@ -121,18 +120,14 @@ public class RecipientService {
 
     /**
      * An MR adds a doctor to their own list -- no approval. A doctor already in the directory under
-     * the same pcode (or registration number) is the same doctor: they join this MR's list rather than
-     * becoming a duplicate (which the unique indexes would also refuse).
+     * the same pcode is the same doctor: they join this MR's list rather than becoming a duplicate
+     * (which the unique index would also refuse).
      */
     @Transactional
     public RecipientResponse createMine(CreateRecipientRequest request) {
         User user = currentUser();
-        DoctorDetails doctor = DoctorDetails.orEmpty(request.doctor());
         UUID companyId = user.getCompany().getId();
         Recipient recipient = recipientRepository.findFirstByCompany_IdAndPcodeIgnoreCase(companyId, request.pcode().trim()).orElse(null);
-        if (recipient == null && doctor.registrationNumber() != null) {
-            recipient = recipientRepository.findFirstByCompany_IdAndRegistrationNumberIgnoreCase(companyId, doctor.registrationNumber()).orElse(null);
-        }
         if (recipient == null) {
             recipient = createEntity(user, request);
         }
@@ -144,9 +139,8 @@ public class RecipientService {
 
     /**
      * Adds a whole sheet of doctors to the caller's list, all or none. A row that matches a doctor
-     * already in the company (same pcode or registration number, or same name + phone + email) is that
-     * doctor: it joins the list instead of becoming a duplicate -- and a doctor that predates pcodes
-     * gets the row's pcode.
+     * already in the company (same pcode, or same name + phone + email) is that doctor: it joins the
+     * list instead of becoming a duplicate.
      */
     @Transactional
     public BulkDoctorsResponse bulkCreateMine(List<BulkDoctorRow> rows) {
@@ -160,9 +154,6 @@ public class RecipientService {
             DoctorDetails doctor = DoctorDetails.orEmpty(row.doctor());
             String pcode = row.pcode().trim();
             Recipient recipient = recipientRepository.findFirstByCompany_IdAndPcodeIgnoreCase(companyId, pcode).orElse(null);
-            if (recipient == null && doctor.registrationNumber() != null) {
-                recipient = recipientRepository.findFirstByCompany_IdAndRegistrationNumberIgnoreCase(companyId, doctor.registrationNumber()).orElse(null);
-            }
             if (recipient == null) {
                 recipient = recipientRepository
                         .findMatch(companyId, normalizedName(row.name()), row.phone().trim(), normalizedEmail(email))
@@ -175,8 +166,6 @@ public class RecipientService {
                 recipient.setPcode(pcode);
                 applyDoctorDetails(recipient, doctor);
                 recipient = recipientRepository.save(recipient);
-            } else if (recipient.getPcode() == null) {
-                recipient.setPcode(pcode);
             }
             if (recipientAssignmentRepository.existsByRecipient_IdAndMrUser_Id(recipient.getId(), user.getId())) {
                 unchanged++;
@@ -230,7 +219,6 @@ public class RecipientService {
         // Omitted means "leave the doctor details alone" -- a form that doesn't show them must not wipe them.
         if (request.doctor() != null) {
             DoctorDetails doctor = request.doctor().normalized();
-            rejectDuplicateRegistration(recipient.getCompany().getId(), doctor, id);
             applyDoctorDetails(recipient, doctor);
         }
         return recipient;
@@ -244,20 +232,8 @@ public class RecipientService {
                 });
     }
 
-    private void rejectDuplicateRegistration(UUID companyId, DoctorDetails doctor, UUID excludeId) {
-        if (doctor.registrationNumber() == null) {
-            return;
-        }
-        recipientRepository.findFirstByCompany_IdAndRegistrationNumberIgnoreCase(companyId, doctor.registrationNumber())
-                .filter(r -> !r.getId().equals(excludeId))
-                .ifPresent(r -> {
-                    throw new RecipientAlreadyExistsException(r.getName());
-                });
-    }
-
     private static void applyDoctorDetails(Recipient recipient, DoctorDetails doctor) {
         recipient.setQualification(doctor.qualification());
-        recipient.setRegistrationNumber(doctor.registrationNumber());
         recipient.setSpeciality(doctor.speciality());
         recipient.setClinicName(doctor.clinicName());
     }
@@ -289,7 +265,7 @@ public class RecipientService {
     }
 
     /**
-     * Same, carrying a doctor's pcode and print details -- a known pcode or registration number counts as "already there" too.
+     * Same, carrying a doctor's pcode and print details -- a known pcode counts as "already there" too.
      * A doctor needs a pcode, so without one nothing is added to the directory (the caller's own record is unaffected).
      */
     @Transactional
@@ -303,10 +279,6 @@ public class RecipientService {
         }
         String cleanEmail = blankToNull(email);
         if (recipientRepository.findMatch(company.getId(), normalizedName(name), phone.trim(), normalizedEmail(cleanEmail)).isPresent()) {
-            return;
-        }
-        if (doctor.registrationNumber() != null
-                && recipientRepository.findFirstByCompany_IdAndRegistrationNumberIgnoreCase(company.getId(), doctor.registrationNumber()).isPresent()) {
             return;
         }
         Recipient recipient = new Recipient(company, name.trim(), phone.trim(), cleanEmail, blankToNull(address), dateOfBirth, createdBy);

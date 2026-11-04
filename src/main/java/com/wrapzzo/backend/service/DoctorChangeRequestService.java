@@ -74,7 +74,6 @@ public class DoctorChangeRequestService {
         entity.setProposedDob(request.proposedDob());
         DoctorDetails doctor = DoctorDetails.orEmpty(request.proposedDoctor());
         entity.setProposedQualification(doctor.qualification());
-        entity.setProposedRegistrationNumber(doctor.registrationNumber());
         entity.setProposedSpeciality(doctor.speciality());
         entity.setProposedClinicName(doctor.clinicName());
         return DoctorChangeRequestResponse.from(doctorChangeRequestRepository.save(entity));
@@ -144,19 +143,13 @@ public class DoctorChangeRequestService {
     }
 
     /**
-     * A doctor already in the directory under the same registration number is the same doctor:
-     * they join the MR's list rather than becoming a duplicate (which the V36 unique index would
-     * also refuse).
+     * A doctor already in the directory under the same pcode is the same doctor: they join the MR's
+     * list rather than becoming a duplicate (which the unique index would also refuse).
      */
     private void applyAdd(DoctorChangeRequest entity) {
         Recipient recipient = entity.getProposedPcode() == null
                 ? null
                 : recipientRepository.findFirstByCompany_IdAndPcodeIgnoreCase(entity.getCompany().getId(), entity.getProposedPcode()).orElse(null);
-        if (recipient == null && entity.getProposedRegistrationNumber() != null) {
-            recipient = recipientRepository
-                    .findFirstByCompany_IdAndRegistrationNumberIgnoreCase(entity.getCompany().getId(), entity.getProposedRegistrationNumber())
-                    .orElse(null);
-        }
         if (recipient == null) {
             recipient = new Recipient(
                     entity.getCompany(),
@@ -168,7 +161,6 @@ public class DoctorChangeRequestService {
                     entity.getRequestedBy());
             recipient.setPcode(entity.getProposedPcode());
             recipient.setQualification(entity.getProposedQualification());
-            recipient.setRegistrationNumber(entity.getProposedRegistrationNumber());
             recipient.setSpeciality(entity.getProposedSpeciality());
             recipient.setClinicName(entity.getProposedClinicName());
             recipient = recipientRepository.save(recipient);
@@ -197,15 +189,6 @@ public class DoctorChangeRequestService {
                         throw RecipientAlreadyExistsException.pcode(pcode, other.getName());
                     });
             recipient.setPcode(pcode);
-        }
-        String registration = entity.getProposedRegistrationNumber();
-        if (registration != null) {
-            recipientRepository.findFirstByCompany_IdAndRegistrationNumberIgnoreCase(recipient.getCompany().getId(), registration)
-                    .filter(other -> !other.getId().equals(recipient.getId()))
-                    .ifPresent(other -> {
-                        throw new RecipientAlreadyExistsException(other.getName());
-                    });
-            recipient.setRegistrationNumber(registration);
         }
     }
 

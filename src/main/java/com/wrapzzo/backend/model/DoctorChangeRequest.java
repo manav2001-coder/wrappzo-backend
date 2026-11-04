@@ -76,9 +76,6 @@ public class DoctorChangeRequest {
     @Column(name = "proposed_qualification")
     private String proposedQualification;
 
-    @Column(name = "proposed_registration_number")
-    private String proposedRegistrationNumber;
-
     @Column(name = "proposed_speciality")
     private String proposedSpeciality;
 

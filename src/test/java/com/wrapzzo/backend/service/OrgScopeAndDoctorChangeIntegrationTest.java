@@ -61,7 +61,7 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * The functional gaps closed after the prescription-pad work: a manager covering more than one
  * zone, the dashboard staying inside the viewer's org scope, and doctor change requests carrying
- * the print details (and finding an existing doctor by registration number instead of
+ * the print details (and finding an existing doctor by pcode instead of
  * duplicating them).
  *
  * Org tree: Division -> North (MR North), South (MR South).
@@ -239,7 +239,7 @@ class OrgScopeAndDoctorChangeIntegrationTest {
     void aFieldUserSeesTheirOwnListAndTheirManagerSeesTheirTeamsDoctors() {
         actAs(mrNorth);
         RecipientResponse added = recipientService.createMine(new CreateRecipientRequest(
-                "Dr. Meera Iyer", "9800000077", "PC-777", null, "Clinic Road", null, new DoctorDetails(null, "TN-777", null, null)));
+                "Dr. Meera Iyer", "9800000077", "PC-777", null, "Clinic Road", null, new DoctorDetails(null, null, null)));
         assertThat(added.inMyList()).isTrue();
         assertThat(recipientService.list()).extracting(RecipientResponse::id).contains(added.id());
 
@@ -292,27 +292,27 @@ class OrgScopeAndDoctorChangeIntegrationTest {
         actAs(mrNorth);
         DoctorChangeRequestResponse request = doctorChangeRequestService.create(new CreateDoctorChangeRequest(
                 DoctorChangeAction.ADD, null, "Dr. Meera Iyer", "9800000003", "PC-555", null, "Clinic Road", null,
-                new DoctorDetails("MBBS, DNB", "TN-555", "Paediatrics", "Iyer Child Care")));
-        assertThat(request.proposedDoctor().registrationNumber()).isEqualTo("TN-555");
+                new DoctorDetails("MBBS, DNB", "Paediatrics", "Iyer Child Care")));
+        assertThat(request.proposedPcode()).isEqualTo("PC-555");
 
         actAs(manager);
         DoctorChangeRequestResponse approved = doctorChangeRequestService.approve(request.id());
 
         Recipient doctor = recipientRepository.findById(approved.recipientId()).orElseThrow();
-        assertThat(doctor.getRegistrationNumber()).isEqualTo("TN-555");
+        assertThat(doctor.getPcode()).isEqualTo("PC-555");
         assertThat(doctor.getSpeciality()).isEqualTo("Paediatrics");
         assertThat(recipientAssignmentRepository.existsByRecipient_IdAndMrUser_Id(doctor.getId(), mrNorth.getId())).isTrue();
     }
 
     @Test
-    void addingADoctorWhoseRegistrationIsKnownAssignsTheExistingOne() {
+    void addingADoctorWhosePcodeIsKnownAssignsTheExistingOne() {
         Recipient existing = new Recipient(company, "Dr. A. Shah", "9800000001", null, null, null, mrSouth);
-        existing.setRegistrationNumber("MH-12345");
+        existing.setPcode("MH-12345");
         existing = recipientRepository.save(existing);
 
         actAs(mrNorth);
         DoctorChangeRequestResponse request = doctorChangeRequestService.create(new CreateDoctorChangeRequest(
-                DoctorChangeAction.ADD, null, "Asha Shah", "9800000099", "PC-273", null, null, null, new DoctorDetails(null, "mh-12345", null, null)));
+                DoctorChangeAction.ADD, null, "Asha Shah", "9800000099", "mh-12345", null, null, null, null));
 
         actAs(manager);
         DoctorChangeRequestResponse approved = doctorChangeRequestService.approve(request.id());
@@ -322,11 +322,10 @@ class OrgScopeAndDoctorChangeIntegrationTest {
         assertThat(recipientAssignmentRepository.existsByRecipient_IdAndMrUser_Id(existing.getId(), mrNorth.getId())).isTrue();
     }
 
-    private DoctorChangeRequestResponse requestNewDoctor(User mr, String registration) {
+    private DoctorChangeRequestResponse requestNewDoctor(User mr, String pcode) {
         actAs(mr);
         return doctorChangeRequestService.create(new CreateDoctorChangeRequest(
-                DoctorChangeAction.ADD, null, "Dr. New", "9800000077", "PC-" + registration, null, "Clinic Road", null,
-                new DoctorDetails(null, registration, null, null)));
+                DoctorChangeAction.ADD, null, "Dr. New", "9800000077", pcode, null, "Clinic Road", null, null));
     }
 
     @Test

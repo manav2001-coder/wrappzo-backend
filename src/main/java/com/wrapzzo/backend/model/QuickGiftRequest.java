@@ -80,8 +80,9 @@ public class QuickGiftRequest {
     @Column(name = "recipient_qualification")
     private String recipientQualification;
 
-    @Column(name = "recipient_registration_number")
-    private String recipientRegistrationNumber;
+    /** The doctor's pcode when ordered -- what the vendor prints on the pad. */
+    @Column(name = "recipient_pcode")
+    private String recipientPcode;
 
     @Column(name = "recipient_speciality")
     private String recipientSpeciality;

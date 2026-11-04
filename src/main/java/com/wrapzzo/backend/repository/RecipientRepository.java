@@ -46,9 +46,6 @@ public interface RecipientRepository extends JpaRepository<Recipient, UUID> {
     /** The doctor's unique identifier within a company, ignoring case. */
     Optional<Recipient> findFirstByCompany_IdAndPcodeIgnoreCase(UUID companyId, String pcode);
 
-    /** The doctor-directory dedupe: the same registration number in a company is the same doctor, whatever the name/phone say. */
-    Optional<Recipient> findFirstByCompany_IdAndRegistrationNumberIgnoreCase(UUID companyId, String registrationNumber);
-
     // Visibility (see service.Visibility): a recipient is visible through whoever added it or
     // whoever has it on their list -- if any of them is visible to the caller, so is the recipient.
 
@@ -68,8 +65,7 @@ public interface RecipientRepository extends JpaRepository<Recipient, UUID> {
             select r from Recipient r left join r.createdBy creator
             where r.company.id = :companyId
               and (lower(r.name) like lower(concat('%', :query, '%')) or r.phone like concat('%', :query, '%')
-                   or lower(r.pcode) like lower(concat('%', :query, '%'))
-                   or lower(r.registrationNumber) like lower(concat('%', :query, '%')))
+                   or lower(r.pcode) like lower(concat('%', :query, '%')))
               and (:companyWide = true
                    or creator.id in :people or creator.orgUnit.id in :orgUnits
                    or exists (select 1 from RecipientAssignment a where a.recipient = r

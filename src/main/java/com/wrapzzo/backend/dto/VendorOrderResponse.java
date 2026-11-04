@@ -25,6 +25,8 @@ public record VendorOrderResponse(
         String giftName,
         String recipientName,
         String recipientPhone,
+        /** The doctor's pcode -- printed on a personalised pad; null for a campaign order. */
+        String recipientPcode,
         /** Null until the recipient uploads one -- shown so the vendor can produce a personalized gift correctly. */
         String recipientPhotoUrl,
         /** The gift's raw price -- no markup, no commission. Null if the gift has no price set. */
@@ -67,6 +69,7 @@ public record VendorOrderResponse(
                 order.getGift() != null ? order.getGift().getName() : null,
                 order.getRecipientName(),
                 order.getRecipientPhone(),
+                request != null ? request.getRecipientPcode() : null,
                 recipientPhotoUrl,
                 order.getGift() != null ? order.getGift().getPrice() : null,
                 order.getQuantity(),
@@ -75,8 +78,7 @@ public record VendorOrderResponse(
                 order.getWarehouse() != null ? order.getWarehouse().getAddress() : null,
                 request != null ? request.getGiftMessage() : null,
                 request != null
-                        ? new DoctorDetails(request.getRecipientQualification(), request.getRecipientRegistrationNumber(),
-                                request.getRecipientSpeciality(), request.getRecipientClinicName())
+                        ? new DoctorDetails(request.getRecipientQualification(), request.getRecipientSpeciality(), request.getRecipientClinicName())
                         : null,
                 order.getGift() != null && order.getGift().isArtworkRequired(),
                 artworkApproved,
