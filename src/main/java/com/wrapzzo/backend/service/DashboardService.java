@@ -33,7 +33,6 @@ import com.wrapzzo.backend.repository.QuickGiftRequestRepository;
 import com.wrapzzo.backend.repository.SubmissionRepository;
 import com.wrapzzo.backend.repository.UserRepository;
 import com.wrapzzo.backend.security.CurrentUser;
-import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -118,13 +117,12 @@ public class DashboardService {
         long quickGiftsThisMonth = quickGifts.stream().filter(q -> !q.getCreatedAt().isBefore(monthStart)).count();
         long quickGiftsPending = quickGifts.stream().filter(q -> q.getStatus() == QuickGiftStatus.SUBMITTED).count();
 
-        // Counted from the moment an order exists (i.e. approved -- an Order is only ever created at
-        // approval time, whether that's automatic for a Campaign submission or manual for a Quick
-        // Gift), not from DELIVERED -- the spend is committed the moment it's approved, not on delivery.
-        BigDecimal monthlySpend = orders.stream()
-                .filter(o -> o.getStatus() != OrderStatus.CANCELLED && !o.getCreatedAt().isBefore(monthStart) && o.getTotalPrice() != null)
-                .map(Order::getTotalPrice)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // An Order only exists once approved (automatic for a Campaign submission, manual for a Quick Gift),
+        // so every non-cancelled order is a PEL request; delivered ones are served.
+        List<Order> requested = orders.stream().filter(DashboardService::isRequested).toList();
+        long pelsRequested = requested.stream().mapToLong(Order::getQuantity).sum();
+        long doctorsRequested = requested.stream().filter(DashboardService::hasDoctor).map(DashboardService::doctorKey).distinct().count();
+        long pelsServed = orders.stream().filter(o -> o.getStatus() == OrderStatus.DELIVERED).mapToLong(Order::getQuantity).sum();
 
         Map<String, Long> orderSourceBreakdown = orders.stream()
                 .collect(Collectors.groupingBy(o -> o.getSource().name(), Collectors.counting()));
@@ -145,7 +143,9 @@ public class DashboardService {
                 submissionsPending,
                 quickGiftsThisMonth,
                 quickGiftsPending,
-                monthlySpend,
+                pelsRequested,
+                doctorsRequested,
+                pelsServed,
                 orderSourceBreakdown,
                 quickGiftStatusBreakdown,
                 submissionStatusBreakdown,
@@ -184,7 +184,9 @@ public class DashboardService {
                     data.orders().stream().filter(o -> departmentOf(o, data.quickGiftRequesterByOrderId()).equals(value)).toList(),
                     "Orders — " + value);
             case "week" -> weekDrilldown(value, data.submissions(), data.quickGifts());
-            case "monthlySpend" -> monthlySpendDrilldown(data.orders(), data.quickGiftRequesterByOrderId());
+            case "pelsRequested" -> pelsPerDoctorDrilldown(data.orders().stream().filter(DashboardService::isRequested).toList(), "PELs requested per doctor");
+            case "pelsServed" -> pelsPerDoctorDrilldown(
+                    data.orders().stream().filter(o -> o.getStatus() == OrderStatus.DELIVERED).toList(), "PELs served per doctor");
             case "pipelineStage" -> ordersDrilldown(
                     data.orders().stream().filter(o -> pipelineStageMatches(o.getStatus(), value)).toList(),
                     "Orders — " + pipelineStageTitle(value));
@@ -272,8 +274,7 @@ public class DashboardService {
                         o.getStatus().name(),
                         o.getCreatedAt(),
                         o.getCampaign() != null ? o.getCampaign().getId() : null,
-                        o.getTotalPrice(),
-                        null))
+                        (long) o.getQuantity()))
                 .toList();
         return new DashboardDrilldownResponse(title, rows);
     }
@@ -289,8 +290,7 @@ public class DashboardService {
                         q.getStatus().name(),
                         q.getCreatedAt(),
                         null,
-                        q.getOrder() != null ? q.getOrder().getTotalPrice() : null,
-                        null))
+                        (long) q.getQuantity()))
                 .toList();
         return new DashboardDrilldownResponse(title, rows);
     }
@@ -306,35 +306,49 @@ public class DashboardService {
                         s.getStatus().name(),
                         s.getSubmittedAt() != null ? s.getSubmittedAt() : s.getCreatedAt(),
                         s.getCampaign().getId(),
-                        null,
                         null))
                 .toList();
         return new DashboardDrilldownResponse(title, rows);
     }
 
-    /** Every priced order approved this calendar month (not yet cancelled) -- who submitted/requested it, what gift, and how much.
-     * source is populated here (unlike the other drilldowns) so the frontend can segregate Campaign orders from
-     * Quick Gift ones instead of showing one undifferentiated list. */
-    private DashboardDrilldownResponse monthlySpendDrilldown(List<Order> orders, Map<UUID, User> quickGiftRequesterByOrderId) {
-        Instant monthStart = monthStart();
-        List<Row> rows = orders.stream()
-                .filter(o -> o.getStatus() != OrderStatus.CANCELLED && !o.getCreatedAt().isBefore(monthStart) && o.getTotalPrice() != null)
-                .sorted(Comparator.comparing(Order::getCreatedAt).reversed())
-                .limit(DRILLDOWN_LIMIT)
-                .map(o -> new Row(
-                        "ORD-" + o.getOrderNo(),
-                        submitterName(o, quickGiftRequesterByOrderId),
-                        o.getGift() != null ? o.getGift().getName() : "—",
-                        o.getStatus().name(),
-                        o.getCreatedAt(),
-                        o.getCampaign() != null ? o.getCampaign().getId() : null,
-                        o.getTotalPrice(),
-                        o.getSource().name()))
-                .toList();
-        return new DashboardDrilldownResponse("Monthly spend", rows);
+    /** A cancelled order was never a PEL request. */
+    private static boolean isRequested(Order order) {
+        return order.getStatus() != OrderStatus.CANCELLED;
     }
 
-    /** CAMPAIGN orders attribute to the submitter; Quick Gift orders to the requester -- "who spent it", not the recipient. */
+    private static boolean hasDoctor(Order order) {
+        return (order.getRecipientPhone() != null && !order.getRecipientPhone().isBlank())
+                || (order.getRecipientName() != null && !order.getRecipientName().isBlank());
+    }
+
+    /** One doctor per phone number (their name when there is none), so a doctor who is sent PELs twice counts once. */
+    private static String doctorKey(Order order) {
+        String phone = order.getRecipientPhone() == null ? "" : order.getRecipientPhone().replaceAll("\\D", "");
+        if (!phone.isEmpty()) {
+            return "p:" + phone;
+        }
+        return "n:" + (order.getRecipientName() == null ? "" : order.getRecipientName().trim().toLowerCase());
+    }
+
+    /** One row per doctor: how many PELs these orders carry for them, most first. */
+    private DashboardDrilldownResponse pelsPerDoctorDrilldown(List<Order> orders, String title) {
+        List<Row> rows = orders.stream()
+                .filter(DashboardService::hasDoctor)
+                .collect(Collectors.groupingBy(DashboardService::doctorKey))
+                .values().stream()
+                .map(group -> {
+                    Order latest = group.stream().max(Comparator.comparing(Order::getCreatedAt)).orElseThrow();
+                    String name = latest.getRecipientName() != null && !latest.getRecipientName().isBlank() ? latest.getRecipientName() : latest.getRecipientPhone();
+                    long pels = group.stream().mapToLong(Order::getQuantity).sum();
+                    return new Row(null, name, group.size() + (group.size() == 1 ? " order" : " orders"), null, latest.getCreatedAt(), null, pels);
+                })
+                .sorted(Comparator.comparing(Row::quantity).reversed())
+                .limit(DRILLDOWN_LIMIT)
+                .toList();
+        return new DashboardDrilldownResponse(title, rows);
+    }
+
+    /** CAMPAIGN orders attribute to the submitter; Quick Gift orders to the requester -- who asked for it, not the recipient. */
     private String submitterName(Order order, Map<UUID, User> quickGiftRequesterByOrderId) {
         if (order.getSource() == OrderSource.CAMPAIGN && order.getSubmission() != null) {
             return order.getSubmission().getSubmittedBy().getName();
@@ -407,14 +421,14 @@ public class DashboardService {
         if ("QUICK_GIFT".equals(seriesKey)) {
             for (QuickGiftRequest q : quickGifts) {
                 if (!q.getCreatedAt().isBefore(start) && q.getCreatedAt().isBefore(end)) {
-                    rows.add(new Row("QG-" + q.getRequestNo(), q.getGift().getName(), q.getRecipientName(), q.getStatus().name(), q.getCreatedAt(), null, null, null));
+                    rows.add(new Row("QG-" + q.getRequestNo(), q.getGift().getName(), q.getRecipientName(), q.getStatus().name(), q.getCreatedAt(), null, (long) q.getQuantity()));
                 }
             }
             title = "Quick Gift requests — week of " + weekLabel;
         } else {
             for (Submission s : submissions) {
                 if (s.getSubmittedAt() != null && !s.getSubmittedAt().isBefore(start) && s.getSubmittedAt().isBefore(end)) {
-                    rows.add(new Row(null, s.getCampaign().getName(), s.getSubmittedBy().getName(), s.getStatus().name(), s.getSubmittedAt(), s.getCampaign().getId(), null, null));
+                    rows.add(new Row(null, s.getCampaign().getName(), s.getSubmittedBy().getName(), s.getStatus().name(), s.getSubmittedAt(), s.getCampaign().getId(), null));
                 }
             }
             title = "Campaign submissions — week of " + weekLabel;
