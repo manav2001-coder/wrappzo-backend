@@ -44,8 +44,9 @@ public enum Permission {
     DOCTOR_CREATE(Keys.DOCTOR_CREATE, true),
     DOCTOR_EDIT(Keys.DOCTOR_EDIT, true),
 
-    MY_DOCTORS_MANAGE(Keys.MY_DOCTORS_MANAGE, true),
-    MY_DOCTORS_APPROVE(Keys.MY_DOCTORS_APPROVE, true),
+    DOCTOR_REMOVE(Keys.DOCTOR_REMOVE, true),
+    DOCTOR_IMPORT(Keys.DOCTOR_IMPORT, true),
+    DOCTOR_APPROVE(Keys.DOCTOR_APPROVE, true),
 
     USER_VIEW(Keys.USER_VIEW, true),
     USER_CREATE(Keys.USER_CREATE, true),
@@ -183,8 +184,9 @@ public enum Permission {
         public static final String DOCTOR_CREATE = "doctor.create";
         public static final String DOCTOR_EDIT = "doctor.edit";
 
-        public static final String MY_DOCTORS_MANAGE = "my_doctors.manage";
-        public static final String MY_DOCTORS_APPROVE = "my_doctors.approve";
+        public static final String DOCTOR_REMOVE = "doctor.remove";
+        public static final String DOCTOR_IMPORT = "doctor.import";
+        public static final String DOCTOR_APPROVE = "doctor.approve";
 
         public static final String USER_VIEW = "user.view";
         public static final String USER_CREATE = "user.create";

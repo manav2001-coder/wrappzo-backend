@@ -14,9 +14,15 @@ public record RecipientResponse(
         LocalDate dateOfBirth,
         DoctorDetails doctor,
         String createdByName,
-        Instant createdAt) {
+        Instant createdAt,
+        /** On the caller's own list (they added the doctor or are mapped to them) -- the only doctors they can remove. */
+        boolean inMyList) {
 
     public static RecipientResponse from(Recipient r) {
+        return from(r, false);
+    }
+
+    public static RecipientResponse from(Recipient r, boolean inMyList) {
         return new RecipientResponse(
                 r.getId(),
                 r.getName(),
@@ -26,6 +32,7 @@ public record RecipientResponse(
                 r.getDateOfBirth(),
                 new DoctorDetails(r.getQualification(), r.getRegistrationNumber(), r.getSpeciality(), r.getClinicName()),
                 r.getCreatedBy() != null ? r.getCreatedBy().getName() : null,
-                r.getCreatedAt());
+                r.getCreatedAt(),
+                inMyList);
     }
 }

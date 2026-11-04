@@ -26,7 +26,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Shared recipient directory -- Company Admin and Member alike can view and add. */
+/** Doctors: each user sees the ones they added or are mapped to and, up the reporting line, those of their org units. */
 @RestController
 @RequestMapping("/api/recipients")
 @RequiredArgsConstructor
@@ -40,53 +40,43 @@ public class RecipientController {
         return recipientService.list();
     }
 
-    /** "Pick an existing doctor" for the Quick Gift form -- anyone who can send a gift can search, not just recipient.manage holders. */
+    /** "Pick an existing doctor" for the Quick Gift form -- anyone who can send a gift can search, not just doctor.view holders. */
     @GetMapping("/search")
-    @PreAuthorize("hasAnyAuthority('" + Keys.DOCTOR_VIEW + "', '" + Keys.QUICK_GIFT_CREATE + "', '" + Keys.MY_DOCTORS_MANAGE + "')")
+    @PreAuthorize("hasAnyAuthority('" + Keys.DOCTOR_VIEW + "', '" + Keys.QUICK_GIFT_CREATE + "')")
     public List<RecipientResponse> search(@RequestParam String q) {
         return recipientService.search(q);
     }
 
-    /** An MR's own working list (recipient_assignments) -- not the full shared directory. */
+    /** The doctors on the caller's own list (recipient_assignments) -- who the Quick Gift form offers first. */
     @GetMapping("/mine")
-    @PreAuthorize("hasAnyAuthority('" + Keys.MY_DOCTORS_MANAGE + "', '" + Keys.QUICK_GIFT_CREATE + "')")
+    @PreAuthorize("hasAnyAuthority('" + Keys.DOCTOR_VIEW + "', '" + Keys.QUICK_GIFT_CREATE + "')")
     public List<RecipientResponse> mine() {
         return recipientService.listMine();
     }
 
-    /** An MR adds a doctor to their own list -- no approval step. */
+    /** Adds a doctor and puts them on the caller's list -- no approval step. */
     @PostMapping("/mine")
-    @RequiresPermission(Keys.MY_DOCTORS_MANAGE)
+    @RequiresPermission(Keys.DOCTOR_CREATE)
     public RecipientResponse createMine(@Valid @RequestBody CreateRecipientRequest request) {
         return recipientService.createMine(request);
     }
 
     /** A sheet of doctors onto the caller's own list, all or none. */
     @PostMapping("/mine/bulk")
-    @RequiresPermission(Keys.MY_DOCTORS_MANAGE)
+    @RequiresPermission(Keys.DOCTOR_IMPORT)
     public BulkDoctorsResponse bulkCreateMine(@Valid @RequestBody BulkDoctorsRequest request) {
         return recipientService.bulkCreateMine(request.rows());
     }
 
-    @PutMapping("/mine/{id}")
-    @RequiresPermission(Keys.MY_DOCTORS_MANAGE)
-    public RecipientResponse updateMine(@PathVariable UUID id, @Valid @RequestBody UpdateRecipientRequest request) {
-        return recipientService.updateMine(id, request);
-    }
-
+    /** Takes a doctor off the caller's list; they stay a company doctor. */
     @DeleteMapping("/mine/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @RequiresPermission(Keys.MY_DOCTORS_MANAGE)
+    @RequiresPermission(Keys.DOCTOR_REMOVE)
     public void removeMine(@PathVariable UUID id) {
         recipientService.removeMine(id);
     }
 
-    @PostMapping
-    @RequiresPermission(Keys.DOCTOR_CREATE)
-    public RecipientResponse create(@Valid @RequestBody CreateRecipientRequest request) {
-        return recipientService.create(request);
-    }
-
+    /** Edits any doctor the caller can see: one they added, one they are mapped to, or one in their org units (see Visibility). */
     @PutMapping("/{id}")
     @RequiresPermission(Keys.DOCTOR_EDIT)
     public RecipientResponse update(@PathVariable UUID id, @Valid @RequestBody UpdateRecipientRequest request) {

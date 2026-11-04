@@ -5,10 +5,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.wrapzzo.backend.dto.CreateDoctorChangeRequest;
 import com.wrapzzo.backend.dto.CreateQuickGiftRequest;
+import com.wrapzzo.backend.dto.CreateRecipientRequest;
 import com.wrapzzo.backend.dto.DashboardResponse;
 import com.wrapzzo.backend.dto.DoctorChangeRequestResponse;
 import com.wrapzzo.backend.dto.DoctorDetails;
 import com.wrapzzo.backend.dto.OrderResponse;
+import com.wrapzzo.backend.dto.RecipientResponse;
 import com.wrapzzo.backend.dto.UserResponse;
 import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.CompanyFeature;
@@ -63,6 +65,7 @@ class OrgScopeAndDoctorChangeIntegrationTest {
 
     @Autowired private QuickGiftService quickGiftService;
     @Autowired private OrderService orderService;
+    @Autowired private RecipientService recipientService;
     @Autowired private DashboardService dashboardService;
     @Autowired private UserService userService;
     @Autowired private DoctorChangeRequestService doctorChangeRequestService;
@@ -187,6 +190,37 @@ class OrgScopeAndDoctorChangeIntegrationTest {
     }
 
     @Test
+    void aFieldUserSeesTheirOwnListAndTheirManagerSeesTheirTeamsDoctors() {
+        actAs(mrNorth);
+        RecipientResponse added = recipientService.createMine(new CreateRecipientRequest(
+                "Dr. Meera Iyer", "9800000077", null, "Clinic Road", null, new DoctorDetails(null, "TN-777", null, null)));
+        assertThat(added.inMyList()).isTrue();
+        assertThat(recipientService.list()).extracting(RecipientResponse::id).contains(added.id());
+
+        // A peer in another zone never sees it; the manager of the zone does, without it being on their own list.
+        actAs(mrSouth);
+        assertThat(recipientService.list()).extracting(RecipientResponse::id).doesNotContain(added.id());
+        actAs(manager);
+        RecipientResponse seenByManager = recipientService.list().stream().filter(r -> r.id().equals(added.id())).findFirst().orElseThrow();
+        assertThat(seenByManager.inMyList()).isFalse();
+
+        // Taking it off their list makes it disappear for them, and leaves it with the manager.
+        actAs(mrNorth);
+        recipientService.removeMine(added.id());
+        assertThat(recipientService.list()).extracting(RecipientResponse::id).doesNotContain(added.id());
+        actAs(manager);
+        assertThat(recipientService.list()).extracting(RecipientResponse::id).contains(added.id());
+    }
+
+    @Test
+    void aDoctorAddedThroughAQuickGiftIsOnTheAddersList() {
+        placeOrder(mrNorth);
+        actAs(mrNorth);
+        assertThat(recipientService.list()).extracting(RecipientResponse::name).contains("Dr. " + mrNorth.getName());
+        assertThat(recipientService.list()).allSatisfy(r -> assertThat(r.inMyList()).isTrue());
+    }
+
+    @Test
     void anApprovedDoctorAdditionCarriesThePrintDetails() {
         actAs(mrNorth);
         DoctorChangeRequestResponse request = doctorChangeRequestService.create(new CreateDoctorChangeRequest(
@@ -231,7 +265,7 @@ class OrgScopeAndDoctorChangeIntegrationTest {
     @Test
     void aPeerMrCannotReviewAnotherMrsDoctorRequest() {
         // Every real Member manages their own list -- it must not make them a reviewer.
-        grant(mrSouth.getRole(), "my_doctors.manage");
+        grant(mrSouth.getRole(), "doctor.create");
         DoctorChangeRequestResponse request = requestNewDoctor(mrNorth, "PEER-1");
 
         actAs(mrSouth);

@@ -23,7 +23,9 @@ import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,20 +49,32 @@ public class RecipientService {
     public List<RecipientResponse> list() {
         User user = currentUser();
         Visibility visibility = visibilityService.resolve(user);
+        // Someone with nobody below them (an AM or MR) sees their own list -- the doctors they added or are mapped to --
+        // so taking a doctor off it makes them disappear. Managers see everything in reach (their team and org units).
+        if (visibility.ownRecordsOnly()) {
+            return listMine();
+        }
+        Set<UUID> onMyList = myListIds(user);
         return recipientRepository
                 .findVisible(user.getCompany().getId(), visibility.companyWide(), visibility.peopleForQuery(), visibility.orgUnitsForQuery())
                 .stream()
-                .map(RecipientResponse::from)
+                .map(r -> RecipientResponse.from(r, onMyList.contains(r.getId())))
                 .toList();
     }
 
-    /** An MR's own working list (recipient_assignments) -- not the full shared directory. */
+    /** The doctors on the caller's own list (recipient_assignments) -- a subset of what list() shows. */
     @Transactional(readOnly = true)
     public List<RecipientResponse> listMine() {
         User user = currentUser();
         return recipientAssignmentRepository.findByMrUser_IdOrderByAssignedAtDesc(user.getId()).stream()
-                .map(a -> RecipientResponse.from(a.getRecipient()))
+                .map(a -> RecipientResponse.from(a.getRecipient(), true))
                 .toList();
+    }
+
+    private Set<UUID> myListIds(User user) {
+        return recipientAssignmentRepository.findByMrUser_IdOrderByAssignedAtDesc(user.getId()).stream()
+                .map(a -> a.getRecipient().getId())
+                .collect(Collectors.toSet());
     }
 
     private static final int SEARCH_LIMIT = 10;
@@ -122,7 +136,7 @@ public class RecipientService {
         if (!recipientAssignmentRepository.existsByRecipient_IdAndMrUser_Id(recipient.getId(), user.getId())) {
             recipientAssignmentRepository.save(new RecipientAssignment(recipient, user));
         }
-        return RecipientResponse.from(recipient);
+        return RecipientResponse.from(recipient, true);
     }
 
     /**
@@ -169,16 +183,6 @@ public class RecipientService {
         return new BulkDoctorsResponse(created, joined, unchanged);
     }
 
-    /** Edits a doctor on the caller's own list. Anything not on it is a 404, like a doctor that doesn't exist. */
-    @Transactional
-    public RecipientResponse updateMine(UUID id, UpdateRecipientRequest request) {
-        User user = currentUser();
-        RecipientAssignment assignment = recipientAssignmentRepository
-                .findByRecipient_IdAndMrUser_Id(id, user.getId())
-                .orElseThrow(() -> new RecipientNotFoundException(id));
-        return RecipientResponse.from(applyUpdate(assignment.getRecipient(), request));
-    }
-
     /** Takes a doctor off the caller's list; the doctor stays in the directory, so past orders keep pointing at them. */
     @Transactional
     public void removeMine(UUID id) {
@@ -194,7 +198,8 @@ public class RecipientService {
 
     @Transactional
     public RecipientResponse update(UUID id, UpdateRecipientRequest request) {
-        return RecipientResponse.from(applyUpdate(getEntity(id), request));
+        Recipient recipient = applyUpdate(getEntity(id), request);
+        return RecipientResponse.from(recipient, recipientAssignmentRepository.existsByRecipient_IdAndMrUser_Id(id, currentUser().getId()));
     }
 
     private Recipient applyUpdate(Recipient recipient, UpdateRecipientRequest request) {
@@ -281,6 +286,10 @@ public class RecipientService {
         Recipient recipient = new Recipient(company, name.trim(), phone.trim(), cleanEmail, blankToNull(address), dateOfBirth, createdBy);
         applyDoctorDetails(recipient, doctor);
         recipientRepository.save(recipient);
+        // A doctor you add -- here, through a Quick Gift or a campaign entry -- is on your list, like one added on the Doctors screen.
+        if (createdBy != null) {
+            recipientAssignmentRepository.save(new RecipientAssignment(recipient, createdBy));
+        }
     }
 
     /** Upcoming birthdays of the recipients the caller can see (see Visibility). */
@@ -291,6 +300,10 @@ public class RecipientService {
         Visibility visibility = visibilityService.resolve(user);
         List<Recipient> recipients = recipientRepository.findVisibleWithDateOfBirth(
                 user.getCompany().getId(), visibility.companyWide(), visibility.peopleForQuery(), visibility.orgUnitsForQuery());
+        if (visibility.ownRecordsOnly()) {
+            Set<UUID> onMyList = myListIds(user);
+            recipients = recipients.stream().filter(r -> onMyList.contains(r.getId())).toList();
+        }
         return recipients.stream()
                 .map(r -> Map.entry(r, daysUntilNextBirthday(r.getDateOfBirth(), today)))
                 .filter(e -> e.getValue() <= daysAhead)
