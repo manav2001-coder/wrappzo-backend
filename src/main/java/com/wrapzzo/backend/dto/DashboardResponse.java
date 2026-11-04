@@ -2,7 +2,6 @@ package com.wrapzzo.backend.dto;
 
 import com.wrapzzo.backend.model.CampaignStatus;
 import com.wrapzzo.backend.model.OrderStatus;
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -22,8 +21,12 @@ public record DashboardResponse(
         long submissionsPending,
         long quickGiftsThisMonth,
         long quickGiftsPending,
-        /** Sum of totalPrice for DELIVERED orders whose delivery (updatedAt) falls in the current calendar month. */
-        BigDecimal monthlySpend,
+        /** PELs (units) on every order placed, cancelled ones aside. */
+        long pelsRequested,
+        /** Distinct doctors those PELs were requested for -- PELs requested per doctor is the first over this. */
+        long doctorsRequested,
+        /** PELs on orders that have been delivered. */
+        long pelsServed,
         /** Order counts by source -- "CAMPAIGN" / "QUICK_GIFT" / "BULK_GIFT". */
         Map<String, Long> orderSourceBreakdown,
         /** Quick Gift request counts by status -- "SUBMITTED" / "APPROVED" / "REJECTED". */

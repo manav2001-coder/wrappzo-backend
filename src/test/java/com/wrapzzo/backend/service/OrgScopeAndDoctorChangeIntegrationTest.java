@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.wrapzzo.backend.dto.CreateDoctorChangeRequest;
 import com.wrapzzo.backend.dto.CreateQuickGiftRequest;
+import com.wrapzzo.backend.dto.DashboardDrilldownResponse;
 import com.wrapzzo.backend.dto.DashboardResponse;
 import com.wrapzzo.backend.dto.DoctorChangeRequestResponse;
 import com.wrapzzo.backend.dto.DoctorDetails;
@@ -18,6 +19,8 @@ import com.wrapzzo.backend.model.DoctorChangeStatus;
 import com.wrapzzo.backend.exception.QuantityBelowMinimumException;
 import com.wrapzzo.backend.model.Gift;
 import com.wrapzzo.backend.model.GiftModule;
+import com.wrapzzo.backend.model.Order;
+import com.wrapzzo.backend.model.OrderStatus;
 import com.wrapzzo.backend.model.OrgUnit;
 import com.wrapzzo.backend.model.Recipient;
 import com.wrapzzo.backend.model.Role;
@@ -28,6 +31,7 @@ import com.wrapzzo.backend.repository.AccessControlRepository;
 import com.wrapzzo.backend.repository.CompanyRepository;
 import com.wrapzzo.backend.repository.CompanyVendorRepository;
 import com.wrapzzo.backend.repository.GiftRepository;
+import com.wrapzzo.backend.repository.OrderRepository;
 import com.wrapzzo.backend.repository.OrgUnitRepository;
 import com.wrapzzo.backend.repository.RecipientAssignmentRepository;
 import com.wrapzzo.backend.repository.RecipientRepository;
@@ -63,6 +67,7 @@ class OrgScopeAndDoctorChangeIntegrationTest {
 
     @Autowired private QuickGiftService quickGiftService;
     @Autowired private OrderService orderService;
+    @Autowired private OrderRepository orderRepository;
     @Autowired private DashboardService dashboardService;
     @Autowired private UserService userService;
     @Autowired private DoctorChangeRequestService doctorChangeRequestService;
@@ -184,6 +189,27 @@ class OrgScopeAndDoctorChangeIntegrationTest {
         actAs(manager);
         DashboardResponse dashboard = dashboardService.summary();
         assertThat(dashboard.recentOrders()).extracting(DashboardResponse.OrderTimelineItem::id).contains(northOrder).doesNotContain(southOrder);
+    }
+
+    @Test
+    void theDashboardCountsPelsPerDoctorAndServedInsteadOfMoney() {
+        UUID first = placeOrder(mrNorth);
+        placeOrder(mrNorth);
+        placeOrder(mrSouth);
+        Order delivered = orderRepository.findById(first).orElseThrow();
+        delivered.setStatus(OrderStatus.DELIVERED);
+        orderRepository.saveAndFlush(delivered);
+
+        actAs(manager);
+        DashboardResponse dashboard = dashboardService.summary();
+        // The manager sees North only: two orders of one PEL each, for two doctors; one of them delivered.
+        assertThat(dashboard.pelsRequested()).isEqualTo(2);
+        assertThat(dashboard.doctorsRequested()).isEqualTo(2);
+        assertThat(dashboard.pelsServed()).isEqualTo(1);
+
+        DashboardDrilldownResponse perDoctor = dashboardService.drilldown("pelsRequested", "");
+        assertThat(perDoctor.rows()).hasSize(2).allSatisfy(row -> assertThat(row.quantity()).isEqualTo(1L));
+        assertThat(dashboardService.drilldown("pelsServed", "").rows()).hasSize(1);
     }
 
     @Test
