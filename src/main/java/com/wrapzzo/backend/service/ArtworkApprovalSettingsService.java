@@ -74,7 +74,12 @@ public class ArtworkApprovalSettingsService {
         return new ArtworkApprovalStepsResponse(
                 companyFeatureFlagService.isEnabled(company.getId(), CompanyFeature.MARKETING_DESIGN_APPROVAL),
                 company.getArtworkApprovalLevels(),
-                steps);
+                steps,
+                roleRepository.findByCompanyId(company.getId()).stream()
+                        .filter(Role::isActive)
+                        .map(role -> new ArtworkApprovalStepsResponse.RoleOption(role.getId(), role.getName()))
+                        .sorted(java.util.Comparator.comparing(ArtworkApprovalStepsResponse.RoleOption::name, String.CASE_INSENSITIVE_ORDER))
+                        .toList());
     }
 
     private Company callersCompany() {

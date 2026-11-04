@@ -10,6 +10,7 @@ import com.wrapzzo.backend.dto.DoctorDetails;
 import com.wrapzzo.backend.dto.OrderResponse;
 import com.wrapzzo.backend.dto.PendingArtworkApprovalResponse;
 import com.wrapzzo.backend.dto.ArtworkApprovalStepsRequest;
+import com.wrapzzo.backend.dto.ArtworkApprovalStepsResponse;
 import com.wrapzzo.backend.dto.PresignOrderDesignResponse;
 import com.wrapzzo.backend.dto.QuickGiftRequestResponse;
 import com.wrapzzo.backend.dto.VendorOrderResponse;
@@ -433,6 +434,7 @@ class PrescriptionPadOrderingIntegrationTest {
         companyFeatureFlagService.setEnabled(company.getId(), CompanyFeature.MARKETING_DESIGN_APPROVAL, true);
         var saved = artworkApprovalSettingsService.set(request);
         assertThat(saved.enabled()).isTrue();
+        assertThat(saved.roles()).extracting(ArtworkApprovalStepsResponse.RoleOption::name).contains("HO", "RM", "Member");
         assertThat(saved.steps()).extracting(step -> step.roleName() + ":" + step.scope()).containsExactly("RM:REPORTING_LINE", "HO:DIVISION");
         assertThat(companyRepository.findById(company.getId()).orElseThrow().getArtworkApprovalLevels()).isEqualTo(2);
 
