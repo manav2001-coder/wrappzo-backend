@@ -72,7 +72,11 @@ public class OrderDesignService {
 
     // --- Vendor side: only orders assigned to them. ---
 
-    /** Proofs are PDFs, named PCODE_AMCODE_vN.pdf: the doctor's pcode, the ordering AM's code (their name if they have none), the version. */
+    /**
+     * Proofs are PDFs, named PCODE_AMCODE_vN.pdf: the doctor's pcode, the ordering AM's code (their name if they have none), the version.
+     * Transactional because the name reads the order's lazily-loaded owner (open-in-view is off).
+     */
+    @Transactional(readOnly = true)
     public PresignOrderDesignResponse presignForVendor(UUID orderId, UUID vendorId, String contentType) {
         String type = contentType == null ? "" : contentType.split(";")[0].trim();
         if (!PDF_CONTENT_TYPE.equalsIgnoreCase(type)) {

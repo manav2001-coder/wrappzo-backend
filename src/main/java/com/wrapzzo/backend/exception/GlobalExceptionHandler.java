@@ -399,7 +399,9 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(LazyInitializationException.class)
     public ResponseEntity<Map<String, String>> handleLazyInitialization(LazyInitializationException e) {
+        // Logged: this is a bug (a lazy field read outside a transaction), and without a trace it is invisible.
+        org.slf4j.LoggerFactory.getLogger(GlobalExceptionHandler.class).error("Lazy association read outside a transaction", e);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("error", "Something went wrong loading this data. Please try again."));
+                .body(Map.of("error", "The server could not load part of this data. This is a fault on our side, not something you did."));
     }
 }

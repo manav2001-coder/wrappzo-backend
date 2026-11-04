@@ -223,4 +223,20 @@ class OrderDesignServiceTest {
         u.setReportsTo(reportsTo);
         return u;
     }
+
+    /**
+     * open-in-view is off, so a service method that touches a lazy association outside a transaction fails at run
+     * time with a server error -- and the integration tests, which run inside one big transaction, never see it.
+     * Every public method here reads such associations, so each must open its own.
+     */
+    @Test
+    void everyPublicMethodRunsInATransaction() {
+        for (java.lang.reflect.Method method : OrderDesignService.class.getDeclaredMethods()) {
+            if (java.lang.reflect.Modifier.isPublic(method.getModifiers()) && !java.lang.reflect.Modifier.isStatic(method.getModifiers())) {
+                org.assertj.core.api.Assertions.assertThat(method.isAnnotationPresent(org.springframework.transaction.annotation.Transactional.class))
+                        .as(method.getName() + " is @Transactional")
+                        .isTrue();
+            }
+        }
+    }
 }
