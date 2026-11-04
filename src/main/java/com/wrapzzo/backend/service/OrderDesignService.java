@@ -10,17 +10,24 @@ import com.wrapzzo.backend.exception.InvalidArtworkFileException;
 import com.wrapzzo.backend.exception.OrderDesignAlreadyReviewedException;
 import com.wrapzzo.backend.exception.OrderDesignNotFoundException;
 import com.wrapzzo.backend.exception.OrderNotFoundException;
+import com.wrapzzo.backend.model.ArtworkApprovalScope;
+import com.wrapzzo.backend.model.Company;
+import com.wrapzzo.backend.model.CompanyArtworkApprovalStep;
 import com.wrapzzo.backend.model.CompanyFeature;
 import com.wrapzzo.backend.model.Order;
 import com.wrapzzo.backend.model.OrderDesign;
 import com.wrapzzo.backend.model.OrderDesignApproval;
 import com.wrapzzo.backend.model.OrderDesignDecision;
 import com.wrapzzo.backend.model.OrderDesignStatus;
+import com.wrapzzo.backend.model.OrgUnit;
 import com.wrapzzo.backend.model.QuickGiftRequest;
 import com.wrapzzo.backend.model.User;
+import com.wrapzzo.backend.model.UserStatus;
 import com.wrapzzo.backend.model.Vendor;
+import com.wrapzzo.backend.repository.CompanyArtworkApprovalStepRepository;
 import com.wrapzzo.backend.repository.OrderDesignApprovalRepository;
 import com.wrapzzo.backend.repository.OrderDesignRepository;
+import com.wrapzzo.backend.repository.OrgUnitRepository;
 import com.wrapzzo.backend.repository.QuickGiftRequestRepository;
 import com.wrapzzo.backend.repository.OrderRepository;
 import com.wrapzzo.backend.repository.UserRepository;
@@ -61,6 +68,8 @@ public class OrderDesignService {
     private final OrderDesignApprovalRepository orderDesignApprovalRepository;
     private final OrderRepository orderRepository;
     private final QuickGiftRequestRepository quickGiftRequestRepository;
+    private final CompanyArtworkApprovalStepRepository approvalStepRepository;
+    private final OrgUnitRepository orgUnitRepository;
     private final VendorRepository vendorRepository;
     private final UserRepository userRepository;
     private final FileStorageService fileStorageService;
@@ -165,7 +174,7 @@ public class OrderDesignService {
             }
         } else {
             int level = currentLevel(design);
-            List<User> chain = approvalChain(design);
+            List<Stage> chain = approvalChain(design);
             record(design, level, OrderDesignDecision.APPROVED, reviewer, coveredManager(chain, level, reviewer), null, now);
             if (level < levelCount(chain)) {
                 moveToLevel(design, level + 1, chain);
@@ -216,10 +225,11 @@ public class OrderDesignService {
             if (!canApproveCurrentLevel(design, reviewer)) {
                 continue;
             }
-            User waitingOn = expectedApprover(approvalChain(design), currentLevel(design));
-            boolean covering = waitingOn == null || !waitingOn.getId().equals(reviewer.getId());
+            Stage stage = expectedApprover(approvalChain(design), currentLevel(design));
+            boolean covering = stage == null || !stage.includes(reviewer);
             queue.add(PendingArtworkApprovalResponse.from(design, fileStorageService.publicUrl(design.getFileKey()),
-                    requesterOf(design.getOrder()), waitingOn, covering, trails.getOrDefault(design.getId(), List.of())));
+                    requesterOf(design.getOrder()), stage != null ? stage.label() : null, covering,
+                    trails.getOrDefault(design.getId(), List.of())));
         }
         return queue;
     }
@@ -242,9 +252,9 @@ public class OrderDesignService {
                     throw new AccessDeniedException("You have already approved this artwork; the next level needs someone else");
                 }
                 if (!canApproveCurrentLevel(design, reviewer)) {
-                    User waitingOn = expectedApprover(approvalChain(design), currentLevel(design));
-                    throw new AccessDeniedException(waitingOn != null
-                            ? "This artwork is waiting on " + waitingOn.getName() + "'s approval"
+                    Stage stage = expectedApprover(approvalChain(design), currentLevel(design));
+                    throw new AccessDeniedException(stage != null
+                            ? "This artwork is waiting for approval from " + stage.label()
                             : "Only a Final Artwork Approval holder can approve this artwork");
                 }
             }
@@ -266,8 +276,8 @@ public class OrderDesignService {
         if (orderDesignApprovalRepository.existsByDesign_IdAndDecidedBy_Id(design.getId(), reviewer.getId())) {
             return false;
         }
-        User waitingOn = expectedApprover(approvalChain(design), currentLevel(design));
-        if (waitingOn != null && waitingOn.getId().equals(reviewer.getId())) {
+        Stage stage = expectedApprover(approvalChain(design), currentLevel(design));
+        if (stage != null && stage.includes(reviewer)) {
             return true;
         }
         Order order = design.getOrder();
@@ -275,47 +285,102 @@ public class OrderDesignService {
                 && visibilityService.resolve(reviewer).canSee(order.getOwner(), order.getOrgUnit());
     }
 
-    /**
-     * The managers above the order's MR, nearest first (users.reports_to_id walked upward), at most
-     * the company's artwork_approval_levels long. Resolved fresh at every step, so a change in the
-     * reporting line applies to the next level straight away.
-     */
-    private List<User> approvalChain(OrderDesign design) {
-        int maxLevels = design.getOrder().getCompany().getArtworkApprovalLevels();
-        User requester = requesterOf(design.getOrder());
-        List<User> chain = new ArrayList<>();
-        if (requester == null) {
-            return chain;
+    /** One level of the chain: who may sign it, and how to name them (a person, or "HO of Summit"). */
+    private record Stage(User named, List<User> eligible, String label) {
+        boolean includes(User user) {
+            return eligible.stream().anyMatch(candidate -> candidate.getId().equals(user.getId()));
         }
+    }
+
+    /**
+     * The levels after the MR's own review, resolved fresh at every step so a change in the reporting line, a
+     * placement or the company's steps applies to the next level straight away. A company with approval steps
+     * (V60) follows them -- each a role found in the MR's reporting line or in their division; one without keeps
+     * the older "the managers above the MR, nearest first, at most artwork_approval_levels of them".
+     */
+    private List<Stage> approvalChain(OrderDesign design) {
+        Company company = design.getOrder().getCompany();
+        User requester = requesterOf(design.getOrder());
+        if (requester == null) {
+            return List.of();
+        }
+        List<CompanyArtworkApprovalStep> steps = approvalStepRepository.findByCompany_IdOrderByStepNoAsc(company.getId());
+        if (steps.isEmpty()) {
+            return managersUpTheLine(requester, company.getArtworkApprovalLevels());
+        }
+        return steps.stream().map(step -> stageOf(step, requester)).toList();
+    }
+
+    private static List<Stage> managersUpTheLine(User requester, int maxLevels) {
+        List<Stage> chain = new ArrayList<>();
         Set<UUID> seen = new HashSet<>(List.of(requester.getId()));
         User next = requester.getReportsTo();
         while (next != null && chain.size() < maxLevels && seen.add(next.getId())) {
-            chain.add(next);
+            chain.add(new Stage(next, List.of(next), next.getName()));
             next = next.getReportsTo();
         }
         return chain;
     }
 
-    /** Levels this proof climbs: one per manager in the chain, and at least one -- with no one above the MR, a Final Artwork Approval holder signs it. */
-    private static int levelCount(List<User> chain) {
+    private Stage stageOf(CompanyArtworkApprovalStep step, User requester) {
+        UUID roleId = step.getRole().getId();
+        String roleName = step.getRole().getName();
+        if (step.getScope() == ArtworkApprovalScope.REPORTING_LINE) {
+            Set<UUID> seen = new HashSet<>(List.of(requester.getId()));
+            for (User manager = requester.getReportsTo(); manager != null && seen.add(manager.getId()); manager = manager.getReportsTo()) {
+                if (manager.getRole().getId().equals(roleId)) {
+                    return new Stage(manager, List.of(manager), manager.getName());
+                }
+            }
+            return new Stage(null, List.of(), roleName);
+        }
+        OrgUnit division = divisionOf(requester);
+        List<User> holders = division == null
+                ? List.of()
+                : userRepository.findByCompanyIdAndRoleId(requester.getCompany().getId(), roleId).stream()
+                        .filter(user -> user.getStatus() == UserStatus.ACTIVE && coversDivision(user, division))
+                        .toList();
+        String label = roleName + (division != null ? " of " + division.getName() : "");
+        return new Stage(holders.size() == 1 ? holders.get(0) : null, holders, label);
+    }
+
+    /** The top of the MR's org tree -- level 1, the division -- or null for someone placed nowhere. */
+    private OrgUnit divisionOf(User user) {
+        OrgUnit unit = user.getOrgUnit();
+        if (unit == null) {
+            return null;
+        }
+        return unit.getAncestorIds().isEmpty() ? unit : orgUnitRepository.findById(unit.getAncestorIds().get(0)).orElse(unit);
+    }
+
+    /** Placed in the division itself, or given it as an extra unit to cover. */
+    private static boolean coversDivision(User user, OrgUnit division) {
+        return (user.getOrgUnit() != null && user.getOrgUnit().getId().equals(division.getId()))
+                || user.getExtraOrgUnits().stream().anyMatch(unit -> unit.getId().equals(division.getId()));
+    }
+
+    /** Levels this proof climbs: one per stage, and at least one -- with no one above the MR, a Final Artwork Approval holder signs it. */
+    private static int levelCount(List<Stage> chain) {
         return Math.max(1, chain.size());
     }
 
-    private static User expectedApprover(List<User> chain, int level) {
+    private static Stage expectedApprover(List<Stage> chain, int level) {
         return level >= 1 && level <= chain.size() ? chain.get(level - 1) : null;
     }
 
-    /** The manager a level was waiting on, when someone else signs it for them; null when they sign it themselves. */
-    private static User coveredManager(List<User> chain, int level, User reviewer) {
-        User waitingOn = expectedApprover(chain, level);
-        return waitingOn != null && !waitingOn.getId().equals(reviewer.getId()) ? waitingOn : null;
+    /** The manager a level was waiting on, when someone else signs it for them; null when they sign it themselves or no one person was meant. */
+    private static User coveredManager(List<Stage> chain, int level, User reviewer) {
+        Stage stage = expectedApprover(chain, level);
+        return stage != null && stage.named() != null && !stage.named().getId().equals(reviewer.getId()) && !stage.includes(reviewer)
+                ? stage.named()
+                : null;
     }
 
     private static int currentLevel(OrderDesign design) {
         return design.getApprovalLevel() != null ? design.getApprovalLevel() : 1;
     }
 
-    private static void moveToLevel(OrderDesign design, int level, List<User> chain) {
+    private static void moveToLevel(OrderDesign design, int level, List<Stage> chain) {
         design.setApprovalLevel(level);
         design.setApprovalLevels(levelCount(chain));
     }
@@ -374,8 +439,8 @@ public class OrderDesignService {
     private OrderDesignResponse toResponse(OrderDesign design, List<ArtworkApprovalStep> trail) {
         String waitingOn = null;
         if (design.getStatus() == OrderDesignStatus.PENDING_FINAL_APPROVAL) {
-            User manager = expectedApprover(approvalChain(design), currentLevel(design));
-            waitingOn = manager != null ? manager.getName() : null;
+            Stage stage = expectedApprover(approvalChain(design), currentLevel(design));
+            waitingOn = stage != null ? stage.label() : null;
         }
         return OrderDesignResponse.from(design, fileStorageService.publicUrl(design.getFileKey()), trail, waitingOn);
     }

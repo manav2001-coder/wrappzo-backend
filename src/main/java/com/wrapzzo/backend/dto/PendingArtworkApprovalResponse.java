@@ -31,7 +31,7 @@ public record PendingArtworkApprovalResponse(
         /** The decisions so far, oldest first. */
         List<ArtworkApprovalStep> approvals) {
 
-    public static PendingArtworkApprovalResponse from(OrderDesign design, String fileUrl, User requester, User waitingOn, boolean covering,
+    public static PendingArtworkApprovalResponse from(OrderDesign design, String fileUrl, User requester, String waitingOnName, boolean covering,
             List<ArtworkApprovalStep> approvals) {
         Order order = design.getOrder();
         return new PendingArtworkApprovalResponse(
@@ -50,7 +50,7 @@ public record PendingArtworkApprovalResponse(
                 design.getFirstApprovedAt(),
                 design.getApprovalLevel() != null ? design.getApprovalLevel() : 1,
                 design.getApprovalLevels() != null ? design.getApprovalLevels() : 1,
-                waitingOn != null ? waitingOn.getName() : null,
+                waitingOnName,
                 covering,
                 approvals);
     }

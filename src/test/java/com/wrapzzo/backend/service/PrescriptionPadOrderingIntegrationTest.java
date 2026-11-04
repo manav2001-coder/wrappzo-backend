@@ -9,6 +9,7 @@ import com.wrapzzo.backend.dto.CreateRecipientRequest;
 import com.wrapzzo.backend.dto.DoctorDetails;
 import com.wrapzzo.backend.dto.OrderResponse;
 import com.wrapzzo.backend.dto.PendingArtworkApprovalResponse;
+import com.wrapzzo.backend.dto.ArtworkApprovalStepsRequest;
 import com.wrapzzo.backend.dto.PresignOrderDesignResponse;
 import com.wrapzzo.backend.dto.QuickGiftRequestResponse;
 import com.wrapzzo.backend.dto.VendorOrderResponse;
@@ -16,9 +17,12 @@ import com.wrapzzo.backend.exception.ArtworkNotApprovedException;
 import com.wrapzzo.backend.exception.GiftNotAvailableForQuickGiftException;
 import com.wrapzzo.backend.exception.OrderNotFoundException;
 import com.wrapzzo.backend.exception.QuickGiftRequestNotFoundException;
+import com.wrapzzo.backend.exception.InvalidArtworkApprovalStepsException;
+import com.wrapzzo.backend.exception.OrderDesignAlreadyReviewedException;
 import com.wrapzzo.backend.exception.ConflictException;
 import com.wrapzzo.backend.exception.InvalidArtworkFileException;
 import com.wrapzzo.backend.exception.RecipientAlreadyExistsException;
+import com.wrapzzo.backend.model.ArtworkApprovalScope;
 import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.CompanyFeature;
 import com.wrapzzo.backend.model.CompanyVendor;
@@ -396,5 +400,64 @@ class PrescriptionPadOrderingIntegrationTest {
         Order order = orderRepository.findById(quickGiftService.create(padOrder(pad, 1)).orderId()).orElseThrow();
         OrderDesign proof = orderDesignRepository.save(new OrderDesign(order, 1, "designs/v1.pdf", "v1.pdf", printer));
         assertThat(orderDesignService.approve(order.getId(), proof.getId()).status()).isEqualTo(OrderDesignStatus.APPROVED);
+    }
+
+    /** With real rows: the steps are saved through the service, then the AM's proof goes to their RM and then to an HO of their division. */
+    @Test
+    void savedApprovalStepsRouteTheProofToTheRmThenAnHoOfTheDivision() {
+        enableDirectOrdering();
+        companyFeatureFlagService.setEnabled(company.getId(), CompanyFeature.MARKETING_DESIGN_APPROVAL, true);
+        Role rmRole = roleRepository.save(new Role(company, "RM"));
+        Role hoRole = roleRepository.save(new Role(company, "HO"));
+        OrgUnit division = zoneNorth.getParent();
+        OrgUnit otherDivision = orgUnitRepository.save(new OrgUnit(company, null, "Other Division", "Division"));
+        User rm = saveUserWithRole("RM North", zoneNorth, rmRole);
+        User hoOne = saveUserWithRole("HO One", division, hoRole);
+        User hoTwo = saveUserWithRole("HO Two", division, hoRole);
+        User hoOther = saveUserWithRole("HO Other", otherDivision, hoRole);
+        mrNorth.setReportsTo(zonalManagerNorth);
+        zonalManagerNorth.setReportsTo(null);
+        rm.setReportsTo(zonalManagerNorth);
+        mrNorth.setReportsTo(rm);
+        userRepository.save(mrNorth);
+
+        var saved = companyFeatureFlagService.setArtworkApprovalSteps(company.getId(), new ArtworkApprovalStepsRequest(List.of(
+                new ArtworkApprovalStepsRequest.Step(rmRole.getId(), ArtworkApprovalScope.REPORTING_LINE),
+                new ArtworkApprovalStepsRequest.Step(hoRole.getId(), ArtworkApprovalScope.DIVISION))));
+        assertThat(saved.steps()).extracting(step -> step.roleName() + ":" + step.scope()).containsExactly("RM:REPORTING_LINE", "HO:DIVISION");
+        assertThat(companyRepository.findById(company.getId()).orElseThrow().getArtworkApprovalLevels()).isEqualTo(2);
+
+        actAs(mrNorth);
+        Order order = orderRepository.findById(quickGiftService.create(padOrder(pad, 1)).orderId()).orElseThrow();
+        OrderDesign proof = orderDesignRepository.save(new OrderDesign(order, 1, "designs/v1.pdf", "v1.pdf", printer));
+        UUID orderId = order.getId();
+
+        assertThat(orderDesignService.approve(orderId, proof.getId()).waitingOnName()).isEqualTo("RM North");
+        actAs(zonalManagerNorth);
+        assertThat(orderDesignService.listPendingFinalApproval()).isEmpty();
+        assertThatThrownBy(() -> orderDesignService.approve(orderId, proof.getId())).isInstanceOf(AccessDeniedException.class);
+
+        actAs(rm);
+        assertThat(orderDesignService.approve(orderId, proof.getId()).waitingOnName()).isEqualTo("HO of Division");
+        actAs(hoOther);
+        assertThat(orderDesignService.listPendingFinalApproval()).isEmpty();
+        actAs(hoOne);
+        assertThat(orderDesignService.listPendingFinalApproval()).hasSize(1);
+        assertThat(orderDesignService.approve(orderId, proof.getId()).status()).isEqualTo(OrderDesignStatus.APPROVED);
+        actAs(hoTwo);
+        assertThatThrownBy(() -> orderDesignService.approve(orderId, proof.getId())).isInstanceOf(OrderDesignAlreadyReviewedException.class);
+
+        // A role from another company cannot be a step.
+        Company stranger = companyRepository.save(new Company("Stranger " + UUID.randomUUID()));
+        Role foreign = roleRepository.save(new Role(stranger, "HO"));
+        assertThatThrownBy(() -> companyFeatureFlagService.setArtworkApprovalSteps(company.getId(), new ArtworkApprovalStepsRequest(List.of(
+                new ArtworkApprovalStepsRequest.Step(foreign.getId(), ArtworkApprovalScope.DIVISION)))))
+                .isInstanceOf(InvalidArtworkApprovalStepsException.class);
+    }
+
+    private User saveUserWithRole(String name, OrgUnit unit, Role role) {
+        User user = new User(company, role, name, "pad-" + UUID.randomUUID() + "@test.com", "n/a");
+        user.setOrgUnit(unit);
+        return userRepository.save(user);
     }
 }

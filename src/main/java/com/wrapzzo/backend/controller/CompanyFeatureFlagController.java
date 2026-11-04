@@ -2,6 +2,8 @@ package com.wrapzzo.backend.controller;
 
 import com.wrapzzo.backend.dto.ArtworkApprovalLevelsRequest;
 import com.wrapzzo.backend.dto.ArtworkApprovalLevelsResponse;
+import com.wrapzzo.backend.dto.ArtworkApprovalStepsRequest;
+import com.wrapzzo.backend.dto.ArtworkApprovalStepsResponse;
 import com.wrapzzo.backend.dto.CompanyFeatureFlagResponse;
 import com.wrapzzo.backend.dto.SetCompanyFeatureFlagRequest;
 import com.wrapzzo.backend.security.Permission.Keys;
@@ -41,6 +43,16 @@ public class CompanyFeatureFlagController {
     @GetMapping("/artwork-approval-levels")
     public ArtworkApprovalLevelsResponse artworkApprovalLevels(@PathVariable UUID companyId) {
         return companyFeatureFlagService.getArtworkApprovalLevels(companyId);
+    }
+
+    @GetMapping("/artwork-approval-steps")
+    public ArtworkApprovalStepsResponse artworkApprovalSteps(@PathVariable UUID companyId) {
+        return companyFeatureFlagService.getArtworkApprovalSteps(companyId);
+    }
+
+    @PutMapping("/artwork-approval-steps")
+    public ArtworkApprovalStepsResponse setArtworkApprovalSteps(@PathVariable UUID companyId, @Valid @RequestBody ArtworkApprovalStepsRequest request) {
+        return companyFeatureFlagService.setArtworkApprovalSteps(companyId, request);
     }
 
     @PutMapping("/artwork-approval-levels")

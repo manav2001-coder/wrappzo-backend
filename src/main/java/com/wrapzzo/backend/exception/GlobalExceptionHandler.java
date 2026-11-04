@@ -360,6 +360,11 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
     }
 
+    @ExceptionHandler(InvalidArtworkApprovalStepsException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidArtworkApprovalSteps(InvalidArtworkApprovalStepsException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+    }
+
     @ExceptionHandler(InvalidArtworkFileException.class)
     public ResponseEntity<Map<String, String>> handleInvalidArtworkFile(InvalidArtworkFileException e) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));

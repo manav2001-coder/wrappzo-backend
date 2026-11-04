@@ -18,6 +18,9 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     List<User> findByCompanyId(UUID companyId);
 
+    /** Everyone holding a role in a company -- an approval step resolves its approvers from this. */
+    List<User> findByCompanyIdAndRoleId(UUID companyId, UUID roleId);
+
 
     /** One round-trip for a whole bulk-import batch instead of a findByEmail per row. */
     List<User> findByEmailIn(Collection<String> emails);

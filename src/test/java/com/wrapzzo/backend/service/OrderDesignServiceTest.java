@@ -13,6 +13,10 @@ import com.wrapzzo.backend.dto.OrderDesignResponse;
 import com.wrapzzo.backend.dto.PendingArtworkApprovalResponse;
 import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.CompanyFeature;
+import com.wrapzzo.backend.model.ArtworkApprovalScope;
+import com.wrapzzo.backend.model.CompanyArtworkApprovalStep;
+import com.wrapzzo.backend.model.OrgUnit;
+import com.wrapzzo.backend.model.Role;
 import com.wrapzzo.backend.model.Order;
 import com.wrapzzo.backend.model.OrderDesign;
 import com.wrapzzo.backend.model.OrderDesignApproval;
@@ -23,6 +27,8 @@ import com.wrapzzo.backend.model.Vendor;
 import com.wrapzzo.backend.repository.OrderDesignApprovalRepository;
 import com.wrapzzo.backend.repository.OrderDesignRepository;
 import com.wrapzzo.backend.repository.OrderRepository;
+import com.wrapzzo.backend.repository.CompanyArtworkApprovalStepRepository;
+import com.wrapzzo.backend.repository.OrgUnitRepository;
 import com.wrapzzo.backend.repository.QuickGiftRequestRepository;
 import com.wrapzzo.backend.repository.UserRepository;
 import com.wrapzzo.backend.repository.VendorRepository;
@@ -54,8 +60,11 @@ class OrderDesignServiceTest {
     private final VisibilityService visibility = mock(VisibilityService.class);
     private final FileStorageService files = mock(FileStorageService.class);
 
+    private final CompanyArtworkApprovalStepRepository steps = mock(CompanyArtworkApprovalStepRepository.class);
+    private final OrgUnitRepository orgUnits = mock(OrgUnitRepository.class);
+
     private final OrderDesignService service = new OrderDesignService(designs, approvals, orders,
-            mock(QuickGiftRequestRepository.class), mock(VendorRepository.class), users, files, visibility, flags, keys);
+            mock(QuickGiftRequestRepository.class), steps, orgUnits, mock(VendorRepository.class), users, files, visibility, flags, keys);
 
     private final List<OrderDesignApproval> trail = new ArrayList<>();
     private final Company company = new Company();
@@ -205,6 +214,125 @@ class OrderDesignServiceTest {
         assertThat(response.status()).isEqualTo(OrderDesignStatus.APPROVED);
         assertThat(response.approvalLevel()).isNull();
         assertThat(trail).singleElement().satisfies(step -> assertThat(step.getLevel()).isZero());
+    }
+
+    /**
+     * AM -> RM (in the AM's line) -> an HO of the AM's division. The ZM between them only watches: no step is his, so he
+     * can neither see it in his queue nor sign it. Any one HO of the division decides; an HO of another division never can.
+     */
+    @Test
+    void anAmsProofGoesToTheirRmThenToAnHoOfTheirDivisionWhileTheZmOnlyWatches() {
+        Role amRole = role("AM"), rmRole = role("RM"), zmRole = role("ZM"), hoRole = role("HO");
+        OrgUnit summit = unit("Summit", null), maxis = unit("Maxis", null);
+        OrgUnit zone = unit("Kolkata", summit), area = unit("Howrah", zone);
+        User zm = user("Zara ZM", null), rm = user("Ravi RM", zm), am = user("Aditi AM", rm);
+        User hoOne = user("Hari HO", null), hoTwo = user("Hema HO", null), hoElsewhere = user("Omar HO", null);
+        zm.setRole(zmRole);
+        rm.setRole(rmRole);
+        am.setRole(amRole);
+        am.setOrgUnit(area);
+        for (User ho : List.of(hoOne, hoTwo)) {
+            ho.setRole(hoRole);
+            ho.setOrgUnit(summit);
+        }
+        hoElsewhere.setRole(hoRole);
+        hoElsewhere.setOrgUnit(maxis);
+        for (User u : List.of(zm, rm, am, hoOne, hoTwo, hoElsewhere)) {
+            u.setCompany(company);
+            when(users.findById(u.getId())).thenReturn(Optional.of(u));
+            when(keys.resolveEffectiveKeys(u)).thenReturn(Set.of());
+            when(visibility.resolve(u)).thenReturn(Visibility.everything(u.getId()));
+        }
+        when(orgUnits.findById(summit.getId())).thenReturn(Optional.of(summit));
+        when(users.findByCompanyIdAndRoleId(company.getId(), hoRole.getId())).thenReturn(List.of(hoOne, hoTwo, hoElsewhere));
+        when(steps.findByCompany_IdOrderByStepNoAsc(company.getId())).thenReturn(List.of(
+                new CompanyArtworkApprovalStep(company, 1, rmRole, ArtworkApprovalScope.REPORTING_LINE),
+                new CompanyArtworkApprovalStep(company, 2, hoRole, ArtworkApprovalScope.DIVISION)));
+        order.setOwner(am);
+        order.setCreatedBy(am);
+
+        OrderDesignResponse afterAm = approveAs(am);
+        assertThat(afterAm.status()).isEqualTo(OrderDesignStatus.PENDING_FINAL_APPROVAL);
+        assertThat(afterAm.approvalLevels()).isEqualTo(2);
+        assertThat(afterAm.waitingOnName()).isEqualTo("Ravi RM");
+
+        // The ZM watches: not his to sign, and not in his queue.
+        assertThatThrownBy(() -> approveAs(zm)).isInstanceOf(AccessDeniedException.class).hasMessageContaining("Ravi RM");
+        assertThat(service.listPendingFinalApproval()).isEmpty();
+        as(hoOne);
+        assertThat(service.listPendingFinalApproval()).isEmpty();
+
+        OrderDesignResponse afterRm = approveAs(rm);
+        assertThat(afterRm.approvalLevel()).isEqualTo(2);
+        assertThat(afterRm.waitingOnName()).isEqualTo("HO of Summit");
+
+        // Both HOs of the division see it as theirs; the other division's HO and the ZM do not.
+        for (User ho : List.of(hoOne, hoTwo)) {
+            as(ho);
+            assertThat(service.listPendingFinalApproval()).singleElement().satisfies(item -> {
+                assertThat(item.covering()).isFalse();
+                assertThat(item.waitingOnName()).isEqualTo("HO of Summit");
+            });
+        }
+        as(hoElsewhere);
+        assertThat(service.listPendingFinalApproval()).isEmpty();
+        assertThatThrownBy(() -> approveAs(hoElsewhere)).isInstanceOf(AccessDeniedException.class).hasMessageContaining("HO of Summit");
+
+        // The first HO to act decides.
+        OrderDesignResponse done = approveAs(hoTwo);
+        assertThat(done.status()).isEqualTo(OrderDesignStatus.APPROVED);
+        assertThat(done.reviewedByUserName()).isEqualTo("Hema HO");
+        assertThat(done.approvals()).extracting(step -> step.level() + ":" + step.decidedByName())
+                .containsExactly("0:Aditi AM", "1:Ravi RM", "2:Hema HO");
+        assertThat(done.approvals().get(2).onBehalfOfName()).isNull();
+    }
+
+    @Test
+    void anHoCanSendTheProofBackToTheVendor() {
+        Role rmRole = role("RM"), hoRole = role("HO");
+        OrgUnit summit = unit("Summit", null);
+        User rm = user("Ravi RM", null), am = user("Aditi AM", rm), ho = user("Hari HO", null);
+        rm.setRole(rmRole);
+        ho.setRole(hoRole);
+        ho.setOrgUnit(summit);
+        am.setOrgUnit(summit);
+        for (User u : List.of(rm, am, ho)) {
+            u.setCompany(company);
+            when(users.findById(u.getId())).thenReturn(Optional.of(u));
+            when(keys.resolveEffectiveKeys(u)).thenReturn(Set.of());
+            when(visibility.resolve(u)).thenReturn(Visibility.everything(u.getId()));
+        }
+        when(users.findByCompanyIdAndRoleId(company.getId(), hoRole.getId())).thenReturn(List.of(ho));
+        when(steps.findByCompany_IdOrderByStepNoAsc(company.getId())).thenReturn(List.of(
+                new CompanyArtworkApprovalStep(company, 1, rmRole, ArtworkApprovalScope.REPORTING_LINE),
+                new CompanyArtworkApprovalStep(company, 2, hoRole, ArtworkApprovalScope.DIVISION)));
+        order.setOwner(am);
+        approveAs(am);
+        approveAs(rm);
+
+        as(ho);
+        OrderDesignResponse rejected = service.reject(order.getId(), design.getId(), "Logo is off-brand");
+        assertThat(rejected.status()).isEqualTo(OrderDesignStatus.REJECTED);
+        assertThat(rejected.reviewComment()).isEqualTo("Logo is off-brand");
+    }
+
+    private static Role role(String name) {
+        Role role = new Role();
+        role.setId(UUID.randomUUID());
+        role.setName(name);
+        return role;
+    }
+
+    private static OrgUnit unit(String name, OrgUnit parent) {
+        OrgUnit unit = new OrgUnit();
+        unit.setId(UUID.randomUUID());
+        unit.setName(name);
+        unit.setParent(parent);
+        if (parent != null) {
+            unit.getAncestorIds().addAll(parent.getAncestorIds());
+            unit.getAncestorIds().add(parent.getId());
+        }
+        return unit;
     }
 
     private OrderDesignResponse approveAs(User reviewer) {
