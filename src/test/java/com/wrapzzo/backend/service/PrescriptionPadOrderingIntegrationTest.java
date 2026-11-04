@@ -88,6 +88,7 @@ class PrescriptionPadOrderingIntegrationTest {
     @Autowired private OrderRepository orderRepository;
     @Autowired private OrderDesignRepository orderDesignRepository;
     @Autowired private OrderDesignService orderDesignService;
+    @Autowired private ArtworkApprovalSettingsService artworkApprovalSettingsService;
 
     private Company company;
     private Role memberRole;
@@ -406,7 +407,6 @@ class PrescriptionPadOrderingIntegrationTest {
     @Test
     void savedApprovalStepsRouteTheProofToTheRmThenAnHoOfTheDivision() {
         enableDirectOrdering();
-        companyFeatureFlagService.setEnabled(company.getId(), CompanyFeature.MARKETING_DESIGN_APPROVAL, true);
         Role rmRole = roleRepository.save(new Role(company, "RM"));
         Role hoRole = roleRepository.save(new Role(company, "HO"));
         OrgUnit division = zoneNorth.getParent();
@@ -421,9 +421,18 @@ class PrescriptionPadOrderingIntegrationTest {
         mrNorth.setReportsTo(rm);
         userRepository.save(mrNorth);
 
-        var saved = companyFeatureFlagService.setArtworkApprovalSteps(company.getId(), new ArtworkApprovalStepsRequest(List.of(
+        var request = new ArtworkApprovalStepsRequest(List.of(
                 new ArtworkApprovalStepsRequest.Step(rmRole.getId(), ArtworkApprovalScope.REPORTING_LINE),
-                new ArtworkApprovalStepsRequest.Step(hoRole.getId(), ArtworkApprovalScope.DIVISION))));
+                new ArtworkApprovalStepsRequest.Step(hoRole.getId(), ArtworkApprovalScope.DIVISION)));
+        // The company's own admin sets the steps -- but only once Wrappzo has switched Senior Artwork Approval on.
+        actAs(zonalManagerNorth);
+        assertThat(artworkApprovalSettingsService.get().enabled()).isFalse();
+        assertThatThrownBy(() -> artworkApprovalSettingsService.set(request))
+                .isInstanceOf(InvalidArtworkApprovalStepsException.class)
+                .hasMessageContaining("not switched on");
+        companyFeatureFlagService.setEnabled(company.getId(), CompanyFeature.MARKETING_DESIGN_APPROVAL, true);
+        var saved = artworkApprovalSettingsService.set(request);
+        assertThat(saved.enabled()).isTrue();
         assertThat(saved.steps()).extracting(step -> step.roleName() + ":" + step.scope()).containsExactly("RM:REPORTING_LINE", "HO:DIVISION");
         assertThat(companyRepository.findById(company.getId()).orElseThrow().getArtworkApprovalLevels()).isEqualTo(2);
 
@@ -450,7 +459,8 @@ class PrescriptionPadOrderingIntegrationTest {
         // A role from another company cannot be a step.
         Company stranger = companyRepository.save(new Company("Stranger " + UUID.randomUUID()));
         Role foreign = roleRepository.save(new Role(stranger, "HO"));
-        assertThatThrownBy(() -> companyFeatureFlagService.setArtworkApprovalSteps(company.getId(), new ArtworkApprovalStepsRequest(List.of(
+        actAs(zonalManagerNorth);
+        assertThatThrownBy(() -> artworkApprovalSettingsService.set(new ArtworkApprovalStepsRequest(List.of(
                 new ArtworkApprovalStepsRequest.Step(foreign.getId(), ArtworkApprovalScope.DIVISION)))))
                 .isInstanceOf(InvalidArtworkApprovalStepsException.class);
     }

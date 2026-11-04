@@ -39,6 +39,8 @@ public enum Permission {
     ORDER_REQUEST_PHOTO(Keys.ORDER_REQUEST_PHOTO, true),
     ARTWORK_REVIEW(Keys.ARTWORK_REVIEW, true),
     ARTWORK_FINAL_APPROVE(Keys.ARTWORK_FINAL_APPROVE, true),
+    ARTWORK_APPROVAL_VIEW(Keys.ARTWORK_APPROVAL_VIEW, true),
+    ARTWORK_APPROVAL_CONFIGURE(Keys.ARTWORK_APPROVAL_CONFIGURE, true),
 
     DOCTOR_VIEW(Keys.DOCTOR_VIEW, true),
     DOCTOR_CREATE(Keys.DOCTOR_CREATE, true),
@@ -179,6 +181,8 @@ public enum Permission {
         public static final String ORDER_REQUEST_PHOTO = "order.request_photo";
         public static final String ARTWORK_REVIEW = "artwork.review";
         public static final String ARTWORK_FINAL_APPROVE = "artwork.final_approve";
+        public static final String ARTWORK_APPROVAL_VIEW = "artwork_approval.view";
+        public static final String ARTWORK_APPROVAL_CONFIGURE = "artwork_approval.configure";
 
         public static final String DOCTOR_VIEW = "doctor.view";
         public static final String DOCTOR_CREATE = "doctor.create";
