@@ -23,10 +23,12 @@ public record DashboardResponse(
         long quickGiftsPending,
         /** PELs (units) on every order placed, cancelled ones aside. */
         long pelsRequested,
-        /** Distinct doctors those PELs were requested for -- PELs requested per doctor is the first over this. */
+        /** Distinct doctors those PELs were requested for -- PELs created per doctor is the first over this. */
         long doctorsRequested,
         /** PELs on orders that have been delivered. */
         long pelsServed,
+        /** Distinct doctors those delivered PELs reached. */
+        long doctorsServed,
         /** Order counts by source -- "CAMPAIGN" / "QUICK_GIFT" / "BULK_GIFT". */
         Map<String, Long> orderSourceBreakdown,
         /** Quick Gift request counts by status -- "SUBMITTED" / "APPROVED" / "REJECTED". */

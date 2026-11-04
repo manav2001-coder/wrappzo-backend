@@ -122,7 +122,9 @@ public class DashboardService {
         List<Order> requested = orders.stream().filter(DashboardService::isRequested).toList();
         long pelsRequested = requested.stream().mapToLong(Order::getQuantity).sum();
         long doctorsRequested = requested.stream().filter(DashboardService::hasDoctor).map(DashboardService::doctorKey).distinct().count();
-        long pelsServed = orders.stream().filter(o -> o.getStatus() == OrderStatus.DELIVERED).mapToLong(Order::getQuantity).sum();
+        List<Order> served = orders.stream().filter(o -> o.getStatus() == OrderStatus.DELIVERED).toList();
+        long pelsServed = served.stream().mapToLong(Order::getQuantity).sum();
+        long doctorsServed = served.stream().filter(DashboardService::hasDoctor).map(DashboardService::doctorKey).distinct().count();
 
         Map<String, Long> orderSourceBreakdown = orders.stream()
                 .collect(Collectors.groupingBy(o -> o.getSource().name(), Collectors.counting()));
@@ -146,6 +148,7 @@ public class DashboardService {
                 pelsRequested,
                 doctorsRequested,
                 pelsServed,
+                doctorsServed,
                 orderSourceBreakdown,
                 quickGiftStatusBreakdown,
                 submissionStatusBreakdown,
@@ -184,7 +187,7 @@ public class DashboardService {
                     data.orders().stream().filter(o -> departmentOf(o, data.quickGiftRequesterByOrderId()).equals(value)).toList(),
                     "Orders — " + value);
             case "week" -> weekDrilldown(value, data.submissions(), data.quickGifts());
-            case "pelsRequested" -> pelsPerDoctorDrilldown(data.orders().stream().filter(DashboardService::isRequested).toList(), "PELs requested per doctor");
+            case "pelsRequested" -> pelsPerDoctorDrilldown(data.orders().stream().filter(DashboardService::isRequested).toList(), "PELs created per doctor");
             case "pelsServed" -> pelsPerDoctorDrilldown(
                     data.orders().stream().filter(o -> o.getStatus() == OrderStatus.DELIVERED).toList(), "PELs served per doctor");
             case "pipelineStage" -> ordersDrilldown(

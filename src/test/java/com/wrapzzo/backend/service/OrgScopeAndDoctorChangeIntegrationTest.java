@@ -281,6 +281,7 @@ class OrgScopeAndDoctorChangeIntegrationTest {
         assertThat(dashboard.pelsRequested()).isEqualTo(2);
         assertThat(dashboard.doctorsRequested()).isEqualTo(2);
         assertThat(dashboard.pelsServed()).isEqualTo(1);
+        assertThat(dashboard.doctorsServed()).isEqualTo(1);
 
         DashboardDrilldownResponse perDoctor = dashboardService.drilldown("pelsRequested", "");
         assertThat(perDoctor.rows()).hasSize(2).allSatisfy(row -> assertThat(row.quantity()).isEqualTo(1L));
