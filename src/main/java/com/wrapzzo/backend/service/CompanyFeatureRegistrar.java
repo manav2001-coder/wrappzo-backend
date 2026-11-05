@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 /** At startup, registers any catalogue feature a company lacks (see FeatureService.registerMissingForAllCompanies). */
 @Slf4j
 @Component
+@org.springframework.core.annotation.Order(1)
 @RequiredArgsConstructor
 public class CompanyFeatureRegistrar implements ApplicationRunner {
 
