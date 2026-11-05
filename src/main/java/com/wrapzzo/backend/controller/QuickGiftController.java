@@ -48,7 +48,7 @@ public class QuickGiftController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyAuthority('" + Keys.QUICK_GIFT_CREATE + "', '" + Keys.QUICK_GIFT_APPROVE + "')")
+    @RequiresPermission(Keys.QUICK_GIFT_CREATE)
     public QuickGiftRequestResponse get(@PathVariable UUID id) {
         return quickGiftService.get(id);
     }
@@ -57,23 +57,5 @@ public class QuickGiftController {
     @RequiresPermission(Keys.QUICK_GIFT_CREATE)
     public RequestPhotoLinkResponse requestPhotoLink(@PathVariable UUID id) {
         return new RequestPhotoLinkResponse(quickGiftService.requestPhotoLinkAgain(id));
-    }
-
-    @GetMapping("/pending-approval")
-    @RequiresPermission(Keys.QUICK_GIFT_APPROVE)
-    public List<QuickGiftRequestResponse> pendingApproval() {
-        return quickGiftService.listPendingApproval();
-    }
-
-    @PostMapping("/{id}/approve")
-    @RequiresPermission(Keys.QUICK_GIFT_APPROVE)
-    public QuickGiftRequestResponse approve(@PathVariable UUID id) {
-        return quickGiftService.approve(id);
-    }
-
-    @PostMapping("/{id}/reject")
-    @RequiresPermission(Keys.QUICK_GIFT_APPROVE)
-    public QuickGiftRequestResponse reject(@PathVariable UUID id, @Valid @RequestBody RejectQuickGiftRequest request) {
-        return quickGiftService.reject(id, request.reason());
     }
 }

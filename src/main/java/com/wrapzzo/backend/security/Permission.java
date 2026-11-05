@@ -31,7 +31,6 @@ public enum Permission {
     CAMPAIGN_ENTRY_VIEW(Keys.CAMPAIGN_ENTRY_VIEW, true),
 
     QUICK_GIFT_CREATE(Keys.QUICK_GIFT_CREATE, true),
-    QUICK_GIFT_APPROVE(Keys.QUICK_GIFT_APPROVE, true),
 
     GIFT_STORE_VIEW(Keys.GIFT_STORE_VIEW, true),
 
@@ -175,7 +174,6 @@ public enum Permission {
         public static final String CAMPAIGN_ENTRY_VIEW = "campaign_entry.view";
 
         public static final String QUICK_GIFT_CREATE = "quick_gift.create";
-        public static final String QUICK_GIFT_APPROVE = "quick_gift.approve";
 
         public static final String GIFT_STORE_VIEW = "gift_store.view";
 

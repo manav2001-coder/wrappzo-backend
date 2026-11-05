@@ -203,13 +203,11 @@ class PrescriptionPadOrderingIntegrationTest {
     }
 
     @Test
-    void withoutTheFlagARequestStillWaitsForApproval() {
+    void thereIsNoApprovalStep_aRequestGoesStraightToTheVendorWhateverTheCompanyFlagSays() {
         actAs(mrNorth);
-
-        QuickGiftRequestResponse placed = quickGiftService.create(padOrder(pad, 2));
-
-        assertThat(placed.status()).isEqualTo(QuickGiftStatus.SUBMITTED);
-        assertThat(placed.orderId()).isNull();
+        QuickGiftRequestResponse placed = quickGiftService.create(padOrder(pad, 1));
+        assertThat(placed.status()).isEqualTo(QuickGiftStatus.APPROVED);
+        assertThat(placed.orderId()).isNotNull();
     }
 
     @Test
@@ -303,20 +301,6 @@ class PrescriptionPadOrderingIntegrationTest {
 
         actAs(headOffice);
         assertThat(orderService.list()).extracting(OrderResponse::id).contains(northOrder);
-    }
-
-    @Test
-    void approvalQueueFollowsTheOrgTree() {
-        actAs(mrNorth);
-        UUID requestId = quickGiftService.create(padOrder(pad, 1)).id();
-
-        actAs(mrSouth);
-        assertThat(quickGiftService.listPendingApproval()).extracting(QuickGiftRequestResponse::id).doesNotContain(requestId);
-        assertThatThrownBy(() -> quickGiftService.approve(requestId)).isInstanceOf(QuickGiftRequestNotFoundException.class);
-
-        actAs(zonalManagerNorth);
-        assertThat(quickGiftService.listPendingApproval()).extracting(QuickGiftRequestResponse::id).contains(requestId);
-        assertThat(quickGiftService.approve(requestId).status()).isEqualTo(QuickGiftStatus.APPROVED);
     }
 
     @Test

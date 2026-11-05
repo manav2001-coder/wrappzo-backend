@@ -134,16 +134,14 @@ public class QuickGiftService {
         quickGift = quickGiftRequestRepository.saveAndFlush(quickGift);
         recipientService.upsertFromSubmission(company, name, phone, email, address, dob, pcode, doctor, requester);
 
-        if (companyFeatureFlagService.isEnabled(company.getId(), CompanyFeature.DIRECT_VENDOR_ORDERING)) {
-            Order order = placeOrder(quickGift, requester);
-            orderService.assignOnPlacement(order, gift.getVendor());
-            String recipientUploadUrl = quickGiftUploadService.requestPhotoIfMissing(quickGift);
-            return QuickGiftRequestResponse.from(quickGift, photoUrlOf(quickGift), recipientUploadUrl);
-        }
-        return toResponse(quickGift);
+        // There is no approval step: choosing the gift is choosing the vendor, and the order goes straight to it.
+        Order order = placeOrder(quickGift, requester);
+        orderService.assignOnPlacement(order, gift.getVendor());
+        String recipientUploadUrl = quickGiftUploadService.requestPhotoIfMissing(quickGift);
+        return QuickGiftRequestResponse.from(quickGift, photoUrlOf(quickGift), recipientUploadUrl);
     }
 
-    /** SUBMITTED -> APPROVED with its Order -- shared by an approver's approve() and direct ordering's self-approval. */
+    /** Creates the request's Order and marks the request placed. */
     private Order placeOrder(QuickGiftRequest request, User actor) {
         Order order = new Order(
                 request.getCompany(), request.getGift(), OrderSource.QUICK_GIFT, request.getRecipientName(),
@@ -170,48 +168,9 @@ public class QuickGiftService {
                 .toList();
     }
 
-    /** Requests waiting for approval that the approver can see (see Visibility) -- never their own. */
-    @Transactional(readOnly = true)
-    public List<QuickGiftRequestResponse> listPendingApproval() {
-        User approver = currentUser();
-        Visibility visibility = visibilityService.resolve(approver);
-        return quickGiftRequestRepository
-                .findVisibleInCompanyByStatus(approver.getCompany().getId(), QuickGiftStatus.SUBMITTED,
-                        visibility.companyWide(), visibility.peopleForQuery(), visibility.orgUnitsForQuery())
-                .stream()
-                .filter(r -> !r.getRequestedBy().getId().equals(approver.getId()))
-                .map(this::toResponse)
-                .toList();
-    }
-
     @Transactional(readOnly = true)
     public QuickGiftRequestResponse get(UUID id) {
         return toResponse(getVisibleEntity(id));
-    }
-
-    @Transactional
-    public QuickGiftRequestResponse approve(UUID id) {
-        QuickGiftRequest request = getReviewableEntity(id);
-        requireReviewable(request);
-        placeOrder(request, currentUser());
-
-        // Best-effort: if no photo was attached at request time, hand the recipient a
-        // self-serve upload link now that there's a real Order to fulfill. Never blocks approval.
-        String recipientUploadUrl = quickGiftUploadService.requestPhotoIfMissing(request);
-        return QuickGiftRequestResponse.from(request, photoUrlOf(request), recipientUploadUrl);
-    }
-
-    @Transactional
-    public QuickGiftRequestResponse reject(UUID id, String reason) {
-        QuickGiftRequest request = getReviewableEntity(id);
-        requireReviewable(request);
-        User approver = currentUser();
-
-        request.setStatus(QuickGiftStatus.REJECTED);
-        request.setRejectionReason(reason);
-        request.setReviewedBy(approver);
-        request.setReviewedAt(Instant.now());
-        return toResponse(request);
     }
 
     /** Requester-triggered, from "My Quick Gifts" -- e.g. the recipient's first photo wasn't clear enough. */
@@ -222,12 +181,6 @@ public class QuickGiftService {
             throw new QuickGiftNotApprovedException(id);
         }
         return quickGiftUploadService.requestAgain(request);
-    }
-
-    private void requireReviewable(QuickGiftRequest request) {
-        if (request.getStatus() != QuickGiftStatus.SUBMITTED) {
-            throw new QuickGiftAlreadyReviewedException(request.getId());
-        }
     }
 
     /** Must be a gift the requester's Gift Store actually shows them -- their org unit's vendor roster -- not just any active gift. */
@@ -244,15 +197,6 @@ public class QuickGiftService {
         QuickGiftRequest request = getEntity(id);
         if (!visibilityService.resolve(currentUser()).canSee(request.getRequestedBy(), request.getOrgUnit())) {
             throw new QuickGiftRequestNotFoundException(id);
-        }
-        return request;
-    }
-
-    /** A request the approver can see, and isn't their own -- nobody approves their own request. */
-    private QuickGiftRequest getReviewableEntity(UUID id) {
-        QuickGiftRequest request = getVisibleEntity(id);
-        if (request.getRequestedBy().getId().equals(currentUser().getId())) {
-            throw new AccessDeniedException("You can't approve your own request");
         }
         return request;
     }

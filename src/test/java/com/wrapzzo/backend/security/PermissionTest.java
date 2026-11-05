@@ -50,7 +50,7 @@ class PermissionTest {
         assertThat(Permission.ARTWORK_FINAL_APPROVE.impliedView()).contains(Permission.ORDER_VIEW);
         assertThat(Permission.CAMPAIGN_VIEW.impliedView()).isEmpty();
         // A module without a view action implies nothing.
-        assertThat(Permission.QUICK_GIFT_APPROVE.impliedView()).isEmpty();
+        assertThat(Permission.QUICK_GIFT_CREATE.impliedView()).isEmpty();
     }
 
     @Test
