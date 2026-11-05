@@ -271,7 +271,13 @@ public class OrderDesignService {
             throw new OrderDesignNotFoundException(designId);
         }
         switch (design.getStatus()) {
-            case PENDING_REVIEW -> getOwnCompanyEntity(orderId);
+            case PENDING_REVIEW -> {
+                // The MR's own first review (the green flag on the Orders page): artwork.review, nothing else.
+                if (!holds(currentUser(), Permission.ARTWORK_REVIEW.key())) {
+                    throw new AccessDeniedException("Reviewing a proof needs the Review artwork permission, which your role doesn't have");
+                }
+                getOwnCompanyEntity(orderId);
+            }
             case PENDING_FINAL_APPROVAL -> {
                 // Authorised by the approval chain (canApproveCurrentLevel): the manager the level
                 // waits on is above the MR, so always sees the order; a cover signer must see it too.
@@ -284,6 +290,9 @@ public class OrderDesignService {
                 }
                 if (!canApproveCurrentLevel(design, reviewer)) {
                     Stage stage = expectedApprover(approvalChain(design), currentLevel(design));
+                    if (stage != null && stage.includes(reviewer)) {
+                        throw new AccessDeniedException("This artwork is waiting for you, but your role doesn't have the Approve artwork permission");
+                    }
                     throw new AccessDeniedException(stage != null
                             ? "This artwork is waiting for approval from " + stage.label()
                             : "Only a Final Artwork Approval holder can approve this artwork");
@@ -308,12 +317,16 @@ public class OrderDesignService {
             return false;
         }
         Stage stage = expectedApprover(approvalChain(design), currentLevel(design));
-        if (stage != null && stage.includes(reviewer)) {
+        if (stage != null && stage.includes(reviewer) && holds(reviewer, Permission.APPROVAL_DECIDE.key())) {
             return true;
         }
         Order order = design.getOrder();
         return accessControlCacheService.resolveEffectiveKeys(reviewer).contains(FINAL_APPROVAL_KEY)
                 && visibilityService.resolve(reviewer).canSee(order.getOwner(), order.getOrgUnit());
+    }
+
+    private boolean holds(User user, String key) {
+        return accessControlCacheService.resolveEffectiveKeys(user).contains(key);
     }
 
     /** One level of the chain: who may sign it, and how to name them (a person, or "HO of Summit"). */

@@ -32,13 +32,13 @@ public class OrderDesignController {
     }
 
     @PostMapping("/{designId}/approve")
-    @PreAuthorize("hasAnyAuthority('" + Keys.ARTWORK_REVIEW + "', '" + Keys.ARTWORK_FINAL_APPROVE + "')")
+    @PreAuthorize("hasAnyAuthority('" + Keys.ARTWORK_REVIEW + "', '" + Keys.APPROVAL_DECIDE + "', '" + Keys.ARTWORK_FINAL_APPROVE + "')")
     public OrderDesignResponse approve(@PathVariable UUID orderId, @PathVariable UUID designId) {
         return orderDesignService.approve(orderId, designId);
     }
 
     @PostMapping("/{designId}/reject")
-    @PreAuthorize("hasAnyAuthority('" + Keys.ARTWORK_REVIEW + "', '" + Keys.ARTWORK_FINAL_APPROVE + "')")
+    @PreAuthorize("hasAnyAuthority('" + Keys.ARTWORK_REVIEW + "', '" + Keys.APPROVAL_DECIDE + "', '" + Keys.ARTWORK_FINAL_APPROVE + "')")
     public OrderDesignResponse reject(
             @PathVariable UUID orderId, @PathVariable UUID designId, @Valid @RequestBody RejectOrderDesignRequest request) {
         return orderDesignService.reject(orderId, designId, request.comment());

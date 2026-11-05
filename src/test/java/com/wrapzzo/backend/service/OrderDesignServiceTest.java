@@ -86,7 +86,7 @@ class OrderDesignServiceTest {
         for (User u : List.of(kavya, ravi, sanjay, aditi, neha, outsider)) {
             u.setCompany(company);
             when(users.findById(u.getId())).thenReturn(Optional.of(u));
-            when(keys.resolveEffectiveKeys(u)).thenReturn(u == neha ? Set.of(OrderDesignService.FINAL_APPROVAL_KEY) : Set.of());
+            when(keys.resolveEffectiveKeys(u)).thenReturn(u == neha ? Set.of(OrderDesignService.FINAL_APPROVAL_KEY) : Set.of("artwork.review", "approval.decide"));
             when(visibility.resolve(u)).thenReturn(Visibility.everything(u.getId()));
         }
         order = new Order();
@@ -195,6 +195,27 @@ class OrderDesignServiceTest {
     }
 
     @Test
+    void theMrsFirstReviewAndTheManagerLevelsAreSeparatePermissions() {
+        // An MR with only the cycle permission cannot do the first review...
+        when(keys.resolveEffectiveKeys(aditi)).thenReturn(Set.of("approval.decide"));
+        assertThatThrownBy(() -> approveAs(aditi)).isInstanceOf(AccessDeniedException.class).hasMessageContaining("Review artwork");
+
+        // ...and with only the review permission she does it, but is no approver up the cycle.
+        when(keys.resolveEffectiveKeys(aditi)).thenReturn(Set.of("artwork.review"));
+        approveAs(aditi);
+
+        // The manager the level waits on, holding only the review permission, cannot approve at his level.
+        when(keys.resolveEffectiveKeys(sanjay)).thenReturn(Set.of("artwork.review"));
+        assertThatThrownBy(() -> approveAs(sanjay)).isInstanceOf(AccessDeniedException.class).hasMessageContaining("Approve artwork");
+        as(sanjay);
+        assertThat(service.listPendingFinalApproval()).isEmpty();
+
+        // With the cycle permission he can.
+        when(keys.resolveEffectiveKeys(sanjay)).thenReturn(Set.of("approval.decide"));
+        assertThat(approveAs(sanjay).waitingOnName()).isEqualTo("Ravi");
+    }
+
+    @Test
     void anyLevelCanSendItBackToTheVendor() {
         approveAs(aditi);
         approveAs(sanjay);
@@ -241,7 +262,7 @@ class OrderDesignServiceTest {
         for (User u : List.of(zm, rm, am, hoOne, hoTwo, hoElsewhere)) {
             u.setCompany(company);
             when(users.findById(u.getId())).thenReturn(Optional.of(u));
-            when(keys.resolveEffectiveKeys(u)).thenReturn(Set.of());
+            when(keys.resolveEffectiveKeys(u)).thenReturn(Set.of("artwork.review", "approval.decide"));
             when(visibility.resolve(u)).thenReturn(Visibility.everything(u.getId()));
         }
         when(orgUnits.findById(summit.getId())).thenReturn(Optional.of(summit));
@@ -300,7 +321,7 @@ class OrderDesignServiceTest {
         for (User u : List.of(rm, am, ho)) {
             u.setCompany(company);
             when(users.findById(u.getId())).thenReturn(Optional.of(u));
-            when(keys.resolveEffectiveKeys(u)).thenReturn(Set.of());
+            when(keys.resolveEffectiveKeys(u)).thenReturn(Set.of("artwork.review", "approval.decide"));
             when(visibility.resolve(u)).thenReturn(Visibility.everything(u.getId()));
         }
         when(users.findByCompanyIdAndRoleId(company.getId(), hoRole.getId())).thenReturn(List.of(ho));

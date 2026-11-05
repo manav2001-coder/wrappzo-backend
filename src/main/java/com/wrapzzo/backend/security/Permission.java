@@ -40,6 +40,7 @@ public enum Permission {
     ARTWORK_REVIEW(Keys.ARTWORK_REVIEW, true),
     ARTWORK_FINAL_APPROVE(Keys.ARTWORK_FINAL_APPROVE, true),
     APPROVAL_VIEW(Keys.APPROVAL_VIEW, true),
+    APPROVAL_DECIDE(Keys.APPROVAL_DECIDE, true),
     ARTWORK_APPROVAL_VIEW(Keys.ARTWORK_APPROVAL_VIEW, true),
     ARTWORK_APPROVAL_CONFIGURE(Keys.ARTWORK_APPROVAL_CONFIGURE, true),
 
@@ -184,6 +185,8 @@ public enum Permission {
         public static final String ARTWORK_FINAL_APPROVE = "artwork.final_approve";
         /** The Approvals page -- the manager-level queue of proofs waiting on someone. Not the approval-steps setup (artwork_approval.*). */
         public static final String APPROVAL_VIEW = "approval.view";
+        /** Approve or send back a proof at a manager level of the approval cycle. The MR's own first review is artwork.review. */
+        public static final String APPROVAL_DECIDE = "approval.decide";
         public static final String ARTWORK_APPROVAL_VIEW = "artwork_approval.view";
         public static final String ARTWORK_APPROVAL_CONFIGURE = "artwork_approval.configure";
 
