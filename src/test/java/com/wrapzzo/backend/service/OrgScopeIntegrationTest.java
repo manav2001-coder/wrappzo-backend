@@ -3,14 +3,12 @@ package com.wrapzzo.backend.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.wrapzzo.backend.dto.CreateDoctorChangeRequest;
 import com.wrapzzo.backend.dto.CreateQuickGiftRequest;
 import com.wrapzzo.backend.dto.CreateRecipientRequest;
 import com.wrapzzo.backend.exception.RecipientAlreadyExistsException;
 import com.wrapzzo.backend.dto.UpdateRecipientRequest;
 import com.wrapzzo.backend.dto.DashboardDrilldownResponse;
 import com.wrapzzo.backend.dto.DashboardResponse;
-import com.wrapzzo.backend.dto.DoctorChangeRequestResponse;
 import com.wrapzzo.backend.dto.DoctorDetails;
 import com.wrapzzo.backend.dto.OrderResponse;
 import com.wrapzzo.backend.dto.RecipientResponse;
@@ -18,8 +16,6 @@ import com.wrapzzo.backend.dto.UserResponse;
 import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.CompanyFeature;
 import com.wrapzzo.backend.model.CompanyVendor;
-import com.wrapzzo.backend.model.DoctorChangeAction;
-import com.wrapzzo.backend.model.DoctorChangeStatus;
 import com.wrapzzo.backend.exception.PcodeRequiredException;
 import com.wrapzzo.backend.exception.QuantityBelowMinimumException;
 import com.wrapzzo.backend.model.Gift;
@@ -60,7 +56,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * The functional gaps closed after the prescription-pad work: a manager covering more than one
- * zone, the dashboard staying inside the viewer's org scope, and doctor change requests carrying
+ * zone, the dashboard staying inside the viewer's org scope, and a doctor added directly carrying
  * the print details (and finding an existing doctor by pcode instead of
  * duplicating them).
  *
@@ -68,7 +64,7 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @SpringBootTest
 @Transactional
-class OrgScopeAndDoctorChangeIntegrationTest {
+class OrgScopeIntegrationTest {
 
     @Autowired private QuickGiftService quickGiftService;
     @Autowired private OrderService orderService;
@@ -76,7 +72,6 @@ class OrgScopeAndDoctorChangeIntegrationTest {
     @Autowired private OrderRepository orderRepository;
     @Autowired private DashboardService dashboardService;
     @Autowired private UserService userService;
-    @Autowired private DoctorChangeRequestService doctorChangeRequestService;
     @Autowired private AuthService authService;
     @Autowired private CompanyFeatureFlagService companyFeatureFlagService;
     @Autowired private CompanyRepository companyRepository;
@@ -219,11 +214,8 @@ class OrgScopeAndDoctorChangeIntegrationTest {
     }
 
     @Test
-    void aNewDoctorNeedsAPcode_whetherAddedByRequestOrThroughAQuickGift() {
+    void aNewDoctorNeedsAPcode_whenAddedThroughAQuickGift() {
         actAs(mrNorth);
-        assertThatThrownBy(() -> doctorChangeRequestService.create(new CreateDoctorChangeRequest(
-                DoctorChangeAction.ADD, null, "Dr. No Code", "9800000011", null, null, null, null, null)))
-                .isInstanceOf(PcodeRequiredException.class);
         assertThatThrownBy(() -> quickGiftService.create(new CreateQuickGiftRequest(
                 pad.getId(), null, "Dr. No Code", "9800000012", null, null, "Somewhere", null, null, null, null, null, 50)))
                 .isInstanceOf(PcodeRequiredException.class);
@@ -293,17 +285,13 @@ class OrgScopeAndDoctorChangeIntegrationTest {
     }
 
     @Test
-    void anApprovedDoctorAdditionCarriesThePrintDetails() {
+    void aDoctorAddedDirectlyCarriesThePrintDetails() {
         actAs(mrNorth);
-        DoctorChangeRequestResponse request = doctorChangeRequestService.create(new CreateDoctorChangeRequest(
-                DoctorChangeAction.ADD, null, "Dr. Meera Iyer", "9800000003", "PC-555", null, "Clinic Road", null,
+        RecipientResponse added = recipientService.createMine(new CreateRecipientRequest(
+                "Dr. Meera Iyer", "9800000003", "PC-555", null, "Clinic Road", null,
                 new DoctorDetails("MBBS, DNB", "Paediatrics", "Iyer Child Care")));
-        assertThat(request.proposedPcode()).isEqualTo("PC-555");
 
-        actAs(manager);
-        DoctorChangeRequestResponse approved = doctorChangeRequestService.approve(request.id());
-
-        Recipient doctor = recipientRepository.findById(approved.recipientId()).orElseThrow();
+        Recipient doctor = recipientRepository.findById(added.id()).orElseThrow();
         assertThat(doctor.getPcode()).isEqualTo("PC-555");
         assertThat(doctor.getSpeciality()).isEqualTo("Paediatrics");
         assertThat(recipientAssignmentRepository.existsByRecipient_IdAndMrUser_Id(doctor.getId(), mrNorth.getId())).isTrue();
@@ -316,46 +304,12 @@ class OrgScopeAndDoctorChangeIntegrationTest {
         existing = recipientRepository.save(existing);
 
         actAs(mrNorth);
-        DoctorChangeRequestResponse request = doctorChangeRequestService.create(new CreateDoctorChangeRequest(
-                DoctorChangeAction.ADD, null, "Asha Shah", "9800000099", "mh-12345", null, null, null, null));
+        RecipientResponse joined = recipientService.createMine(new CreateRecipientRequest(
+                "Asha Shah", "9800000099", "mh-12345", null, null, null, null));
 
-        actAs(manager);
-        DoctorChangeRequestResponse approved = doctorChangeRequestService.approve(request.id());
-
-        assertThat(approved.recipientId()).isEqualTo(existing.getId());
+        assertThat(joined.id()).isEqualTo(existing.getId());
         assertThat(recipientRepository.findByCompanyIdOrderByNameAsc(company.getId())).hasSize(1);
         assertThat(recipientAssignmentRepository.existsByRecipient_IdAndMrUser_Id(existing.getId(), mrNorth.getId())).isTrue();
-    }
-
-    private DoctorChangeRequestResponse requestNewDoctor(User mr, String pcode) {
-        actAs(mr);
-        return doctorChangeRequestService.create(new CreateDoctorChangeRequest(
-                DoctorChangeAction.ADD, null, "Dr. New", "9800000077", pcode, null, "Clinic Road", null, null));
-    }
-
-    @Test
-    void aPeerMrCannotReviewAnotherMrsDoctorRequest() {
-        // Every real Member manages their own list -- it must not make them a reviewer.
-        grant(mrSouth.getRole(), "doctor.create");
-        DoctorChangeRequestResponse request = requestNewDoctor(mrNorth, "PEER-1");
-
-        actAs(mrSouth);
-        assertThat(doctorChangeRequestService.listPendingForReviewer()).isEmpty();
-        assertThatThrownBy(() -> doctorChangeRequestService.approve(request.id())).isInstanceOf(AccessDeniedException.class);
-    }
-
-    @Test
-    void recipientApproveReviewsCompanyWideButNeverYourOwnRequest() {
-        grant(platformAdmin.getRole(), DoctorChangeRequestService.APPROVE_ANY_KEY);
-        DoctorChangeRequestResponse fromMr = requestNewDoctor(mrSouth, "ANY-1");
-        DoctorChangeRequestResponse ownRequest = requestNewDoctor(platformAdmin, "ANY-2");
-
-        actAs(platformAdmin);
-        assertThat(doctorChangeRequestService.listPendingForReviewer()).extracting(DoctorChangeRequestResponse::id)
-                .contains(fromMr.id())
-                .doesNotContain(ownRequest.id());
-        assertThatThrownBy(() -> doctorChangeRequestService.approve(ownRequest.id())).isInstanceOf(AccessDeniedException.class);
-        assertThat(doctorChangeRequestService.approve(fromMr.id()).status()).isEqualTo(DoctorChangeStatus.APPROVED);
     }
 
     @Test
