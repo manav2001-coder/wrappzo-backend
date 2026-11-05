@@ -62,6 +62,11 @@ public class Vendor extends AuditNames {
     @Column(precision = 5, scale = 2)
     private BigDecimal commission;
 
+    /** The company that added this vendor and runs it; null for a vendor that predates ownership and serves several companies. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "company_id")
+    private Company company;
+
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 

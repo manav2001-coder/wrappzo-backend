@@ -77,7 +77,8 @@ public enum Permission {
     COMPANY_VENDOR_VIEW(Keys.COMPANY_VENDOR_VIEW, true),
     COMPANY_VENDOR_ADD(Keys.COMPANY_VENDOR_ADD, true),
     COMPANY_VENDOR_ASSIGN(Keys.COMPANY_VENDOR_ASSIGN, true),
-    COMPANY_VENDOR_REMOVE(Keys.COMPANY_VENDOR_REMOVE, true),
+    COMPANY_VENDOR_EDIT(Keys.COMPANY_VENDOR_EDIT, true),
+    COMPANY_VENDOR_STATUS(Keys.COMPANY_VENDOR_STATUS, true),
 
     WAREHOUSE_VIEW(Keys.WAREHOUSE_VIEW, true),
     WAREHOUSE_SETUP(Keys.WAREHOUSE_SETUP, true),
@@ -90,9 +91,6 @@ public enum Permission {
     PLATFORM_COMPANY_CONFIGURE(Keys.PLATFORM_COMPANY_CONFIGURE, false),
 
     PLATFORM_VENDOR_VIEW(Keys.PLATFORM_VENDOR_VIEW, false),
-    PLATFORM_VENDOR_CREATE(Keys.PLATFORM_VENDOR_CREATE, false),
-    PLATFORM_VENDOR_EDIT(Keys.PLATFORM_VENDOR_EDIT, false),
-    PLATFORM_VENDOR_STATUS(Keys.PLATFORM_VENDOR_STATUS, false),
 
     PLATFORM_GIFT_VIEW(Keys.PLATFORM_GIFT_VIEW, false),
     PLATFORM_GIFT_CREATE(Keys.PLATFORM_GIFT_CREATE, false),
@@ -221,7 +219,8 @@ public enum Permission {
         public static final String COMPANY_VENDOR_VIEW = "company_vendor.view";
         public static final String COMPANY_VENDOR_ADD = "company_vendor.add";
         public static final String COMPANY_VENDOR_ASSIGN = "company_vendor.assign";
-        public static final String COMPANY_VENDOR_REMOVE = "company_vendor.remove";
+        public static final String COMPANY_VENDOR_EDIT = "company_vendor.edit";
+        public static final String COMPANY_VENDOR_STATUS = "company_vendor.status";
 
         public static final String WAREHOUSE_VIEW = "warehouse.view";
         public static final String WAREHOUSE_SETUP = "warehouse.setup";
@@ -234,9 +233,6 @@ public enum Permission {
         public static final String PLATFORM_COMPANY_CONFIGURE = "platform_company.configure";
 
         public static final String PLATFORM_VENDOR_VIEW = "platform_vendor.view";
-        public static final String PLATFORM_VENDOR_CREATE = "platform_vendor.create";
-        public static final String PLATFORM_VENDOR_EDIT = "platform_vendor.edit";
-        public static final String PLATFORM_VENDOR_STATUS = "platform_vendor.status";
 
         public static final String PLATFORM_GIFT_VIEW = "platform_gift.view";
         public static final String PLATFORM_GIFT_CREATE = "platform_gift.create";

@@ -13,6 +13,8 @@ public interface CompanyVendorRepository extends JpaRepository<CompanyVendor, UU
 
     List<CompanyVendor> findByVendor_Id(UUID vendorId);
 
+    List<CompanyVendor> findByVendor_IdIn(java.util.Collection<UUID> vendorIds);
+
     /** Company-wide (orgUnitId null) rows, plus any row scoped to one of the given org unit ids (the viewer's own unit and its ancestors). */
     @Query("""
             select cv.vendor.id from CompanyVendor cv

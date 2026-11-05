@@ -1,12 +1,13 @@
 package com.wrapzzo.backend.service;
 
 import com.wrapzzo.backend.dto.AddVendorRequest;
-import com.wrapzzo.backend.dto.EditVendorRequest;
 import com.wrapzzo.backend.dto.VendorResponse;
 import com.wrapzzo.backend.exception.EmailDeliveryException;
 import com.wrapzzo.backend.exception.VendorEmailAlreadyExistsException;
 import com.wrapzzo.backend.exception.VendorNotFoundException;
 import com.wrapzzo.backend.model.User;
+import com.wrapzzo.backend.model.Company;
+import com.wrapzzo.backend.model.CompanyVendor;
 import com.wrapzzo.backend.model.Vendor;
 import com.wrapzzo.backend.model.VendorInviteToken;
 import com.wrapzzo.backend.model.VendorStatus;
@@ -18,6 +19,9 @@ import com.wrapzzo.backend.security.CurrentUser;
 import com.wrapzzo.backend.security.TokenHasher;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
@@ -26,7 +30,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Super Admin-only vendor onboarding/management -- see Vendor's own doc comment for why this is kept separate from User. */
+/**
+ * Vendors, which a company adds and runs (see CompanyVendorService) and platform staff only view. Kept separate from User --
+ * see Vendor's own doc comment.
+ */
 @Service
 @Slf4j
 public class VendorService {
@@ -59,8 +66,9 @@ public class VendorService {
         this.frontendBaseUrl = frontendBaseUrl;
     }
 
+    /** Adds a vendor owned by {@code owner} and emails it an invite. Who may do so, and where the vendor serves, is the caller's to settle. */
     @Transactional
-    public VendorResponse add(AddVendorRequest request) {
+    public Vendor add(AddVendorRequest request, Company owner) {
         if (vendorRepository.findByContactEmailIgnoreCase(request.contactEmail().trim()).isPresent()) {
             throw new VendorEmailAlreadyExistsException(request.contactEmail());
         }
@@ -69,6 +77,7 @@ public class VendorService {
         // ever authenticate after setting one themselves via the emailed invite link.
         String placeholderHash = passwordEncoder.encode(TokenHasher.generateOpaqueToken());
         Vendor newVendor = new Vendor(request.name(), request.contactEmail(), request.contactPhone(), placeholderHash, currentUser());
+        newVendor.setCompany(owner);
         newVendor.setMarkupFees(request.markupFees());
         newVendor.setCommission(request.commission());
         // saveAndFlush -- vendorNo is DB-generated and only readable after the physical
@@ -76,46 +85,57 @@ public class VendorService {
         Vendor vendor = vendorRepository.saveAndFlush(newVendor);
 
         issueInviteAndSendEmail(vendor);
-        return VendorResponse.from(vendor);
+        return vendor;
     }
 
-    /** Every vendor; with a company, only those serving it (in whole or in any of its org units). */
+    /** Every vendor, across all franchises; with a company, only those serving it (in whole or in any of its org units). */
+    @Transactional(readOnly = true)
     public List<VendorResponse> list(UUID companyId) {
         List<Vendor> vendors = companyId == null
                 ? vendorRepository.findAll()
                 : vendorRepository.findAllById(companyVendorRepository.findVendorIdsByCompany(companyId));
-        return vendors.stream().map(VendorResponse::from).toList();
+        Map<UUID, List<String>> serves = servesOf(vendors.stream().map(Vendor::getId).toList());
+        return vendors.stream().map(vendor -> VendorResponse.from(vendor, serves.getOrDefault(vendor.getId(), List.of()))).toList();
     }
 
+    @Transactional(readOnly = true)
     public VendorResponse view(UUID id) {
-        return VendorResponse.from(getEntity(id));
+        return toResponse(getEntity(id));
     }
 
+    /** A vendor's own name and phone; its commercial terms are never touched here. */
     @Transactional
-    public VendorResponse edit(UUID id, EditVendorRequest request) {
-        Vendor vendor = getEntity(id);
-        vendor.setName(request.name());
-        vendor.setContactPhone(request.contactPhone());
-        vendor.setMarkupFees(request.markupFees());
-        vendor.setCommission(request.commission());
+    public Vendor editDetails(Vendor vendor, String name, String contactPhone) {
+        vendor.setName(name);
+        vendor.setContactPhone(contactPhone);
         vendor.setUpdatedBy(currentUser());
-        return VendorResponse.from(vendor);
+        return vendor;
     }
 
     @Transactional
-    public VendorResponse setStatus(UUID id, VendorStatus status) {
-        Vendor vendor = getEntity(id);
+    public Vendor setStatus(Vendor vendor, VendorStatus status) {
         vendor.setStatus(status);
         vendor.setUpdatedBy(currentUser());
-        return VendorResponse.from(vendor);
+        return vendor;
     }
 
     /** For when the original invite email was lost or its link expired before the vendor used it. */
     @Transactional
-    public VendorResponse resendInvite(UUID id) {
-        Vendor vendor = getEntity(id);
+    public void resendInvite(Vendor vendor) {
         issueInviteAndSendEmail(vendor);
-        return VendorResponse.from(vendor);
+    }
+
+    public VendorResponse toResponse(Vendor vendor) {
+        return VendorResponse.from(vendor, servesOf(List.of(vendor.getId())).getOrDefault(vendor.getId(), List.of()));
+    }
+
+    private Map<UUID, List<String>> servesOf(List<UUID> vendorIds) {
+        Map<UUID, List<String>> serves = new LinkedHashMap<>();
+        for (CompanyVendor mapping : companyVendorRepository.findByVendor_IdIn(vendorIds)) {
+            String where = mapping.getOrgUnit() != null ? mapping.getOrgUnit().getName() : "Whole company";
+            serves.computeIfAbsent(mapping.getVendor().getId(), id -> new ArrayList<>()).add(mapping.getCompany().getName() + " · " + where);
+        }
+        return serves;
     }
 
     /**

@@ -3,12 +3,15 @@ package com.wrapzzo.backend.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.wrapzzo.backend.dto.AddCompanyVendorRequest;
 import com.wrapzzo.backend.dto.CompanyVendorResponse;
+import com.wrapzzo.backend.dto.EditCompanyVendorRequest;
 import com.wrapzzo.backend.dto.SetVendorCoverageRequest;
 import com.wrapzzo.backend.exception.ConflictException;
 import com.wrapzzo.backend.exception.InvalidVendorCoverageException;
 import com.wrapzzo.backend.exception.NoAvailableVendorException;
 import com.wrapzzo.backend.exception.OrgUnitNotFoundException;
+import com.wrapzzo.backend.exception.VendorNotFoundException;
 import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.Gift;
 import com.wrapzzo.backend.model.Order;
@@ -17,6 +20,7 @@ import com.wrapzzo.backend.model.OrgUnit;
 import com.wrapzzo.backend.model.Role;
 import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.model.Vendor;
+import com.wrapzzo.backend.model.VendorStatus;
 import com.wrapzzo.backend.repository.CompanyRepository;
 import com.wrapzzo.backend.repository.GiftRepository;
 import com.wrapzzo.backend.repository.OrderRepository;
@@ -31,14 +35,18 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 
 /** The company admin maps vendors to divisions and units; an order then only goes to a vendor that serves where it was raised. */
 @SpringBootTest
+@Import(TestEmailSenderConfig.class)
 @Transactional
 class CompanyVendorMappingIntegrationTest {
+
+    @Autowired private TestEmailSenderConfig.RecordingEmailSender emailSender;
 
     @Autowired private CompanyVendorService companyVendorService;
     @Autowired private OrderService orderService;
@@ -65,6 +73,7 @@ class CompanyVendorMappingIntegrationTest {
         summit = orgUnitRepository.save(new OrgUnit(company, null, "Summit", "Division"));
         summitLucknow = orgUnitRepository.save(new OrgUnit(company, summit, "Lucknow", "Zone"));
         megacare = orgUnitRepository.save(new OrgUnit(company, null, "Megacare", "Division"));
+        emailSender.sent.clear();
         gift = giftRepository.save(new Gift("Pad", "Stationery", "A pad", null, null, staff));
         // Assigning a vendor records who moved the order, so there has to be a signed-in user.
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(staff.getId(), null, List.of()));
@@ -76,7 +85,9 @@ class CompanyVendorMappingIntegrationTest {
     }
 
     private Vendor vendor(String name) {
-        return vendorRepository.save(new Vendor(name + " " + UUID.randomUUID(), "v-" + UUID.randomUUID() + "@x.com", null, "n/a", staff));
+        Vendor vendor = new Vendor(name + " " + UUID.randomUUID(), "v-" + UUID.randomUUID() + "@x.com", null, "n/a", staff);
+        vendor.setCompany(company);
+        return vendorRepository.save(vendor);
     }
 
     private Order orderRaisedIn(OrgUnit unit) {
@@ -131,14 +142,68 @@ class CompanyVendorMappingIntegrationTest {
     }
 
     @Test
-    void removingAVendorTakesAllItsMappingsInThisCompanyOnly() {
-        Vendor vendor = vendor("Printer");
-        Company other = companyRepository.save(new Company("Other " + UUID.randomUUID()));
-        companyVendorService.setCoverage(company.getId(), vendor.getId(), only(summit, megacare));
-        companyVendorService.assign(other.getId(), vendor.getId(), null);
+    void aCompanyAddsItsOwnVendorMappedToDivisionsAndItIsInvitedAndOwned() {
+        List<CompanyVendorResponse> roster = companyVendorService.addVendor(company.getId(),
+                new AddCompanyVendorRequest("Own Printer", "own-" + UUID.randomUUID() + "@x.com", "999", false, List.of(summit.getId(), megacare.getId())));
 
-        assertThat(companyVendorService.removeVendor(company.getId(), vendor.getId())).isEmpty();
-        assertThat(companyVendorService.list(other.getId())).hasSize(1);
+        assertThat(roster).extracting(CompanyVendorResponse::vendorName).containsOnly("Own Printer");
+        assertThat(roster).extracting(CompanyVendorResponse::orgUnitName).containsExactlyInAnyOrder("Summit", "Megacare");
+        UUID vendorId = roster.get(0).vendorId();
+        assertThat(vendorRepository.findById(vendorId).orElseThrow().getCompany().getId()).isEqualTo(company.getId());
+        assertThat(emailSender.sent).hasSize(1);
+    }
+
+    @Test
+    void aRefusedMappingLeavesNoVendorAndNoInviteBehind() {
+        long before = vendorRepository.count();
+
+        assertThatThrownBy(() -> companyVendorService.addVendor(company.getId(),
+                new AddCompanyVendorRequest("Nowhere", "nowhere-" + UUID.randomUUID() + "@x.com", null, false, List.of())))
+                .isInstanceOf(InvalidVendorCoverageException.class);
+
+        assertThat(vendorRepository.count()).isEqualTo(before);
+        assertThat(emailSender.sent).isEmpty();
+    }
+
+    @Test
+    void aCompanyCannotTouchAnotherCompanysVendor() {
+        Company other = companyRepository.save(new Company("Other " + UUID.randomUUID()));
+        Vendor theirs = vendor("Theirs");
+        companyVendorService.setCoverage(company.getId(), theirs.getId(), only(summit));
+
+        assertThatThrownBy(() -> companyVendorService.setCoverage(other.getId(), theirs.getId(), new SetVendorCoverageRequest(true, List.of())))
+                .isInstanceOf(VendorNotFoundException.class);
+        assertThatThrownBy(() -> companyVendorService.editVendor(other.getId(), theirs.getId(), new EditCompanyVendorRequest("Mine now", null)))
+                .isInstanceOf(VendorNotFoundException.class);
+        assertThatThrownBy(() -> companyVendorService.setVendorStatus(other.getId(), theirs.getId(), VendorStatus.SUSPENDED))
+                .isInstanceOf(VendorNotFoundException.class);
+        assertThatThrownBy(() -> companyVendorService.resendInvite(other.getId(), theirs.getId()))
+                .isInstanceOf(VendorNotFoundException.class);
+    }
+
+    @Test
+    void aCompanyEditsAndSuspendsItsOwnVendorAndASuspendedOneIsNotMapped() {
+        Vendor vendor = vendor("Printer");
+        companyVendorService.setCoverage(company.getId(), vendor.getId(), only(summit));
+
+        companyVendorService.editVendor(company.getId(), vendor.getId(), new EditCompanyVendorRequest("Renamed", "555"));
+        List<CompanyVendorResponse> roster = companyVendorService.setVendorStatus(company.getId(), vendor.getId(), VendorStatus.SUSPENDED);
+
+        assertThat(roster).extracting(CompanyVendorResponse::vendorName).containsOnly("Renamed");
+        assertThat(roster).extracting(CompanyVendorResponse::vendorStatus).containsOnly(VendorStatus.SUSPENDED);
+        assertThatThrownBy(() -> companyVendorService.setCoverage(company.getId(), vendor.getId(), only(megacare)))
+                .isInstanceOf(InvalidVendorCoverageException.class)
+                .hasMessageContaining("suspended");
+    }
+
+    @Test
+    void aSuspendedVendorIsNotUsedToRouteAnOrder() {
+        Vendor vendor = vendor("Printer");
+        companyVendorService.setCoverage(company.getId(), vendor.getId(), only(summit));
+        companyVendorService.setVendorStatus(company.getId(), vendor.getId(), VendorStatus.SUSPENDED);
+        Order order = orderRaisedIn(summitLucknow);
+
+        assertThatThrownBy(() -> orderService.autoAssignVendor(order.getId())).isInstanceOf(NoAvailableVendorException.class);
     }
 
     @Test

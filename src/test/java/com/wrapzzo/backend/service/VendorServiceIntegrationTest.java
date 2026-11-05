@@ -4,15 +4,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.wrapzzo.backend.dto.AddVendorRequest;
-import com.wrapzzo.backend.dto.EditVendorRequest;
 import com.wrapzzo.backend.dto.VendorResponse;
 import com.wrapzzo.backend.exception.VendorEmailAlreadyExistsException;
 import com.wrapzzo.backend.exception.VendorNotFoundException;
 import com.wrapzzo.backend.model.Company;
+import com.wrapzzo.backend.model.CompanyVendor;
+import com.wrapzzo.backend.model.OrgUnit;
 import com.wrapzzo.backend.model.Role;
 import com.wrapzzo.backend.model.User;
+import com.wrapzzo.backend.model.Vendor;
 import com.wrapzzo.backend.model.VendorStatus;
 import com.wrapzzo.backend.repository.CompanyRepository;
+import com.wrapzzo.backend.repository.CompanyVendorRepository;
+import com.wrapzzo.backend.repository.OrgUnitRepository;
 import com.wrapzzo.backend.repository.RoleRepository;
 import com.wrapzzo.backend.repository.UserRepository;
 import java.math.BigDecimal;
@@ -28,7 +32,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 
-/** VendorService reads the caller (a User, the Super Admin) from SecurityContextHolder -- set up manually, same as GiftServiceIntegrationTest. */
+/** VendorService reads the caller (a User) from SecurityContextHolder -- set up manually, same as GiftServiceIntegrationTest. */
 @SpringBootTest
 @Import(TestEmailSenderConfig.class)
 @Transactional
@@ -49,6 +53,12 @@ class VendorServiceIntegrationTest {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private CompanyVendorRepository companyVendorRepository;
+
+    @Autowired
+    private OrgUnitRepository orgUnitRepository;
+
     @BeforeEach
     void actAsAUser() {
         Company company = companyRepository.save(new Company("Vendor Test Co"));
@@ -65,15 +75,20 @@ class VendorServiceIntegrationTest {
         SecurityContextHolder.clearContext();
     }
 
-    @Test
-    void addSendsAnInviteEmail() {
-        VendorResponse vendor =
-                vendorService.add(new AddVendorRequest("Acme Printing", "contact@acme-test.com", "1234567890", null, null));
+    private Company owner() {
+        return companyRepository.save(new Company("Owner Co " + UUID.randomUUID()));
+    }
 
-        assertThat(vendor.status()).isEqualTo(VendorStatus.ACTIVE);
+    @Test
+    void addSendsAnInviteEmailAndRecordsTheOwner() {
+        Company owner = owner();
+        Vendor vendor = vendorService.add(new AddVendorRequest("Acme Printing", "contact@acme-test.com", "1234567890", null, null), owner);
+
+        assertThat(vendor.getStatus()).isEqualTo(VendorStatus.ACTIVE);
+        assertThat(vendor.getCompany().getId()).isEqualTo(owner.getId());
         // Regression check: vendorNo is DB-generated (@Generated INSERT) and only readable
         // immediately if the service flushes rather than deferring the insert to commit.
-        assertThat(vendor.displayId()).matches("VID-\\d+");
+        assertThat(vendorService.toResponse(vendor).displayId()).matches("VID-\\d+");
         assertThat(emailSender.sent).hasSize(1);
         assertThat(emailSender.sent.get(0).to()).isEqualTo("contact@acme-test.com");
         assertThat(emailSender.sent.get(0).html()).contains("/vendor/setup-password?token=");
@@ -81,55 +96,43 @@ class VendorServiceIntegrationTest {
 
     @Test
     void addWithDuplicateEmailThrows() {
-        vendorService.add(new AddVendorRequest("First", "dup@acme-test.com", null, null, null));
+        Company owner = owner();
+        vendorService.add(new AddVendorRequest("First", "dup@acme-test.com", null, null, null), owner);
 
-        assertThatThrownBy(() -> vendorService.add(new AddVendorRequest("Second", "dup@acme-test.com", null, null, null)))
+        assertThatThrownBy(() -> vendorService.add(new AddVendorRequest("Second", "dup@acme-test.com", null, null, null), owner))
                 .isInstanceOf(VendorEmailAlreadyExistsException.class);
     }
 
     @Test
     void resendInviteSendsANewEmail() {
-        VendorResponse vendor = vendorService.add(new AddVendorRequest("Resend Vendor", "resend@acme-test.com", null, null, null));
+        Vendor vendor = vendorService.add(new AddVendorRequest("Resend Vendor", "resend@acme-test.com", null, null, null), owner());
 
-        vendorService.resendInvite(vendor.id());
+        vendorService.resendInvite(vendor);
 
         assertThat(emailSender.sent).hasSize(2);
     }
 
     @Test
-    void editChangesFields() {
-        VendorResponse added = vendorService.add(new AddVendorRequest("Old Name", "contact4@acme-test.com", null, null, null));
+    void editDetailsChangesNameAndPhoneButNeverTheCommercialTerms() {
+        Vendor added = vendorService.add(new AddVendorRequest("Old Name", "contact4@acme-test.com", null, new BigDecimal("12.50"), new BigDecimal("5.00")), owner());
 
-        var updated = vendorService.edit(added.id(), new EditVendorRequest("New Name", "999", null, null));
+        Vendor updated = vendorService.editDetails(added, "New Name", "999");
 
-        assertThat(updated.name()).isEqualTo("New Name");
-        assertThat(updated.contactPhone()).isEqualTo("999");
-    }
-
-    @Test
-    void addAndEditPersistMarkupFeesAndCommission() {
-        VendorResponse added = vendorService.add(new AddVendorRequest(
-                "Commercial Terms Vendor", "commercial-terms@acme-test.com", null, new BigDecimal("12.50"), new BigDecimal("5.00")));
-
-        assertThat(added.markupFees()).isEqualByComparingTo("12.50");
-        assertThat(added.commission()).isEqualByComparingTo("5.00");
-
-        var updated = vendorService.edit(
-                added.id(), new EditVendorRequest("Commercial Terms Vendor", null, new BigDecimal("20.00"), new BigDecimal("7.50")));
-
-        assertThat(updated.markupFees()).isEqualByComparingTo("20.00");
-        assertThat(updated.commission()).isEqualByComparingTo("7.50");
+        assertThat(updated.getName()).isEqualTo("New Name");
+        assertThat(updated.getContactPhone()).isEqualTo("999");
+        assertThat(updated.getMarkupFees()).isEqualByComparingTo("12.50");
+        assertThat(updated.getCommission()).isEqualByComparingTo("5.00");
     }
 
     @Test
     void suspendAndReactivateToggleStatus() {
-        VendorResponse added = vendorService.add(new AddVendorRequest("Toggle Vendor", "contact5@acme-test.com", null, null, null));
+        Vendor added = vendorService.add(new AddVendorRequest("Toggle Vendor", "contact5@acme-test.com", null, null, null), owner());
 
-        vendorService.setStatus(added.id(), VendorStatus.SUSPENDED);
-        assertThat(vendorService.view(added.id()).status()).isEqualTo(VendorStatus.SUSPENDED);
+        vendorService.setStatus(added, VendorStatus.SUSPENDED);
+        assertThat(vendorService.view(added.getId()).status()).isEqualTo(VendorStatus.SUSPENDED);
 
-        vendorService.setStatus(added.id(), VendorStatus.ACTIVE);
-        assertThat(vendorService.view(added.id()).status()).isEqualTo(VendorStatus.ACTIVE);
+        vendorService.setStatus(added, VendorStatus.ACTIVE);
+        assertThat(vendorService.view(added.getId()).status()).isEqualTo(VendorStatus.ACTIVE);
     }
 
     @Test
@@ -138,9 +141,22 @@ class VendorServiceIntegrationTest {
     }
 
     @Test
-    void listIncludesAddedVendors() {
-        VendorResponse added = vendorService.add(new AddVendorRequest("Listed Vendor", "contact6@acme-test.com", null, null, null));
+    void platformStaffSeeEveryVendorAcrossCompaniesWithWhereEachServesAndWhoOwnsIt() {
+        Company alpha = owner();
+        Company beta = owner();
+        Vendor a = vendorService.add(new AddVendorRequest("Alpha Printer", "alpha-p@acme-test.com", null, null, null), alpha);
+        Vendor b = vendorService.add(new AddVendorRequest("Beta Printer", "beta-p@acme-test.com", null, null, null), beta);
+        companyVendorRepository.save(new CompanyVendor(alpha, a, null));
+        companyVendorRepository.save(new CompanyVendor(beta, b, orgUnitRepository.save(new OrgUnit(beta, null, "Summit", "Division"))));
 
-        assertThat(vendorService.list(null)).extracting(VendorResponse::id).contains(added.id());
+        List<VendorResponse> all = vendorService.list(null);
+
+        assertThat(all).extracting(VendorResponse::id).contains(a.getId(), b.getId());
+        VendorResponse alphaRow = all.stream().filter(v -> v.id().equals(a.getId())).findFirst().orElseThrow();
+        assertThat(alphaRow.companyName()).isEqualTo(alpha.getName());
+        assertThat(alphaRow.serves()).containsExactly(alpha.getName() + " · Whole company");
+        VendorResponse betaRow = all.stream().filter(v -> v.id().equals(b.getId())).findFirst().orElseThrow();
+        assertThat(betaRow.serves()).containsExactly(beta.getName() + " · Summit");
+        assertThat(vendorService.list(beta.getId())).extracting(VendorResponse::id).containsExactly(b.getId());
     }
 }
