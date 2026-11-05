@@ -3,7 +3,9 @@ package com.wrapzzo.backend.service;
 import com.wrapzzo.backend.model.AccessControl;
 import com.wrapzzo.backend.model.AccessControlType;
 import com.wrapzzo.backend.model.Company;
+import com.wrapzzo.backend.model.CompanyStatus;
 import com.wrapzzo.backend.model.User;
+import com.wrapzzo.backend.model.UserStatus;
 import com.wrapzzo.backend.repository.AccessControlRepository;
 import com.wrapzzo.backend.repository.CompanyAccessControlRepository;
 import com.wrapzzo.backend.repository.TemplateRepository;
@@ -53,17 +55,34 @@ public class AccessControlCacheService {
     private final CompanyAccessControlRepository companyAccessControlRepository;
     private final StringRedisTemplate redisTemplate;
 
-    /** Effective keys of a user whose id is all the caller has (the JWT filter). */
+    /**
+     * What a user may do right now: whether their account is live at all, and the keys they hold. A deleted or
+     * suspended user, an invited one who never set a password, and anyone in a deactivated company are not live --
+     * they hold no keys and the JWT filter lets none of their still-valid tokens through.
+     */
+    public record Access(boolean active, Set<String> keys) {
+        static Access inactive() {
+            return new Access(false, Set.of());
+        }
+    }
+
+    /** Effective keys of a user whose id is all the caller has; empty for an account that is not live. */
     @Transactional(readOnly = true)
     public Set<String> resolveEffectiveKeys(UUID userId) {
+        return resolve(userId).keys();
+    }
+
+    /** The JWT filter's lookup: one cached read for both "may this token act at all" and the keys. */
+    @Transactional(readOnly = true)
+    public Access resolve(UUID userId) {
         String cacheKey = null;
         try {
             cacheKey = KEY_PREFIX + generation(GENERATION_KEY) + ":" + userId;
             String cached = redisTemplate.opsForValue().get(cacheKey);
             if (cached != null) {
-                Set<String> keys = decodeIfFresh(cached);
-                if (keys != null) {
-                    return keys;
+                Access access = decodeIfFresh(cached);
+                if (access != null) {
+                    return access;
                 }
             }
         } catch (RuntimeException e) {
@@ -71,32 +90,40 @@ public class AccessControlCacheService {
             cacheKey = null;
         }
         User user = userRepository.findById(userId).orElse(null);
-        Set<String> keys = user == null ? Set.of() : compute(user);
-        // An empty set is never cached: it is what a user holds before their role is given any
-        // templates, and caching it would hide a later grant (made outside the app's own
-        // invalidation) for the full TTL. Recomputing an empty set is cheap.
-        if (cacheKey != null && user != null && !keys.isEmpty()) {
+        Access access = user == null || !isLive(user) ? Access.inactive() : new Access(true, compute(user));
+        // A live user with no keys is never cached: it is what a user holds before their role is given any
+        // templates, and caching it would hide a later grant (made outside the app's own invalidation) for the
+        // full TTL. Recomputing an empty set is cheap. A dead account is cached, so a blocked token costs one read.
+        boolean cacheable = !access.active() || !access.keys().isEmpty();
+        if (cacheKey != null && cacheable) {
             try {
-                String companyId = user.getCompany() != null ? user.getCompany().getId().toString() : "";
-                String companyGeneration = user.getCompany() != null ? generation(companyGenerationKey(user.getCompany().getId())) : "";
-                redisTemplate.opsForValue().set(cacheKey, companyId + "|" + companyGeneration + "|" + String.join(",", keys), CACHE_TTL);
+                String companyId = user != null && user.getCompany() != null ? user.getCompany().getId().toString() : "";
+                String companyGeneration = companyId.isEmpty() ? "" : generation(companyGenerationKey(user.getCompany().getId()));
+                redisTemplate.opsForValue().set(cacheKey,
+                        (access.active() ? "1" : "0") + "|" + companyId + "|" + companyGeneration + "|" + String.join(",", access.keys()), CACHE_TTL);
             } catch (RuntimeException e) {
                 log.warn("Could not cache permissions: {}", e.getMessage());
             }
         }
-        return keys;
+        return access;
     }
 
-    /** The cached keys, unless their company's generation has moved on since they were stored. */
-    private Set<String> decodeIfFresh(String cached) {
-        String[] parts = cached.split("\\|", 3);
-        if (parts.length < 3) {
+    /** An active user in a company that is itself active (platform staff belong to no company). */
+    private static boolean isLive(User user) {
+        return user.getStatus() == UserStatus.ACTIVE
+                && (user.getCompany() == null || user.getCompany().getStatus() == CompanyStatus.ACTIVE);
+    }
+
+    /** The cached access, unless their company's generation has moved on since it was stored. */
+    private Access decodeIfFresh(String cached) {
+        String[] parts = cached.split("\\|", 4);
+        if (parts.length < 4) {
             return null;
         }
-        if (!parts[0].isEmpty() && !parts[1].equals(generation(companyGenerationKey(UUID.fromString(parts[0]))))) {
+        if (!parts[1].isEmpty() && !parts[2].equals(generation(companyGenerationKey(UUID.fromString(parts[1]))))) {
             return null;
         }
-        return decode(parts[2]);
+        return new Access("1".equals(parts[0]), decode(parts[3]));
     }
 
     /** For call sites that already hold the user. */

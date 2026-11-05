@@ -106,6 +106,11 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", e.getMessage()));
     }
 
+    @ExceptionHandler(CompanyDeactivatedException.class)
+    public ResponseEntity<Map<String, String>> handleCompanyDeactivated(CompanyDeactivatedException e) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", e.getMessage()));
+    }
+
     @ExceptionHandler(AccountLockedException.class)
     public ResponseEntity<Map<String, String>> handleAccountLocked(AccountLockedException e) {
         return ResponseEntity.status(HttpStatus.LOCKED)

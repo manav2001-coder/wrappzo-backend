@@ -2,6 +2,7 @@ package com.wrapzzo.backend.service;
 
 import com.wrapzzo.backend.dto.CurrentUserResponse;
 import com.wrapzzo.backend.exception.AccountLockedException;
+import com.wrapzzo.backend.exception.CompanyDeactivatedException;
 import com.wrapzzo.backend.exception.InvalidCredentialsException;
 import com.wrapzzo.backend.exception.InvalidInviteTokenException;
 import com.wrapzzo.backend.exception.InvalidRefreshTokenException;
@@ -9,6 +10,7 @@ import com.wrapzzo.backend.exception.PasswordMismatchException;
 import com.wrapzzo.backend.model.RefreshToken;
 import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.model.UserInviteToken;
+import com.wrapzzo.backend.model.CompanyStatus;
 import com.wrapzzo.backend.model.UserStatus;
 import com.wrapzzo.backend.repository.RefreshTokenRepository;
 import com.wrapzzo.backend.repository.UserInviteTokenRepository;
@@ -94,6 +96,10 @@ public class AuthService {
             throw new InvalidCredentialsException();
         }
 
+        // After the password, so the reason is only told to someone who really holds the account.
+        if (user.getCompany() != null && user.getCompany().getStatus() == CompanyStatus.INACTIVE) {
+            throw new CompanyDeactivatedException(user.getCompany().getName());
+        }
         user.setFailedLoginAttempts((short) 0);
         user.setLockedUntil(null);
         return issueTokenPair(user);
@@ -108,8 +114,9 @@ public class AuthService {
         existing.setRevokedAt(Instant.now());
 
         User user = existing.getUser();
-        if (user.getStatus() != UserStatus.ACTIVE) {
-            // Revoked above regardless -- a suspended user's refresh token must never be usable again.
+        if (user.getStatus() != UserStatus.ACTIVE
+                || (user.getCompany() != null && user.getCompany().getStatus() == CompanyStatus.INACTIVE)) {
+            // Revoked above regardless -- a suspended user's (or a deactivated company's) refresh token must never be usable again.
             throw new InvalidRefreshTokenException();
         }
 

@@ -35,6 +35,7 @@ public class CompanyService {
     private final RoleRepository roleRepository;
     private final TemplateRepository templateRepository;
     private final FeatureService featureService;
+    private final AccessControlCacheService accessControlCacheService;
     private final FileStorageService fileStorageService;
 
     @Transactional
@@ -89,6 +90,8 @@ public class CompanyService {
     public CompanyResponse setStatus(UUID id, CompanyStatus status) {
         Company company = getEntity(id);
         company.setStatus(status);
+        // Everyone in the company is switched on or off at once: drop their cached access.
+        accessControlCacheService.invalidateAfterCommit(company);
         return toResponse(company);
     }
 

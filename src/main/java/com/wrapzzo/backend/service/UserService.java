@@ -389,6 +389,8 @@ public class UserService {
             throw new UserHasActivityException(userId);
         }
         eventPublisher.publishEvent(new CompanyStructureChangedEvent(companyId));
+        // The deleted user's still-valid token must stop working now, not when it expires.
+        accessControlCacheService.invalidateAfterCommit(companyId);
     }
 
     /** The value in the first org level that places a user at the company itself -- they see everything. */

@@ -10,7 +10,10 @@ import static org.mockito.Mockito.when;
 
 import com.wrapzzo.backend.model.AccessControl;
 import com.wrapzzo.backend.model.Role;
+import com.wrapzzo.backend.model.Company;
+import com.wrapzzo.backend.model.CompanyStatus;
 import com.wrapzzo.backend.model.User;
+import com.wrapzzo.backend.model.UserStatus;
 import com.wrapzzo.backend.repository.AccessControlRepository;
 import com.wrapzzo.backend.repository.CompanyAccessControlRepository;
 import com.wrapzzo.backend.repository.TemplateRepository;
@@ -47,6 +50,7 @@ class AccessControlCacheServiceTest {
                 userRepository, templateRepository, accessControlRepository, companyAccessControlRepository, redisTemplate);
         when(user.getId()).thenReturn(userId);
         when(user.getRole()).thenReturn(role);
+        when(user.getStatus()).thenReturn(UserStatus.ACTIVE);
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
     }
 
@@ -72,5 +76,53 @@ class AccessControlCacheServiceTest {
         assertThat(service.resolveEffectiveKeys(userId)).isEqualTo(Set.of("dashboard.view"));
 
         verify(values).set(anyString(), anyString(), any(Duration.class));
+    }
+
+    @Test
+    void aDeletedUserIsNotLive() {
+        when(userRepository.findById(userId)).thenReturn(Optional.empty());
+
+        assertThat(service.resolve(userId).active()).isFalse();
+        assertThat(service.resolveEffectiveKeys(userId)).isEmpty();
+    }
+
+    @Test
+    void aSuspendedUserIsNotLiveAndHoldsNoKeys() {
+        AccessControl key = mock(AccessControl.class);
+        when(key.getKey()).thenReturn("dashboard.view");
+        when(role.isPlatformSuperAdmin()).thenReturn(true);
+        when(accessControlRepository.findByType(any())).thenReturn(List.of(key));
+        when(user.getStatus()).thenReturn(UserStatus.SUSPENDED);
+
+        assertThat(service.resolve(userId).active()).isFalse();
+        assertThat(service.resolveEffectiveKeys(userId)).isEmpty();
+    }
+
+    @Test
+    void everyoneInADeactivatedCompanyIsNotLive() {
+        Company company = mock(Company.class);
+        when(company.getId()).thenReturn(UUID.randomUUID());
+        when(company.getStatus()).thenReturn(CompanyStatus.INACTIVE);
+        when(user.getCompany()).thenReturn(company);
+        when(role.isPlatformSuperAdmin()).thenReturn(false);
+
+        assertThat(service.resolve(userId).active()).isFalse();
+
+        // A blocked account is remembered, so a token held by one costs a cache read, not a lookup each time.
+        verify(values).set(anyString(), org.mockito.ArgumentMatchers.startsWith("0|"), any(Duration.class));
+    }
+
+    @Test
+    void aLiveUserIsLiveInAnActiveCompany() {
+        AccessControl key = mock(AccessControl.class);
+        when(key.getKey()).thenReturn("dashboard.view");
+        Company company = mock(Company.class);
+        when(company.getId()).thenReturn(UUID.randomUUID());
+        when(company.getStatus()).thenReturn(CompanyStatus.ACTIVE);
+        when(user.getCompany()).thenReturn(company);
+        when(role.isPlatformSuperAdmin()).thenReturn(true);
+        when(accessControlRepository.findByType(any())).thenReturn(List.of(key));
+
+        assertThat(service.resolve(userId).active()).isTrue();
     }
 }

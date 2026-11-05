@@ -221,4 +221,34 @@ class AuthServiceIntegrationTest {
 
         assertThat(accessControlCacheService.resolveEffectiveKeys(user)).containsExactly("billing.view");
     }
+
+    @Test
+    void aDeactivatedCompanysUserCannotSignInOrRefresh_andIsTold() {
+        TokenPair tokens = authService.login("priya@alembic.com", RAW_PASSWORD);
+
+        user.getCompany().setStatus(com.wrapzzo.backend.model.CompanyStatus.INACTIVE);
+        companyRepository.saveAndFlush(user.getCompany());
+
+        assertThatThrownBy(() -> authService.login("priya@alembic.com", RAW_PASSWORD))
+                .isInstanceOf(com.wrapzzo.backend.exception.CompanyDeactivatedException.class)
+                .hasMessageContaining("Alembic Pharma");
+        // A wrong password is still just "invalid", never a hint about the company.
+        assertThatThrownBy(() -> authService.login("priya@alembic.com", "wrong"))
+                .isInstanceOf(com.wrapzzo.backend.exception.InvalidCredentialsException.class);
+        assertThatThrownBy(() -> authService.refresh(tokens.refreshToken()))
+                .isInstanceOf(com.wrapzzo.backend.exception.InvalidRefreshTokenException.class);
+    }
+
+    @Test
+    void aSuspendedUsersStillValidAccessTokenStopsWorking() {
+        authService.login("priya@alembic.com", RAW_PASSWORD);
+        assertThat(accessControlCacheService.resolve(user.getId()).active()).isTrue();
+
+        user.setStatus(com.wrapzzo.backend.model.UserStatus.SUSPENDED);
+        userRepository.saveAndFlush(user);
+        accessControlCacheService.invalidate(user.getCompany().getId());
+
+        assertThat(accessControlCacheService.resolve(user.getId()).active()).isFalse();
+        assertThat(accessControlCacheService.resolveEffectiveKeys(user.getId())).isEmpty();
+    }
 }

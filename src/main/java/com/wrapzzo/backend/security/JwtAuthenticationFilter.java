@@ -52,12 +52,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 PrincipalClaims claims = jwtService.parseAccessToken(token);
                 var authentication =
                         switch (claims) {
-                            case UserPrincipalClaims u -> new UsernamePasswordAuthenticationToken(
-                                    u.userId(), null, userAuthorities(u));
+                            case UserPrincipalClaims u -> userAuthentication(u);
                             case VendorPrincipalClaims v -> new UsernamePasswordAuthenticationToken(
                                     v.vendorId(), null, Set.of(new SimpleGrantedAuthority(VENDOR_AUTHORITY)));
                         };
-                SecurityContextHolder.getContext().setAuthentication(authentication);
+                // A deleted, suspended or deactivated-company user's token is still valid for its remaining minutes;
+                // they are simply not signed in -- the request is answered as unauthenticated.
+                if (authentication != null) {
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                }
             } catch (JwtException | IllegalArgumentException e) {
                 SecurityContextHolder.clearContext();
             }
@@ -65,10 +68,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
-    private Set<GrantedAuthority> userAuthorities(UserPrincipalClaims claims) {
-        Set<String> keys = accessControlCacheService.resolveEffectiveKeys(claims.userId());
-        Set<GrantedAuthority> authorities = keys.stream().map(SimpleGrantedAuthority::new).collect(Collectors.toCollection(HashSet::new));
+    private UsernamePasswordAuthenticationToken userAuthentication(UserPrincipalClaims claims) {
+        AccessControlCacheService.Access access = accessControlCacheService.resolve(claims.userId());
+        if (!access.active()) {
+            return null;
+        }
+        Set<GrantedAuthority> authorities = access.keys().stream().map(SimpleGrantedAuthority::new).collect(Collectors.toCollection(HashSet::new));
         authorities.add(new SimpleGrantedAuthority(USER_AUTHORITY));
-        return authorities;
+        return new UsernamePasswordAuthenticationToken(claims.userId(), null, authorities);
     }
 }
