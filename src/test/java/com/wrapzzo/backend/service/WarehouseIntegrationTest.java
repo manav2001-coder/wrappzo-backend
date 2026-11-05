@@ -5,13 +5,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.wrapzzo.backend.dto.CreateQuickGiftRequest;
 import com.wrapzzo.backend.dto.QuickGiftRequestResponse;
-import com.wrapzzo.backend.dto.RecurringOrderPlanResponse;
 import com.wrapzzo.backend.dto.VendorOrderResponse;
 import com.wrapzzo.backend.dto.WarehouseOrderResponse;
 import com.wrapzzo.backend.dto.WarehouseRequest;
 import com.wrapzzo.backend.dto.WarehouseResponse;
 import com.wrapzzo.backend.exception.InvalidOrderStatusTransitionException;
-import com.wrapzzo.backend.exception.RecurringOrderPlanNotFoundException;
 import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.CompanyFeature;
 import com.wrapzzo.backend.model.CompanyVendor;
@@ -20,7 +18,6 @@ import com.wrapzzo.backend.model.GiftModule;
 import com.wrapzzo.backend.model.Order;
 import com.wrapzzo.backend.model.OrderStatus;
 import com.wrapzzo.backend.model.OrgUnit;
-import com.wrapzzo.backend.model.RecurringPlanStatus;
 import com.wrapzzo.backend.model.Role;
 import com.wrapzzo.backend.model.Template;
 import com.wrapzzo.backend.model.User;
@@ -32,13 +29,11 @@ import com.wrapzzo.backend.repository.GiftRepository;
 import com.wrapzzo.backend.repository.OrderRepository;
 import com.wrapzzo.backend.repository.OrgUnitRepository;
 import com.wrapzzo.backend.repository.QuickGiftRequestRepository;
-import com.wrapzzo.backend.repository.RecurringOrderPlanRepository;
 import com.wrapzzo.backend.repository.TemplateRepository;
 import com.wrapzzo.backend.repository.RoleRepository;
 import com.wrapzzo.backend.repository.UserRepository;
 import com.wrapzzo.backend.repository.VendorRepository;
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.UUID;
@@ -52,18 +47,17 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * The warehouse leg (vendor -> company warehouse -> doctor) and recurring monthly orders.
+ * The warehouse leg (vendor -> company warehouse -> doctor).
  *
  * Org tree: Division -> North (MR North). A company-wide warehouse plus one for North.
  */
 @SpringBootTest
 @Transactional
-class WarehouseAndRecurringOrderIntegrationTest {
+class WarehouseIntegrationTest {
 
     @Autowired private QuickGiftService quickGiftService;
     @Autowired private OrderService orderService;
     @Autowired private WarehouseService warehouseService;
-    @Autowired private RecurringOrderService recurringOrderService;
     @Autowired private CompanyFeatureFlagService companyFeatureFlagService;
     @Autowired private CompanyRepository companyRepository;
     @Autowired private RoleRepository roleRepository;
@@ -77,7 +71,6 @@ class WarehouseAndRecurringOrderIntegrationTest {
     @Autowired private GiftRepository giftRepository;
     @Autowired private OrderRepository orderRepository;
     @Autowired private QuickGiftRequestRepository quickGiftRequestRepository;
-    @Autowired private RecurringOrderPlanRepository recurringOrderPlanRepository;
 
     private Company company;
     private OrgUnit north;
@@ -210,60 +203,5 @@ class WarehouseAndRecurringOrderIntegrationTest {
         UUID orderId = placeOrder();
 
         assertThat(orderRepository.findById(orderId).orElseThrow().getWarehouse().getId()).isEqualTo(central.id());
-    }
-
-    @Test
-    void aRecurringPlanPlacesTheFirstOrderNowAndTheNextOnDemand() {
-        actAs(mrNorth);
-        RecurringOrderPlanResponse plan = recurringOrderService.create(padRequest("Dr. Monthly"));
-
-        assertThat(plan.runsCompleted()).isEqualTo(1);
-        assertThat(plan.nextRunOn()).isEqualTo(LocalDate.now().plusMonths(1));
-        assertThat(quickGiftService.listMine()).hasSize(1);
-
-        RecurringOrderPlanResponse after = recurringOrderService.placeNextNow(plan.id());
-        assertThat(after.runsCompleted()).isEqualTo(2);
-        assertThat(after.nextRunOn()).isEqualTo(LocalDate.now().plusMonths(2));
-        List<QuickGiftRequestResponse> mine = quickGiftService.listMine();
-        assertThat(mine).hasSize(2).allSatisfy(r -> {
-            assertThat(r.recipientName()).isEqualTo("Dr. Monthly");
-            assertThat(r.quantity()).isEqualTo(200);
-            assertThat(r.orderId()).isNotNull();
-        });
-    }
-
-    @Test
-    void theScheduledRunPlacesADuePlanAsItsRequester() {
-        actAs(mrNorth);
-        RecurringOrderPlanResponse plan = recurringOrderService.create(padRequest("Dr. Due"));
-        var entity = recurringOrderPlanRepository.findById(plan.id()).orElseThrow();
-        entity.setNextRunOn(LocalDate.now());
-        recurringOrderPlanRepository.saveAndFlush(entity);
-        SecurityContextHolder.clearContext();
-
-        assertThat(recurringOrderService.findDue(LocalDate.now())).extracting(RecurringOrderService.DuePlan::planId).contains(plan.id());
-        actAs(mrNorth);
-        recurringOrderService.placeDue(plan.id());
-
-        assertThat(quickGiftRequestRepository.findByRequestedByIdOrderByCreatedAtDesc(mrNorth.getId())).hasSize(2);
-        assertThat(recurringOrderPlanRepository.findById(plan.id()).orElseThrow().getNextRunOn()).isEqualTo(LocalDate.now().plusMonths(1));
-    }
-
-    @Test
-    void aPausedPlanIsNotDueAndOnlyItsRequesterCanChangeIt() {
-        actAs(mrNorth);
-        RecurringOrderPlanResponse plan = recurringOrderService.create(padRequest("Dr. Paused"));
-        assertThat(recurringOrderService.pause(plan.id()).status()).isEqualTo(RecurringPlanStatus.PAUSED);
-        assertThat(recurringOrderService.findDue(LocalDate.now().plusMonths(2)))
-                .extracting(RecurringOrderService.DuePlan::planId)
-                .doesNotContain(plan.id());
-
-        actAs(otherMr);
-        assertThat(recurringOrderService.listMine()).isEmpty();
-        assertThatThrownBy(() -> recurringOrderService.cancel(plan.id())).isInstanceOf(RecurringOrderPlanNotFoundException.class);
-
-        actAs(mrNorth);
-        assertThat(recurringOrderService.cancel(plan.id()).status()).isEqualTo(RecurringPlanStatus.CANCELLED);
-        assertThatThrownBy(() -> recurringOrderService.placeNextNow(plan.id())).isInstanceOf(RecurringOrderPlanNotFoundException.class);
     }
 }
