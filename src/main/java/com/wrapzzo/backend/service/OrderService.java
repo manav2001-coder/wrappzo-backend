@@ -11,6 +11,7 @@ import com.wrapzzo.backend.exception.NoAvailableVendorException;
 import com.wrapzzo.backend.exception.OrderNotFoundException;
 import com.wrapzzo.backend.exception.VendorNotFoundException;
 import com.wrapzzo.backend.model.Order;
+import com.wrapzzo.backend.model.OrgUnit;
 import com.wrapzzo.backend.model.OrderAssignmentMode;
 import com.wrapzzo.backend.model.OrderStatus;
 import com.wrapzzo.backend.model.OrderStatusHistory;
@@ -31,6 +32,7 @@ import com.wrapzzo.backend.repository.UserRepository;
 import com.wrapzzo.backend.repository.VendorRepository;
 import com.wrapzzo.backend.security.CurrentUser;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -338,7 +340,7 @@ public class OrderService {
     /** The gift's own vendor when it serves the order's company and is active; otherwise the least loaded of that company's vendors. */
     private Vendor autoVendorFor(Order order) {
         Vendor giftVendor = order.getGift() != null ? order.getGift().getVendor() : null;
-        if (giftVendor != null && giftVendor.getStatus() == VendorStatus.ACTIVE && servesCompany(giftVendor, order)) {
+        if (giftVendor != null && giftVendor.getStatus() == VendorStatus.ACTIVE && servesOrder(giftVendor, order)) {
             return giftVendor;
         }
         return leastLoadedActiveVendorOf(order);
@@ -346,15 +348,39 @@ public class OrderService {
 
     /** Only vendors mapped to the order's company are candidates: one company must not be able to route another's orders to a vendor of its own making. */
     private Vendor leastLoadedActiveVendorOf(Order order) {
-        List<UUID> serving = companyVendorRepository.findVendorIdsByCompany(order.getCompany().getId());
-        return vendorRepository.findAllById(serving).stream()
+        return vendorRepository.findAllById(vendorIdsServing(order)).stream()
                 .filter(vendor -> vendor.getStatus() == VendorStatus.ACTIVE)
                 .min(Comparator.comparingLong(v -> orderRepository.countByAssignedVendorIdAndStatusIn(v.getId(), IN_FLIGHT_STATUSES)))
-                .orElseThrow(NoAvailableVendorException::new);
+                .orElseThrow(() -> new NoAvailableVendorException(unitOf(order)));
     }
 
     private boolean servesCompany(Vendor vendor, Order order) {
         return companyVendorRepository.existsByCompany_IdAndVendor_Id(order.getCompany().getId(), vendor.getId());
+    }
+
+    /** The org unit the order belongs to -- its owner's (the AM's): where a vendor has to be mapped to serve it. Null for an owner with no unit. */
+    private static OrgUnit unitOf(Order order) {
+        return order.getOwner() != null ? order.getOwner().getOrgUnit() : null;
+    }
+
+    /**
+     * The vendors that serve this order: those mapped to the whole company, or to the owner's unit or any unit above it
+     * (so a vendor mapped to a division serves every order raised in that division). An owner with no unit -- a
+     * company-wide user -- can use any vendor of the company.
+     */
+    private List<UUID> vendorIdsServing(Order order) {
+        UUID companyId = order.getCompany().getId();
+        OrgUnit unit = unitOf(order);
+        if (unit == null) {
+            return companyVendorRepository.findVendorIdsByCompany(companyId);
+        }
+        List<UUID> scope = new ArrayList<>(unit.getAncestorIds());
+        scope.add(unit.getId());
+        return companyVendorRepository.findVendorIdsVisibleToOrgUnits(companyId, scope);
+    }
+
+    private boolean servesOrder(Vendor vendor, Order order) {
+        return vendorIdsServing(order).contains(vendor.getId());
     }
 
     /** A hand-picked vendor must be active, serve the order's company, and the order must still be waiting on or in production. */
@@ -364,6 +390,11 @@ public class OrderService {
         }
         if (!servesCompany(vendor, order)) {
             throw new ConflictException(vendor.getName() + " doesn't serve " + order.getCompany().getName() + " -- map the vendor to the company first");
+        }
+        if (!servesOrder(vendor, order)) {
+            OrgUnit unit = unitOf(order);
+            throw new ConflictException(vendor.getName() + " isn't mapped to " + (unit != null ? unit.getName() : "this order's unit")
+                    + " or the division above it -- map it under Vendors first");
         }
         if (order.getStatus() == OrderStatus.DISPATCHED || order.getStatus() == OrderStatus.DELIVERED || order.getStatus() == OrderStatus.CANCELLED) {
             throw new ConflictException("This order is already " + order.getStatus().name().toLowerCase() + " and can't be reassigned");

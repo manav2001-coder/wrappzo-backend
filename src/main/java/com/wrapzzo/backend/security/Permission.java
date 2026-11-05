@@ -76,6 +76,8 @@ public enum Permission {
 
     COMPANY_VENDOR_VIEW(Keys.COMPANY_VENDOR_VIEW, true),
     COMPANY_VENDOR_ADD(Keys.COMPANY_VENDOR_ADD, true),
+    COMPANY_VENDOR_ASSIGN(Keys.COMPANY_VENDOR_ASSIGN, true),
+    COMPANY_VENDOR_REMOVE(Keys.COMPANY_VENDOR_REMOVE, true),
 
     WAREHOUSE_VIEW(Keys.WAREHOUSE_VIEW, true),
     WAREHOUSE_SETUP(Keys.WAREHOUSE_SETUP, true),
@@ -218,6 +220,8 @@ public enum Permission {
 
         public static final String COMPANY_VENDOR_VIEW = "company_vendor.view";
         public static final String COMPANY_VENDOR_ADD = "company_vendor.add";
+        public static final String COMPANY_VENDOR_ASSIGN = "company_vendor.assign";
+        public static final String COMPANY_VENDOR_REMOVE = "company_vendor.remove";
 
         public static final String WAREHOUSE_VIEW = "warehouse.view";
         public static final String WAREHOUSE_SETUP = "warehouse.setup";

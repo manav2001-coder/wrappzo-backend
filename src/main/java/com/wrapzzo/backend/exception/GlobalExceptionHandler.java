@@ -365,6 +365,11 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
     }
 
+    @ExceptionHandler(InvalidVendorCoverageException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidVendorCoverage(InvalidVendorCoverageException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+    }
+
     @ExceptionHandler(InvalidArtworkFileException.class)
     public ResponseEntity<Map<String, String>> handleInvalidArtworkFile(InvalidArtworkFileException e) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));

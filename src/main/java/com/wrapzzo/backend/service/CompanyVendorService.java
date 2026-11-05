@@ -2,6 +2,11 @@ package com.wrapzzo.backend.service;
 
 import com.wrapzzo.backend.dto.AddCompanyVendorRequest;
 import com.wrapzzo.backend.dto.AddVendorRequest;
+import com.wrapzzo.backend.dto.AvailableVendorResponse;
+import com.wrapzzo.backend.dto.SetVendorCoverageRequest;
+import com.wrapzzo.backend.exception.InvalidVendorCoverageException;
+import com.wrapzzo.backend.model.VendorStatus;
+import java.util.Comparator;
 import com.wrapzzo.backend.dto.CompanyVendorResponse;
 import com.wrapzzo.backend.dto.VendorCoverageRequest;
 import com.wrapzzo.backend.dto.VendorCoverageResponse;
@@ -73,6 +78,83 @@ public class CompanyVendorService {
         } catch (DataIntegrityViolationException e) {
             // Already mapped this exact way (same vendor, same org-unit scope) -- idempotent, not an error.
         }
+        return list(companyId);
+    }
+
+    /** The vendors a company admin may map: every active one, by name only. */
+    @Transactional(readOnly = true)
+    public List<AvailableVendorResponse> availableVendors() {
+        return vendorRepository.findByStatus(VendorStatus.ACTIVE).stream()
+                .map(vendor -> new AvailableVendorResponse(vendor.getId(), vendor.getName()))
+                .sorted(Comparator.comparing(AvailableVendorResponse::name, String.CASE_INSENSITIVE_ORDER))
+                .toList();
+    }
+
+    /**
+     * Sets where one vendor serves inside this company -- the whole company, or exactly the org units named (a division,
+     * or any unit within one; a unit covers everything beneath it). Replaces this vendor's earlier mappings in the
+     * company; its mappings in other companies are never touched.
+     */
+    @Transactional
+    public List<CompanyVendorResponse> setCoverage(UUID companyId, UUID vendorId, SetVendorCoverageRequest request) {
+        Company company = requireCompany(companyId);
+        Vendor vendor = vendorRepository.findById(vendorId).orElseThrow(() -> new VendorNotFoundException(vendorId));
+        List<UUID> unitIds = request.orgUnitIds().stream().distinct().toList();
+        if (request.wholeCompany() && !unitIds.isEmpty()) {
+            throw new InvalidVendorCoverageException("Choose either the whole company or specific divisions and org units, not both.");
+        }
+        if (!request.wholeCompany() && unitIds.isEmpty()) {
+            throw new InvalidVendorCoverageException("Choose at least one division or org unit for " + vendor.getName() + ", or the whole company.");
+        }
+        if (vendor.getStatus() != VendorStatus.ACTIVE) {
+            throw new InvalidVendorCoverageException(vendor.getName() + " is suspended, so it can't be mapped to anything until it is active again.");
+        }
+        Map<UUID, OrgUnit> units = new LinkedHashMap<>();
+        for (UUID unitId : unitIds) {
+            OrgUnit unit = orgUnitRepository.findById(unitId)
+                    .filter(candidate -> candidate.getCompany().getId().equals(companyId))
+                    .orElseThrow(() -> new OrgUnitNotFoundException(unitId));
+            units.put(unitId, unit);
+        }
+        Set<UUID> have = new HashSet<>();
+        boolean haveWholeCompany = false;
+        for (CompanyVendor mapping : companyVendorRepository.findByVendor_Id(vendorId)) {
+            if (!mapping.getCompany().getId().equals(companyId)) {
+                continue;
+            }
+            UUID unitId = mapping.getOrgUnit() != null ? mapping.getOrgUnit().getId() : null;
+            boolean keep = unitId == null ? request.wholeCompany() : units.containsKey(unitId);
+            if (!keep) {
+                companyVendorRepository.delete(mapping);
+            } else if (unitId == null) {
+                haveWholeCompany = true;
+            } else {
+                have.add(unitId);
+            }
+        }
+        companyVendorRepository.flush();
+        if (request.wholeCompany() && !haveWholeCompany) {
+            companyVendorRepository.save(new CompanyVendor(company, vendor, null));
+        }
+        for (OrgUnit unit : units.values()) {
+            if (!have.contains(unit.getId())) {
+                companyVendorRepository.save(new CompanyVendor(company, vendor, unit));
+            }
+        }
+        return list(companyId);
+    }
+
+    /** Takes a vendor off this company altogether -- every mapping it has here. Orders it already holds stay with it. */
+    @Transactional
+    public List<CompanyVendorResponse> removeVendor(UUID companyId, UUID vendorId) {
+        requireCompany(companyId);
+        List<CompanyVendor> mappings = companyVendorRepository.findByVendor_Id(vendorId).stream()
+                .filter(mapping -> mapping.getCompany().getId().equals(companyId))
+                .toList();
+        if (mappings.isEmpty()) {
+            throw new VendorNotFoundException(vendorId);
+        }
+        companyVendorRepository.deleteAll(mappings);
         return list(companyId);
     }
 
