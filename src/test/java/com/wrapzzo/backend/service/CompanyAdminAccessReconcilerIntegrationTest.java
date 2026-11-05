@@ -28,7 +28,7 @@ class CompanyAdminAccessReconcilerIntegrationTest {
     @Autowired private AccessControlRepository accessControlRepository;
 
     @Test
-    void aCompanyAdminTemplateGetsEveryCompanyKey_aSharedOneDoesNot() {
+    void aCompanyAdminTemplateGetsTheWorkingKeys_notAccessControlOrCampaigns_andASharedOneGetsNothing() {
         Company company = companyRepository.save(new Company("Reconcile Pharma " + UUID.randomUUID()));
         AccessControl one = accessControlRepository.findByKey("dashboard.view").orElseThrow();
 
@@ -42,8 +42,6 @@ class CompanyAdminAccessReconcilerIntegrationTest {
         Template shared = new Template(company, "Shared access " + UUID.randomUUID(), null);
         shared.getAccessControls().add(one);
         shared = templateRepository.save(shared);
-        Role sharedAdmin = new Role(company, "Company Admin");
-        // A second role of another name uses the same template, so it must be left alone.
         Role member = new Role(company, "Member");
         member.getTemplates().add(shared);
         roleRepository.save(member);
@@ -55,10 +53,10 @@ class CompanyAdminAccessReconcilerIntegrationTest {
         int added = reconciler.reconcile();
 
         assertThat(added).isPositive();
-        int companyKeys = accessControlRepository.findByCompanyAssignableTrue().size();
-        assertThat(adminOnly.getAccessControls()).hasSize(companyKeys);
+        assertThat(adminOnly.getAccessControls()).extracting(AccessControl::getKey)
+                .contains("approval.view", "approval.decide", "vendor_identity.view", "company_vendor.view", "warehouse.setup")
+                .doesNotContain("template_master.edit", "user_template.assign", "feature_master.add", "role_template.assign", "campaign.create");
         assertThat(shared.getAccessControls()).hasSize(1);
-        // Running it again changes nothing.
         assertThat(reconciler.reconcile()).isZero();
     }
 }
