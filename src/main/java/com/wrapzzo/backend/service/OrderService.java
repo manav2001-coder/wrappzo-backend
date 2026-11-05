@@ -73,6 +73,7 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final OrgUnitRepository orgUnitRepository;
     private final VendorIdentityPolicy vendorIdentityPolicy;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
     private final QuickGiftRequestRepository quickGiftRequestRepository;
     private final VisibilityService visibilityService;
     private final UserRepository userRepository;
@@ -420,6 +421,7 @@ public class OrderService {
     }
 
     private void applyAssignment(Order order, Vendor vendor, OrderAssignmentMode mode) {
+        UUID previousVendorId = order.getAssignedVendor() != null ? order.getAssignedVendor().getId() : null;
         order.setAssignedVendor(vendor);
         order.setAssignmentMode(mode);
         order.setAssignedAt(Instant.now());
@@ -427,6 +429,8 @@ public class OrderService {
             order.setStatus(OrderStatus.PRODUCTION_QUEUE);
             orderStatusHistoryService.record(order, OrderStatus.PRODUCTION_QUEUE, currentUser());
         }
+        // Emailed after commit (VendorEmailListener): the vendor's new order, and a note to the one it was taken from.
+        eventPublisher.publishEvent(new VendorOrderAssignedEvent(order.getId(), vendor.getId(), previousVendorId));
     }
 
     private Order getEntity(UUID id) {

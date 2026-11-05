@@ -189,6 +189,8 @@ public class OrderDesignService {
         design.setStatus(OrderDesignStatus.APPROVED);
         design.setReviewedBy(reviewer);
         design.setReviewedAt(now);
+        // Only the final approval tells the vendor; the levels on the way up are the customer's own business.
+        eventPublisher.publishEvent(new VendorProofDecidedEvent(design.getId(), true));
         return toResponse(design);
     }
 
@@ -208,6 +210,7 @@ public class OrderDesignService {
         design.setReviewComment(comment);
         design.setReviewedBy(reviewer);
         design.setReviewedAt(now);
+        eventPublisher.publishEvent(new VendorProofDecidedEvent(design.getId(), false));
         return toResponse(design);
     }
 

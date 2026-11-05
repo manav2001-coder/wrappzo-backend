@@ -62,10 +62,11 @@ class OrderDesignServiceTest {
 
     private final CompanyArtworkApprovalStepRepository steps = mock(CompanyArtworkApprovalStepRepository.class);
     private final OrgUnitRepository orgUnits = mock(OrgUnitRepository.class);
+    private final org.springframework.context.ApplicationEventPublisher events = mock(org.springframework.context.ApplicationEventPublisher.class);
 
     private final OrderDesignService service = new OrderDesignService(designs, approvals, orders,
             mock(QuickGiftRequestRepository.class), steps, orgUnits, mock(VendorRepository.class), users, files, visibility, flags, keys,
-            mock(org.springframework.context.ApplicationEventPublisher.class));
+            events);
 
     private final List<OrderDesignApproval> trail = new ArrayList<>();
     private final Company company = new Company();
@@ -213,6 +214,25 @@ class OrderDesignServiceTest {
         // With the cycle permission he can.
         when(keys.resolveEffectiveKeys(sanjay)).thenReturn(Set.of("approval.decide"));
         assertThat(approveAs(sanjay).waitingOnName()).isEqualTo("Ravi");
+    }
+
+    @Test
+    void theVendorIsToldOnlyOfTheFinalApprovalAndOfAnySendBack_notOfTheLevelsOnTheWayUp() {
+        approveAs(aditi);
+        approveAs(sanjay);
+        approveAs(ravi);
+        org.mockito.Mockito.verify(events, org.mockito.Mockito.never()).publishEvent(org.mockito.ArgumentMatchers.any(VendorProofDecidedEvent.class));
+
+        approveAs(kavya);
+        org.mockito.Mockito.verify(events).publishEvent(new VendorProofDecidedEvent(design.getId(), true));
+    }
+
+    @Test
+    void aSendBackFromAnyLevelTellsTheVendor() {
+        approveAs(aditi);
+        as(sanjay);
+        service.reject(order.getId(), design.getId(), "Wrong clinic address");
+        org.mockito.Mockito.verify(events).publishEvent(new VendorProofDecidedEvent(design.getId(), false));
     }
 
     @Test
