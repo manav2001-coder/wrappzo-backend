@@ -39,6 +39,7 @@ public enum Permission {
     ORDER_REQUEST_PHOTO(Keys.ORDER_REQUEST_PHOTO, true),
     ARTWORK_REVIEW(Keys.ARTWORK_REVIEW, true),
     ARTWORK_FINAL_APPROVE(Keys.ARTWORK_FINAL_APPROVE, true),
+    APPROVAL_VIEW(Keys.APPROVAL_VIEW, true),
     ARTWORK_APPROVAL_VIEW(Keys.ARTWORK_APPROVAL_VIEW, true),
     ARTWORK_APPROVAL_CONFIGURE(Keys.ARTWORK_APPROVAL_CONFIGURE, true),
 
@@ -181,6 +182,8 @@ public enum Permission {
         public static final String ORDER_REQUEST_PHOTO = "order.request_photo";
         public static final String ARTWORK_REVIEW = "artwork.review";
         public static final String ARTWORK_FINAL_APPROVE = "artwork.final_approve";
+        /** The Approvals page -- the manager-level queue of proofs waiting on someone. Not the approval-steps setup (artwork_approval.*). */
+        public static final String APPROVAL_VIEW = "approval.view";
         public static final String ARTWORK_APPROVAL_VIEW = "artwork_approval.view";
         public static final String ARTWORK_APPROVAL_CONFIGURE = "artwork_approval.configure";
 
