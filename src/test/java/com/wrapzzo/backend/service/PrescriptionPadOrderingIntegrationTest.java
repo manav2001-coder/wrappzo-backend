@@ -81,6 +81,7 @@ class PrescriptionPadOrderingIntegrationTest {
     @Autowired private RoleRepository roleRepository;
     @Autowired private FeatureService featureService;
     @Autowired private AccessControlRepository accessControlRepository;
+    @Autowired private com.wrapzzo.backend.repository.TemplateRepository templateRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private OrgUnitRepository orgUnitRepository;
     @Autowired private VendorRepository vendorRepository;
@@ -105,6 +106,9 @@ class PrescriptionPadOrderingIntegrationTest {
         company = companyRepository.save(new Company("Pad Test Pharma " + UUID.randomUUID()));
         featureService.registerAll(company);
         memberRole = roleRepository.save(new Role(company, "Member"));
+        // Everyone here may review a proof and approve at their level of the cycle; the chain decides who actually may.
+        grant(memberRole, "artwork.review");
+        grant(memberRole, "approval.decide");
 
         OrgUnit division = orgUnitRepository.save(new OrgUnit(company, null, "Division", "Division"));
         zoneNorth = orgUnitRepository.save(new OrgUnit(company, division, "North", "Zone"));
@@ -119,6 +123,18 @@ class PrescriptionPadOrderingIntegrationTest {
         printer = vendorRepository.save(new Vendor("Pad Printers", "pads-" + UUID.randomUUID() + "@test.com", null, "n/a", mrNorth));
         companyVendorRepository.save(new CompanyVendor(company, printer, null));
         pad = savePad(printer, true);
+    }
+
+    private void grant(Role role, String key) {
+        com.wrapzzo.backend.model.Template template = role.getTemplates().stream().findFirst().orElseGet(() -> {
+            com.wrapzzo.backend.model.Template created = templateRepository.save(
+                    new com.wrapzzo.backend.model.Template(role.getCompany(), role.getName() + " access " + UUID.randomUUID(), null));
+            role.getTemplates().add(created);
+            roleRepository.save(role);
+            return created;
+        });
+        template.getAccessControls().add(accessControlRepository.findByKey(key).orElseThrow());
+        templateRepository.save(template);
     }
 
     @AfterEach
@@ -410,6 +426,8 @@ class PrescriptionPadOrderingIntegrationTest {
         enableDirectOrdering();
         Role rmRole = roleRepository.save(new Role(company, "RM"));
         Role hoRole = roleRepository.save(new Role(company, "HO"));
+        grant(rmRole, "approval.decide");
+        grant(hoRole, "approval.decide");
         OrgUnit division = zoneNorth.getParent();
         OrgUnit otherDivision = orgUnitRepository.save(new OrgUnit(company, null, "Other Division", "Division"));
         User rm = saveUserWithRole("RM North", zoneNorth, rmRole);
