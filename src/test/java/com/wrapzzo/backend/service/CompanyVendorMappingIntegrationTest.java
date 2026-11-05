@@ -50,6 +50,7 @@ class CompanyVendorMappingIntegrationTest {
 
     @Autowired private CompanyVendorService companyVendorService;
     @Autowired private OrderService orderService;
+    @Autowired private VendorDivisionService vendorDivisionService;
     @Autowired private CompanyRepository companyRepository;
     @Autowired private OrgUnitRepository orgUnitRepository;
     @Autowired private VendorRepository vendorRepository;
@@ -98,6 +99,18 @@ class CompanyVendorMappingIntegrationTest {
 
     private SetVendorCoverageRequest only(OrgUnit... units) {
         return new SetVendorCoverageRequest(false, java.util.Arrays.stream(units).map(OrgUnit::getId).toList());
+    }
+
+    @Test
+    void aVendorSeesTheDivisionsItIsMappedTo_aZoneCountsAsItsDivision_aWholeCompanyMappingIsEveryDivision() {
+        Vendor vendor = vendor("Printer");
+        companyVendorService.setCoverage(company.getId(), vendor.getId(), only(summitLucknow, megacare));
+        assertThat(vendorDivisionService.servedDivisions(vendor.getId()))
+                .extracting(com.wrapzzo.backend.dto.VendorDivisionResponse::name).containsExactly("Megacare", "Summit");
+
+        companyVendorService.setCoverage(company.getId(), vendor.getId(), new SetVendorCoverageRequest(true, List.of()));
+        assertThat(vendorDivisionService.servedDivisions(vendor.getId()))
+                .extracting(com.wrapzzo.backend.dto.VendorDivisionResponse::name).containsExactly("Megacare", "Summit");
     }
 
     @Test
