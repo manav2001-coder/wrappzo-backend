@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
-/** Only the company admin (company_vendor.view) and platform staff (platform_vendor.view) may know a vendor. */
+/** Only the company admin (vendor_identity.view) and platform staff (platform_vendor.view) may know a vendor. */
 class VendorIdentityPolicyTest {
 
     private final UserRepository users = mock(UserRepository.class);
@@ -37,8 +37,13 @@ class VendorIdentityPolicyTest {
 
     @Test
     void theCompanyAdminAndPlatformStaffSeeVendors() {
-        assertThat(canSeeWith(Set.of("company_vendor.view"))).isTrue();
+        assertThat(canSeeWith(Set.of("vendor_identity.view"))).isTrue();
         assertThat(canSeeWith(Set.of("platform_vendor.view"))).isTrue();
+    }
+
+    @Test
+    void openingTheVendorsPageIsNotTheRightToSeeVendorNames() {
+        assertThat(canSeeWith(Set.of("company_vendor.view", "company_vendor.assign"))).isFalse();
     }
 
     @Test

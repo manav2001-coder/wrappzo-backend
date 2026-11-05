@@ -75,6 +75,7 @@ public enum Permission {
     ROLE_TEMPLATE_VIEW(Keys.ROLE_TEMPLATE_VIEW, true),
     ROLE_TEMPLATE_ASSIGN(Keys.ROLE_TEMPLATE_ASSIGN, true),
 
+    VENDOR_IDENTITY_VIEW(Keys.VENDOR_IDENTITY_VIEW, true),
     COMPANY_VENDOR_VIEW(Keys.COMPANY_VENDOR_VIEW, true),
     COMPANY_VENDOR_ADD(Keys.COMPANY_VENDOR_ADD, true),
     COMPANY_VENDOR_ASSIGN(Keys.COMPANY_VENDOR_ASSIGN, true),
@@ -220,6 +221,8 @@ public enum Permission {
         public static final String ROLE_TEMPLATE_VIEW = "role_template.view";
         public static final String ROLE_TEMPLATE_ASSIGN = "role_template.assign";
 
+        /** May see which vendor makes an order -- the vendor's name and id on orders and gifts. Not the Vendors page (company_vendor.view). */
+        public static final String VENDOR_IDENTITY_VIEW = "vendor_identity.view";
         public static final String COMPANY_VENDOR_VIEW = "company_vendor.view";
         public static final String COMPANY_VENDOR_ADD = "company_vendor.add";
         public static final String COMPANY_VENDOR_ASSIGN = "company_vendor.assign";

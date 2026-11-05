@@ -8,7 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 /**
- * Who may know which vendor (printer) makes an order: the company admin (company_vendor.view) and Wrappzo's own staff
+ * Who may know which vendor (printer) makes an order: the company admin (vendor_identity.view) and Wrappzo's own staff
  * (platform_vendor.view) -- nobody who raises orders or approves artwork, HO included. Every response that could name a
  * vendor asks here and leaves the name and id out when the answer is no, so it never leaves the server.
  */
@@ -25,6 +25,6 @@ public class VendorIdentityPolicy {
             return false;
         }
         var keys = accessControlCacheService.resolveEffectiveKeys(user);
-        return keys.contains(Permission.COMPANY_VENDOR_VIEW.key()) || keys.contains(Permission.PLATFORM_VENDOR_VIEW.key());
+        return keys.contains(Permission.VENDOR_IDENTITY_VIEW.key()) || keys.contains(Permission.PLATFORM_VENDOR_VIEW.key());
     }
 }
