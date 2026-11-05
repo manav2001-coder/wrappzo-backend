@@ -4,6 +4,7 @@ import com.wrapzzo.backend.model.Order;
 import com.wrapzzo.backend.model.OrderDesign;
 import com.wrapzzo.backend.model.OrderDesignStatus;
 import com.wrapzzo.backend.model.OrderSource;
+import com.wrapzzo.backend.model.OrgUnit;
 import com.wrapzzo.backend.model.OrderStatus;
 import com.wrapzzo.backend.model.QuickGiftRequest;
 import java.math.BigDecimal;
@@ -33,6 +34,9 @@ public record VendorOrderResponse(
         String amMobile,
         /** The AM's own org unit (zone / area) -- helps the warehouse route the parcel to them. Null if none. */
         String amArea,
+        /** The top-level org unit (division) the order was raised in -- what the vendor portal's division filter narrows by. Null if the order is placed nowhere. */
+        UUID divisionId,
+        String divisionName,
         /** Null until the recipient uploads one -- shown so the vendor can produce a personalized gift correctly. */
         String recipientPhotoUrl,
         /** The gift's raw price -- no markup, no commission. Null if the gift has no price set. */
@@ -64,7 +68,7 @@ public record VendorOrderResponse(
      * {@code request} is the Quick Gift request the order came from, or null (a campaign order);
      * {@code designs} are the order's proofs, newest version first.
      */
-    public static VendorOrderResponse from(Order order, String recipientPhotoUrl, QuickGiftRequest request, List<OrderDesign> designs) {
+    public static VendorOrderResponse from(Order order, String recipientPhotoUrl, QuickGiftRequest request, List<OrderDesign> designs, OrgUnit division) {
         OrderDesign latest = designs.isEmpty() ? null : designs.get(0);
         boolean artworkApproved = designs.stream().anyMatch(d -> d.getStatus() == OrderDesignStatus.APPROVED);
         return new VendorOrderResponse(
@@ -80,6 +84,8 @@ public record VendorOrderResponse(
                 order.getOwner().getEmployeeCode(),
                 order.getOwner().getMobile(),
                 order.getOwner().getOrgUnit() != null ? order.getOwner().getOrgUnit().getName() : null,
+                division != null ? division.getId() : null,
+                division != null ? division.getName() : null,
                 recipientPhotoUrl,
                 order.getGift() != null ? order.getGift().getPrice() : null,
                 order.getQuantity(),

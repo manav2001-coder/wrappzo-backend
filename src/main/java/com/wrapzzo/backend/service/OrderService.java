@@ -27,6 +27,7 @@ import com.wrapzzo.backend.repository.CompanyVendorRepository;
 import com.wrapzzo.backend.repository.GiftImageRepository;
 import com.wrapzzo.backend.repository.OrderDesignRepository;
 import com.wrapzzo.backend.repository.OrderRepository;
+import com.wrapzzo.backend.repository.OrgUnitRepository;
 import com.wrapzzo.backend.repository.QuickGiftRequestRepository;
 import com.wrapzzo.backend.repository.UserRepository;
 import com.wrapzzo.backend.repository.VendorRepository;
@@ -70,6 +71,7 @@ public class OrderService {
     private static final Set<OrderStatus> ARTWORK_GATED_STATUSES = Set.of(OrderStatus.DISPATCHED, OrderStatus.DELIVERED);
 
     private final OrderRepository orderRepository;
+    private final OrgUnitRepository orgUnitRepository;
     private final QuickGiftRequestRepository quickGiftRequestRepository;
     private final VisibilityService visibilityService;
     private final UserRepository userRepository;
@@ -132,9 +134,11 @@ public class OrderService {
                 .collect(Collectors.toMap(r -> r.getOrder().getId(), r -> r));
         Map<UUID, List<OrderDesign>> designsByOrderId = orderDesignRepository.findByOrder_IdInOrderByVersionNoDesc(orderIds).stream()
                 .collect(Collectors.groupingBy(d -> d.getOrder().getId()));
+        Map<UUID, OrgUnit> divisions = new HashMap<>();
         return orders.stream()
                 .map(o -> VendorOrderResponse.from(
-                        o, orderPhotoService.resolvePhotoUrl(o), requestByOrderId.get(o.getId()), designsByOrderId.getOrDefault(o.getId(), List.of())))
+                        o, orderPhotoService.resolvePhotoUrl(o), requestByOrderId.get(o.getId()), designsByOrderId.getOrDefault(o.getId(), List.of()),
+                        divisionOf(o, divisions)))
                 .toList();
     }
 
@@ -174,7 +178,17 @@ public class OrderService {
     private VendorOrderResponse toVendorResponse(Order order) {
         QuickGiftRequest request = quickGiftRequestRepository.findByOrderId(order.getId()).orElse(null);
         List<OrderDesign> designs = orderDesignRepository.findByOrder_IdOrderByVersionNoDesc(order.getId());
-        return VendorOrderResponse.from(order, orderPhotoService.resolvePhotoUrl(order), request, designs);
+        return VendorOrderResponse.from(order, orderPhotoService.resolvePhotoUrl(order), request, designs, divisionOf(order, new HashMap<>()));
+    }
+
+    /** The division (level-1 org unit) an order was raised in: its own unit, else its owner's; null when placed nowhere. */
+    private OrgUnit divisionOf(Order order, Map<UUID, OrgUnit> cache) {
+        OrgUnit unit = order.getOrgUnit() != null ? order.getOrgUnit() : order.getOwner().getOrgUnit();
+        if (unit == null || unit.getAncestorIds().isEmpty()) {
+            return unit;
+        }
+        UUID topId = unit.getAncestorIds().get(0);
+        return cache.computeIfAbsent(topId, id -> orgUnitRepository.findById(id).orElse(unit));
     }
 
     private Order getEntityForVendor(UUID id, UUID vendorId) {
