@@ -81,6 +81,7 @@ class OrgScopeAndDoctorChangeIntegrationTest {
     @Autowired private CompanyFeatureFlagService companyFeatureFlagService;
     @Autowired private CompanyRepository companyRepository;
     @Autowired private RoleRepository roleRepository;
+    @Autowired private VisibilityService visibilityService;
     @Autowired private FeatureService featureService;
     @Autowired private TemplateRepository templateRepository;
     @Autowired private AccessControlRepository accessControlRepository;
@@ -182,6 +183,9 @@ class OrgScopeAndDoctorChangeIntegrationTest {
         UserResponse updated = userService.setExtraOrgUnits(company.getId(), manager.getId(), List.of(south.getId(), north.getId()));
         // Their own unit is never stored as an extra one.
         assertThat(updated.extraOrgUnits()).extracting(UserResponse.OrgUnitRef::name).containsExactly("South");
+        // In production the change commits and the listener drops everyone's cached visibility; this test's
+        // transaction never commits, so deliver the event by hand.
+        visibilityService.onCompanyStructureChanged(new CompanyStructureChangedEvent(company.getId()));
 
         actAs(manager);
         assertThat(orderService.list()).extracting(OrderResponse::id).contains(northOrder, southOrder);

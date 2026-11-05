@@ -21,10 +21,17 @@ public final class TemplateGraph {
 
     private final Map<UUID, Set<UUID>> edges;
     private final Map<UUID, Set<String>> directKeys;
+    /** Templates switched off: they grant nothing, and neither does anything only reachable through them. */
+    private final Set<UUID> inactive;
 
     public TemplateGraph(Map<UUID, Set<UUID>> edges, Map<UUID, Set<String>> directKeys) {
+        this(edges, directKeys, Set.of());
+    }
+
+    public TemplateGraph(Map<UUID, Set<UUID>> edges, Map<UUID, Set<String>> directKeys, Set<UUID> inactive) {
         this.edges = edges;
         this.directKeys = directKeys;
+        this.inactive = inactive;
     }
 
     /** Every key the given templates grant, directly or through what they include. */
@@ -37,7 +44,7 @@ public final class TemplateGraph {
     }
 
     private void collect(UUID templateId, int depth, Set<UUID> path, Set<String> out) {
-        if (depth > MAX_DEPTH || !path.add(templateId)) {
+        if (depth > MAX_DEPTH || inactive.contains(templateId) || !path.add(templateId)) {
             return;
         }
         out.addAll(directKeys.getOrDefault(templateId, Set.of()));
@@ -67,7 +74,7 @@ public final class TemplateGraph {
         Map<UUID, Set<UUID>> proposed = new HashMap<>();
         edges.forEach((from, to) -> proposed.put(from, new HashSet<>(to)));
         proposed.remove(templateId);
-        TemplateGraph graph = new TemplateGraph(proposed, directKeys);
+        TemplateGraph graph = new TemplateGraph(proposed, directKeys, inactive);
         for (UUID candidate : candidates) {
             if (graph.wouldCreateCycle(templateId, candidate)) {
                 return false;

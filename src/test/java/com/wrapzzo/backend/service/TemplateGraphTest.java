@@ -125,4 +125,22 @@ class TemplateGraphTest {
         assertThat(graph().allowsReferences(b, List.of(a))).isFalse();
         assertThat(graph().allowsReferences(c, List.of(b))).isFalse();
     }
+
+    @Test
+    void anInactiveTemplateGrantsNothing_norAnythingOnlyReachableThroughIt() {
+        UUID base = template("order.view");
+        UUID off = template("campaign.view");
+        UUID top = template("user.view");
+        include(top, off);
+        include(off, base);
+
+        TemplateGraph withOff = new TemplateGraph(edges, keys, java.util.Set.of(off));
+
+        // "off" is switched off, so its own key and the "base" only reachable through it are gone...
+        assertThat(withOff.resolve(List.of(top))).containsExactly("user.view");
+        // ...but "base" still works for anyone who holds it directly.
+        assertThat(withOff.resolve(List.of(base))).containsExactly("order.view");
+        // A switched-off template held directly grants nothing either.
+        assertThat(withOff.resolve(List.of(off))).isEmpty();
+    }
 }

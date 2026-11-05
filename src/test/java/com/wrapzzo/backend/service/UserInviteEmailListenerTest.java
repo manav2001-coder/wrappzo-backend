@@ -30,7 +30,7 @@ class UserInviteEmailListenerTest {
         assertThat(emailSender.sent).extracting(TestEmailSenderConfig.RecordingEmailSender.Sent::to)
                 .containsExactlyInAnyOrder("arpita@nanz-test.com", "rajesh@nanz-test.com");
         assertThat(emailSender.sent.get(0).html()).contains("setup-password?token=");
-        assertThat(emailSender.sent.get(0).subject()).isEqualTo("Set up your Wrapzzo account");
+        assertThat(emailSender.sent.get(0).subject()).isEqualTo("Set up your Wrappzo account");
     }
 
     @Test

@@ -156,14 +156,17 @@ public class AccessControlCacheService {
         }
         Set<UUID> ids = new HashSet<>(edges.keySet());
         edges.values().forEach(ids::addAll);
-        ids.addAll(templateRepository.findAll().stream().map(t -> t.getId()).toList());
+        List<com.wrapzzo.backend.model.Template> templates = templateRepository.findAll();
+        templates.forEach(t -> ids.add(t.getId()));
         Map<UUID, Set<String>> directKeys = new HashMap<>();
         if (!ids.isEmpty()) {
             for (Object[] row : templateRepository.findDirectKeys(ids)) {
                 directKeys.computeIfAbsent((UUID) row[0], k -> new HashSet<>()).add((String) row[1]);
             }
         }
-        return new TemplateGraph(edges, directKeys);
+        Set<UUID> inactive = new HashSet<>();
+        templates.stream().filter(t -> !t.isActive()).forEach(t -> inactive.add(t.getId()));
+        return new TemplateGraph(edges, directKeys, inactive);
     }
 
     /** Refreshes one company's keys once the surrounding transaction commits; no company (a system template) means everyone's. */

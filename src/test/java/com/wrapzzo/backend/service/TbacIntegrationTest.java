@@ -341,9 +341,10 @@ class TbacIntegrationTest {
         BulkAssignUserTemplatesResponse again = templateService.bulkAssignUserTemplates(Set.of(one.getId()), Set.of(orders.id()));
 
         assertThat(first.totalUsersProcessed()).isEqualTo(3);
-        assertThat(first.successfulUsers()).isEqualTo(2);
-        assertThat(first.failedUsers()).isEqualTo(1);
-        assertThat(first.userResults()).extracting(BulkAssignUserTemplatesResponse.UserResult::status).containsExactlyInAnyOrder("success", "success", "failed");
+        // One user in the template's own company succeeds; the unknown id and the other company's user each fail alone.
+        assertThat(first.successfulUsers()).isEqualTo(1);
+        assertThat(first.failedUsers()).isEqualTo(2);
+        assertThat(first.userResults()).extracting(BulkAssignUserTemplatesResponse.UserResult::status).containsExactlyInAnyOrder("success", "failed", "failed");
         assertThat(again.totalAssignmentsSkipped()).isEqualTo(1);
         assertThat(again.totalAssignmentsCreated()).isZero();
     }

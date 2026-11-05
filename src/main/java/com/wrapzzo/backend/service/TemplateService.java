@@ -128,6 +128,9 @@ public class TemplateService {
             template.setPath(blankToNull(request.path()));
         }
         if (request.active() != null) {
+            if (!request.active() && template.isActive()) {
+                requireMayTakeAway(accessControlCacheService.loadGraph().resolve(List.of(template.getId())));
+            }
             setActive(template, request.active());
         }
         template.setUpdatedByName(caller().getName());
@@ -139,6 +142,7 @@ public class TemplateService {
     @Transactional
     public TbacTemplateResponse deactivate(UUID id) {
         Template template = requireWritable(id);
+        requireMayTakeAway(accessControlCacheService.loadGraph().resolve(List.of(template.getId())));
         setActive(template, false);
         template.setUpdatedByName(caller().getName());
         accessControlCacheService.invalidateAfterCommit(template.getCompany());
@@ -197,6 +201,8 @@ public class TemplateService {
     @Transactional
     public void removeFeature(UUID id, UUID featureId) {
         Template template = requireWritable(id);
+        requireMayTakeAway(template.getAccessControls().stream()
+                .filter(feature -> feature.getId().equals(featureId)).map(AccessControl::getKey).collect(Collectors.toSet()));
         template.getAccessControls().removeIf(feature -> feature.getId().equals(featureId));
         template.setUpdatedByName(caller().getName());
         accessControlCacheService.invalidateAfterCommit(template.getCompany());
@@ -253,6 +259,7 @@ public class TemplateService {
     @Transactional
     public void removeReference(UUID id, UUID referencedId) {
         Template template = requireWritable(id);
+        requireMayTakeAway(accessControlCacheService.loadGraph().resolve(List.of(referencedId)));
         template.getReferences().removeIf(reference -> reference.getId().equals(referencedId));
         template.setUpdatedByName(caller().getName());
         accessControlCacheService.invalidateAfterCommit(template.getCompany());
@@ -304,6 +311,7 @@ public class TemplateService {
     @Transactional
     public void removeRoleTemplate(UUID roleId, UUID templateId) {
         Role role = visibleRole(roleId);
+        requireMayTakeAway(accessControlCacheService.loadGraph().resolve(List.of(templateId)));
         Set<UUID> left = role.getTemplates().stream().map(Template::getId).filter(id -> !id.equals(templateId)).collect(Collectors.toSet());
         if (left.isEmpty() && RoleService.COMPANY_ADMIN_ROLE_NAME.equals(role.getName())) {
             // Company Admin repairs access for everyone; emptying it would lock the company out of that.
@@ -333,6 +341,7 @@ public class TemplateService {
     @Transactional
     public void removeUserTemplate(UUID userId, UUID templateId) {
         User user = visibleUser(userId);
+        requireMayTakeAway(accessControlCacheService.loadGraph().resolve(List.of(templateId)));
         user.getTemplates().removeIf(template -> template.getId().equals(templateId));
         accessControlCacheService.invalidateAfterCommit(user.getCompany());
     }
@@ -354,9 +363,18 @@ public class TemplateService {
                 continue;
             }
             if (templates == null || !user.getCompany().getId().equals(templatesCompany)) {
-                templatesCompany = user.getCompany().getId();
-                templates = requireAssignable(templatesCompany, templateIds);
-                requireGrantable(templates);
+                // Judged per company: a user the templates can't be used for (they belong to another company, or are
+                // switched off there) fails alone and says why, instead of sinking the whole batch.
+                try {
+                    templates = requireAssignable(user.getCompany().getId(), templateIds);
+                    requireGrantable(templates);
+                    templatesCompany = user.getCompany().getId();
+                } catch (InvalidTemplateException | AccessDeniedException e) {
+                    templates = null;
+                    templatesCompany = null;
+                    results.add(new BulkAssignUserTemplatesResponse.UserResult(userId, user.getName(), 0, 0, "failed", e.getMessage()));
+                    continue;
+                }
             }
             int added = 0;
             for (Template template : templates) {
@@ -414,6 +432,21 @@ public class TemplateService {
             return;
         }
         requireHolds(accessControlCacheService.loadGraph().resolve(templates.stream().map(Template::getId).toList()));
+    }
+
+    /**
+     * The mirror of {@link #requireGrantable}: nobody takes away access they don't hold themselves, so someone with
+     * "assign templates" can't strip a role or template that sits above them (the Company Admin's, say). Platform staff exempt.
+     */
+    private void requireMayTakeAway(Set<String> keys) {
+        if (keys.isEmpty() || caller().getCompany() == null) {
+            return;
+        }
+        Set<String> lacking = new TreeSet<>(keys);
+        lacking.removeAll(accessControlCacheService.resolveEffectiveKeys(caller()));
+        if (!lacking.isEmpty()) {
+            throw new AccessDeniedException("You can only take away access you hold yourself -- you lack: " + String.join(", ", lacking));
+        }
     }
 
     private void requireHolds(Set<String> keys) {
