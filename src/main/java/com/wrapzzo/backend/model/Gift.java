@@ -68,10 +68,10 @@ public class Gift {
     @Column(name = "photo_required", nullable = false)
     private boolean photoRequired = false;
 
-    /** When true (a personalised prescription pad, say), the vendor may not dispatch or deliver
-     * an order for this gift until the company has approved one of its artwork proofs. */
+    /** Always true: the vendor may not dispatch or deliver an order until the company has approved one of its
+     * artwork proofs. Nobody chooses this per gift any more; the column stays so existing code reads one place. */
     @Column(name = "artwork_required", nullable = false)
-    private boolean artworkRequired = false;
+    private boolean artworkRequired = true;
 
     /** Which commerce paths this gift can be picked from -- every gift is available in all three, unconditionally. */
     @ElementCollection(fetch = FetchType.EAGER)

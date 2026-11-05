@@ -69,7 +69,6 @@ public class GiftService {
         toSave.setMarkupFeePercentage(feeOrZero(request.markupFeePercentage()));
         toSave.setCommissionFeePercentage(feeOrZero(request.commissionFeePercentage()));
         toSave.setPhotoRequired(request.photoRequired());
-        toSave.setArtworkRequired(request.artworkRequired());
         // saveAndFlush -- giftNo is DB-generated and only readable after the physical
         // INSERT runs, which plain save() would otherwise defer until transaction commit.
         Gift gift = giftRepository.saveAndFlush(toSave);
@@ -163,7 +162,6 @@ public class GiftService {
         gift.setMarkupFeePercentage(feeOrZero(request.markupFeePercentage()));
         gift.setCommissionFeePercentage(feeOrZero(request.commissionFeePercentage()));
         gift.setPhotoRequired(request.photoRequired());
-        gift.setArtworkRequired(request.artworkRequired());
         gift.setUpdatedBy(currentUser());
         return toResponse(gift);
     }
@@ -222,7 +220,6 @@ public class GiftService {
         toSave.setMarkupFeePercentage(feeOrZero(vendor.getMarkupFees()));
         toSave.setCommissionFeePercentage(feeOrZero(vendor.getCommission()));
         toSave.setPhotoRequired(request.photoRequired());
-        toSave.setArtworkRequired(request.artworkRequired());
         // saveAndFlush -- giftNo is DB-generated and only readable after the physical
         // INSERT runs, which plain save() would otherwise defer until transaction commit.
         Gift gift = giftRepository.saveAndFlush(toSave);
@@ -253,7 +250,6 @@ public class GiftService {
         gift.setPrice(request.price());
         // Markup and commission stay as the platform set them; they are not the vendor's to change.
         gift.setPhotoRequired(request.photoRequired());
-        gift.setArtworkRequired(request.artworkRequired());
         return toResponse(gift);
     }
 

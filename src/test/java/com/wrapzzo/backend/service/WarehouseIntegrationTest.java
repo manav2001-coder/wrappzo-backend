@@ -102,6 +102,8 @@ class WarehouseIntegrationTest {
         printer = vendorRepository.save(new Vendor("Pad Printers", "pads-" + UUID.randomUUID() + "@test.com", null, "n/a", warehouseAdmin));
         companyVendorRepository.save(new CompanyVendor(company, printer, null));
         pad = new Gift("Rx Pad " + UUID.randomUUID(), "Stationery", null, null, null, printer);
+        // About the warehouse leg, not artwork: skip the proof gate every real gift now has.
+        pad.setArtworkRequired(false);
         pad.setModules(EnumSet.allOf(GiftModule.class));
         pad.setPrice(BigDecimal.TEN);
         pad = giftRepository.save(pad);

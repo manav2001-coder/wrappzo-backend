@@ -70,7 +70,10 @@ class OrderServiceIntegrationTest {
         creator = userRepository.save(new User(company, role, "Test Admin", "order-test-" + UUID.randomUUID() + "@wrapzzo.com", "n/a"));
         vendor = vendorRepository.save(new Vendor("Acme Printing", "acme-" + UUID.randomUUID() + "@test.com", null, "n/a", creator));
         otherVendor = vendorRepository.save(new Vendor("Other Printing", "other-" + UUID.randomUUID() + "@test.com", null, "n/a", creator));
-        gift = giftRepository.save(new Gift("Mug", "Drinkware", "A mug", null, null, creator));
+        Gift mug = new Gift("Mug", "Drinkware", "A mug", null, null, creator);
+        // These tests are about fulfilment, not artwork: skip the proof gate every real gift now has.
+        mug.setArtworkRequired(false);
+        gift = giftRepository.save(mug);
     }
 
     @AfterEach
