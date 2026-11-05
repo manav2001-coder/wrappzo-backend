@@ -45,15 +45,6 @@ class PermissionTest {
     }
 
     @Test
-    void anyActionImpliesItsModulesView() {
-        assertThat(Permission.CAMPAIGN_EDIT.impliedView()).contains(Permission.CAMPAIGN_VIEW);
-        assertThat(Permission.ARTWORK_FINAL_APPROVE.impliedView()).contains(Permission.ORDER_VIEW);
-        assertThat(Permission.CAMPAIGN_VIEW.impliedView()).isEmpty();
-        // A module without a view action implies nothing.
-        assertThat(Permission.QUICK_GIFT_CREATE.impliedView()).isEmpty();
-    }
-
-    @Test
     void platformModulesAreNeverCompanyAssignable() {
         for (Permission permission : Permission.values()) {
             assertThat(permission.companyAssignable()).as(permission.key()).isEqualTo(!permission.module().startsWith("platform_"));

@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
  * the same keys (seeded by migrations, with their labels) because grants are foreign keys to it;
  * PermissionCatalogVerifier fails startup if the two ever drift apart.
  *
- * <p>Company-assignable permissions can be granted to a company's roles, designations and users;
+ * <p>Company-assignable permissions can be granted to a company's roles and users;
  * the rest are platform-only (Wrappzo staff, across every company). Platform super admins hold
  * every permission implicitly (see AccessControlCacheService).
  */
@@ -110,12 +110,6 @@ public enum Permission {
     PLATFORM_MENU_CONFIG_VIEW(Keys.PLATFORM_MENU_CONFIG_VIEW, false),
     PLATFORM_MENU_CONFIG_EDIT(Keys.PLATFORM_MENU_CONFIG_EDIT, false);
 
-    /** The action every module that can be read at all is read with; granting any other action of a module implies it. */
-    public static final String VIEW_ACTION = "view";
-
-    /** Modules whose actions are done on another module's records: artwork is reviewed on an order, so it implies seeing orders. */
-    private static final Map<String, String> VIEW_OF_MODULE = Map.of("artwork", ORDER_VIEW.key);
-
     private static final Map<String, Permission> BY_KEY =
             Arrays.stream(values()).collect(Collectors.toUnmodifiableMap(Permission::key, Function.identity()));
 
@@ -154,11 +148,6 @@ public enum Permission {
 
     public static List<Permission> companyAssignablePermissions() {
         return Arrays.stream(values()).filter(Permission::companyAssignable).toList();
-    }
-
-    /** The module's view permission, if it has one -- what granting any of its other actions also grants. */
-    public Optional<Permission> impliedView() {
-        return VIEW_ACTION.equals(action) ? Optional.empty() : fromKey(VIEW_OF_MODULE.getOrDefault(module, module + "." + VIEW_ACTION));
     }
 
     /** Compile-time constants for annotations ({@code @RequiresPermission(Keys.ORDER_VIEW)}). */

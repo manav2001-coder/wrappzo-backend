@@ -10,7 +10,6 @@ import com.wrapzzo.backend.exception.InvalidRefreshTokenException;
 import com.wrapzzo.backend.exception.PasswordMismatchException;
 import com.wrapzzo.backend.model.AccessControl;
 import com.wrapzzo.backend.model.AccessControlType;
-import com.wrapzzo.backend.model.AccessEffect;
 import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.Role;
 import com.wrapzzo.backend.model.Template;
