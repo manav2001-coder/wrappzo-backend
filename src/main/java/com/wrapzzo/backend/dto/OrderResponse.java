@@ -38,6 +38,7 @@ public record OrderResponse(
         String warehouseName,
         OrderSource source,
         OrderStatus status,
+        /** Null unless the caller may know the vendor (company admin, platform staff): see VendorIdentityPolicy. */
         UUID assignedVendorId,
         String assignedVendorName,
         OrderAssignmentMode assignmentMode,
@@ -49,7 +50,7 @@ public record OrderResponse(
         boolean hasPendingDesignReview) {
 
     public static OrderResponse from(
-            Order order, String recipientPhotoUrl, String giftImageUrl, List<StageEvent> history, boolean hasPendingDesignReview) {
+            Order order, String recipientPhotoUrl, String giftImageUrl, List<StageEvent> history, boolean hasPendingDesignReview, boolean showVendor) {
         return new OrderResponse(
                 order.getId(),
                 "ORD-" + order.getOrderNo(),
@@ -71,8 +72,8 @@ public record OrderResponse(
                 order.getWarehouse() != null ? order.getWarehouse().getName() : null,
                 order.getSource(),
                 order.getStatus(),
-                order.getAssignedVendor() != null ? order.getAssignedVendor().getId() : null,
-                order.getAssignedVendor() != null ? order.getAssignedVendor().getName() : null,
+                showVendor && order.getAssignedVendor() != null ? order.getAssignedVendor().getId() : null,
+                showVendor && order.getAssignedVendor() != null ? order.getAssignedVendor().getName() : null,
                 order.getAssignmentMode(),
                 order.getAssignedAt(),
                 order.getCreatedAt(),

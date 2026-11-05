@@ -13,7 +13,6 @@ public record OrderDesignResponse(
         String fileUrl,
         String fileName,
         OrderDesignStatus status,
-        String uploadedByVendorName,
         String reviewedByUserName,
         /** The MR's approval, when the proof then went to a senior for the final one. */
         String firstApprovedByUserName,
@@ -37,7 +36,6 @@ public record OrderDesignResponse(
                 fileUrl,
                 design.getFileName(),
                 design.getStatus(),
-                design.getUploadedBy().getName(),
                 design.getReviewedBy() != null ? design.getReviewedBy().getName() : null,
                 design.getFirstApprovedBy() != null ? design.getFirstApprovedBy().getName() : null,
                 design.getFirstApprovedAt(),

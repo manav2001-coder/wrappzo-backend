@@ -18,7 +18,6 @@ public record WarehouseOrderResponse(
         String recipientPhone,
         /** The final drop -- a Quick Gift order's own request; null for a campaign order. */
         String deliveryAddress,
-        String vendorName,
         String orgUnitName,
         String requestedByName,
         OrderStatus status,
@@ -35,7 +34,6 @@ public record WarehouseOrderResponse(
                 order.getRecipientName(),
                 order.getRecipientPhone(),
                 request != null ? request.getDeliveryAddress() : null,
-                order.getAssignedVendor() != null ? order.getAssignedVendor().getName() : null,
                 order.getOrgUnit() != null ? order.getOrgUnit().getName() : null,
                 order.getCreatedBy() != null ? order.getCreatedBy().getName() : null,
                 order.getStatus(),

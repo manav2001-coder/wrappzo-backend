@@ -52,6 +52,7 @@ public class GiftService {
     private final GiftImageRepository giftImageRepository;
     private final UserRepository userRepository;
     private final VendorRepository vendorRepository;
+    private final VendorIdentityPolicy vendorIdentityPolicy;
     private final CompanyVendorRepository companyVendorRepository;
     private final FileStorageService fileStorageService;
 
@@ -99,7 +100,8 @@ public class GiftService {
         if (vendorIds.isEmpty()) {
             return List.of();
         }
-        return giftRepository.findByActiveTrueAndVendorIdIn(vendorIds).stream().map(gift -> toResponse(gift).forCompany()).toList();
+        boolean showVendor = vendorIdentityPolicy.canSee();
+        return giftRepository.findByActiveTrueAndVendorIdIn(vendorIds).stream().map(gift -> toResponse(gift).forCompany(showVendor)).toList();
     }
 
     private List<UUID> visibleVendorIds(User caller) {
@@ -136,7 +138,7 @@ public class GiftService {
         if (!isInRoster(gift, user)) {
             throw new GiftNotFoundException(id);
         }
-        return toResponse(gift).forCompany();
+        return toResponse(gift).forCompany(vendorIdentityPolicy.canSee());
     }
 
     /** The Gift Store's own rule, for a write path (placing an order) that already holds the gift. */

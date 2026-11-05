@@ -72,6 +72,7 @@ public class OrderService {
 
     private final OrderRepository orderRepository;
     private final OrgUnitRepository orgUnitRepository;
+    private final VendorIdentityPolicy vendorIdentityPolicy;
     private final QuickGiftRequestRepository quickGiftRequestRepository;
     private final VisibilityService visibilityService;
     private final UserRepository userRepository;
@@ -310,7 +311,8 @@ public class OrderService {
     private OrderResponse toResponse(Order order) {
         String giftImageUrl = order.getGift() != null ? firstImageUrlByGiftId(List.of(order.getGift().getId())).get(order.getGift().getId()) : null;
         boolean pending = !orderDesignRepository.findByOrder_IdInAndStatus(List.of(order.getId()), OrderDesignStatus.PENDING_REVIEW).isEmpty();
-        return OrderResponse.from(order, orderPhotoService.resolvePhotoUrl(order), giftImageUrl, stageEventsFor(order.getId()), pending);
+        return OrderResponse.from(order, orderPhotoService.resolvePhotoUrl(order), giftImageUrl, stageEventsFor(order.getId()), pending,
+                vendorIdentityPolicy.canSee());
     }
 
     private List<OrderResponse> toResponseList(List<Order> orders) {
@@ -323,13 +325,15 @@ public class OrderService {
                 .stream()
                 .map(d -> d.getOrder().getId())
                 .collect(Collectors.toSet());
+        boolean showVendor = vendorIdentityPolicy.canSee();
         return orders.stream()
                 .map(o -> OrderResponse.from(
                         o,
                         orderPhotoService.resolvePhotoUrl(o),
                         o.getGift() != null ? firstImageUrlByGiftId.get(o.getGift().getId()) : null,
                         toStageEvents(historyByOrderId.getOrDefault(o.getId(), List.of())),
-                        ordersPendingDesignReview.contains(o.getId())))
+                        ordersPendingDesignReview.contains(o.getId()),
+                        showVendor))
                 .toList();
     }
 

@@ -19,7 +19,7 @@ class GiftResponseTest {
                 new BigDecimal("100.00"), new BigDecimal("10.00"), new BigDecimal("5.00"), new BigDecimal("115.00"),
                 UUID.randomUUID(), "PrintHouse", List.of(), Instant.now());
 
-        GiftResponse seen = full.forCompany();
+        GiftResponse seen = full.forCompany(true);
 
         assertThat(seen.totalPrice()).isEqualByComparingTo("115.00");
         assertThat(seen.price()).isNull();
@@ -27,5 +27,19 @@ class GiftResponseTest {
         assertThat(seen.commissionFeePercentage()).isNull();
         assertThat(seen.name()).isEqualTo("Pad");
         assertThat(seen.vendorName()).isEqualTo("PrintHouse");
+    }
+
+    @Test
+    void theVendorIsLeftOutForAnyoneWhoMayNotKnowIt() {
+        GiftResponse full = new GiftResponse(
+                UUID.randomUUID(), "GFT-1", "Pad", "Stationery", null, 10, 5, true, false, false, Set.<GiftModule>of(),
+                new BigDecimal("100.00"), new BigDecimal("10.00"), new BigDecimal("5.00"), new BigDecimal("115.00"),
+                UUID.randomUUID(), "PrintHouse", List.of(), Instant.now());
+
+        GiftResponse seen = full.forCompany(false);
+
+        assertThat(seen.vendorName()).isNull();
+        assertThat(seen.vendorId()).isNull();
+        assertThat(seen.name()).isEqualTo("Pad");
     }
 }
