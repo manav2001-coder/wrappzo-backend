@@ -64,7 +64,8 @@ class OrderDesignServiceTest {
     private final OrgUnitRepository orgUnits = mock(OrgUnitRepository.class);
 
     private final OrderDesignService service = new OrderDesignService(designs, approvals, orders,
-            mock(QuickGiftRequestRepository.class), steps, orgUnits, mock(VendorRepository.class), users, files, visibility, flags, keys);
+            mock(QuickGiftRequestRepository.class), steps, orgUnits, mock(VendorRepository.class), users, files, visibility, flags, keys,
+            mock(org.springframework.context.ApplicationEventPublisher.class));
 
     private final List<OrderDesignApproval> trail = new ArrayList<>();
     private final Company company = new Company();

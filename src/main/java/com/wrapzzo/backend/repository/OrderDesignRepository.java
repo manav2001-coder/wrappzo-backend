@@ -25,4 +25,7 @@ public interface OrderDesignRepository extends JpaRepository<OrderDesign, UUID> 
 
     /** Batch "which of these orders has a design awaiting review" -- for the Orders list's at-a-glance indicator, not N+1 per order. */
     List<OrderDesign> findByOrder_IdInAndStatus(Collection<UUID> orderIds, OrderDesignStatus status);
+
+    /** Proofs waiting on someone that have had fewer than maxReminders reminders, oldest wait first. */
+    List<OrderDesign> findByStatusInAndRemindersSentLessThanOrderByAwaitingSinceAsc(Collection<OrderDesignStatus> statuses, int maxReminders);
 }

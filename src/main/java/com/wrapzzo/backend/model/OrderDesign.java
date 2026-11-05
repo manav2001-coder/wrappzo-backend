@@ -82,6 +82,16 @@ public class OrderDesign {
     @Column(name = "reviewed_at")
     private Instant reviewedAt;
 
+    /** When the proof started waiting on its current approver; the reminder emails count from here. */
+    @Column(name = "awaiting_since")
+    private Instant awaitingSince;
+
+    @Column(name = "reminders_sent", nullable = false)
+    private int remindersSent;
+
+    @Column(name = "last_reminder_at")
+    private Instant lastReminderAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -96,9 +106,19 @@ public class OrderDesign {
         this.uploadedBy = uploadedBy;
     }
 
+    /** The proof now waits on a new approver: the reminder clock starts over. */
+    public void startAwaiting(Instant at) {
+        awaitingSince = at;
+        remindersSent = 0;
+        lastReminderAt = null;
+    }
+
     @PrePersist
     void onCreate() {
         Instant now = Instant.now();
+        if (awaitingSince == null) {
+            awaitingSince = now;
+        }
         createdAt = now;
         updatedAt = now;
     }

@@ -13,6 +13,7 @@ public class BackgroundJobScheduler {
     private final RefreshTokenCleanupJob refreshTokenCleanup;
     private final VendorRefreshTokenCleanupJob vendorRefreshTokenCleanup;
     private final RecurringOrderJob recurringOrders;
+    private final ArtworkApprovalReminderJob artworkApprovalReminders;
 
     @Scheduled(cron = "0 0 3 * * *")
     public void refreshTokenCleanup() {
@@ -27,5 +28,10 @@ public class BackgroundJobScheduler {
     @Scheduled(cron = "0 15 6 * * *")
     public void recurringOrders() {
         runner.runScheduled(recurringOrders);
+    }
+
+    @Scheduled(cron = "0 0 9 * * *")
+    public void artworkApprovalReminders() {
+        runner.runScheduled(artworkApprovalReminders);
     }
 }

@@ -33,6 +33,7 @@ import com.wrapzzo.backend.repository.OrderRepository;
 import com.wrapzzo.backend.repository.UserRepository;
 import com.wrapzzo.backend.repository.VendorRepository;
 import com.wrapzzo.backend.security.CurrentUser;
+import org.springframework.context.ApplicationEventPublisher;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -76,6 +77,7 @@ public class OrderDesignService {
     private final VisibilityService visibilityService;
     private final CompanyFeatureFlagService companyFeatureFlagService;
     private final AccessControlCacheService accessControlCacheService;
+    private final ApplicationEventPublisher eventPublisher;
 
     private static final String PDF_CONTENT_TYPE = "application/pdf";
 
@@ -112,6 +114,7 @@ public class OrderDesignService {
             throw new ConflictException("Another version was uploaded in the meantime -- upload this one again.");
         }
         OrderDesign design = orderDesignRepository.save(new OrderDesign(order, nextVersion, fileKey, fileName, vendor));
+        eventPublisher.publishEvent(new ArtworkAwaitingApprovalEvent(design.getId()));
         return toVendorResponse(design);
     }
 
@@ -170,6 +173,7 @@ public class OrderDesignService {
                 design.setFirstApprovedBy(reviewer);
                 design.setFirstApprovedAt(now);
                 moveToLevel(design, 1, approvalChain(design));
+                eventPublisher.publishEvent(new ArtworkAwaitingApprovalEvent(design.getId()));
                 return toResponse(design);
             }
         } else {
@@ -178,6 +182,7 @@ public class OrderDesignService {
             record(design, level, OrderDesignDecision.APPROVED, reviewer, coveredManager(chain, level, reviewer), null, now);
             if (level < levelCount(chain)) {
                 moveToLevel(design, level + 1, chain);
+                eventPublisher.publishEvent(new ArtworkAwaitingApprovalEvent(design.getId()));
                 return toResponse(design);
             }
         }
@@ -232,6 +237,32 @@ public class OrderDesignService {
                     trails.getOrDefault(design.getId(), List.of())));
         }
         return queue;
+    }
+
+    /**
+     * Who a proof waits on right now: the MR who placed the order for the first review, then the people
+     * the current level names (never anyone who has already signed it, nor the MR on their own proof).
+     * Active users with an email only -- these are the people a reminder goes to.
+     */
+    @Transactional(readOnly = true)
+    public List<User> awaitedApprovers(OrderDesign design) {
+        List<User> candidates;
+        if (design.getStatus() == OrderDesignStatus.PENDING_REVIEW) {
+            User owner = requesterOf(design.getOrder());
+            candidates = owner == null ? List.of() : List.of(owner);
+        } else if (design.getStatus() == OrderDesignStatus.PENDING_FINAL_APPROVAL) {
+            Stage stage = expectedApprover(approvalChain(design), currentLevel(design));
+            User requester = requesterOf(design.getOrder());
+            candidates = stage == null ? List.of() : stage.eligible().stream()
+                    .filter(user -> requester == null || !user.getId().equals(requester.getId()))
+                    .filter(user -> !orderDesignApprovalRepository.existsByDesign_IdAndDecidedBy_Id(design.getId(), user.getId()))
+                    .toList();
+        } else {
+            return List.of();
+        }
+        return candidates.stream()
+                .filter(user -> user.getStatus() == UserStatus.ACTIVE && user.getEmail() != null && !user.getEmail().isBlank())
+                .toList();
     }
 
     private OrderDesign reviewableDesign(UUID orderId, UUID designId) {
@@ -383,6 +414,7 @@ public class OrderDesignService {
     private static void moveToLevel(OrderDesign design, int level, List<Stage> chain) {
         design.setApprovalLevel(level);
         design.setApprovalLevels(levelCount(chain));
+        design.startAwaiting(Instant.now());
     }
 
     private void record(OrderDesign design, int level, OrderDesignDecision decision, User reviewer, User onBehalfOf, String comment, Instant at) {
