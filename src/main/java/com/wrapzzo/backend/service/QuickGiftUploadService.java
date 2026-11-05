@@ -137,7 +137,10 @@ public class QuickGiftUploadService {
     @Transactional
     public PresignSubmissionAttachmentResponse presignUpload(String rawToken, String contentType) {
         QuickGiftUploadToken token = resolveActiveToken(rawToken);
-        String key = "quick-gift-uploads/%s/%s".formatted(token.getQuickGiftRequest().getId(), UUID.randomUUID());
+        QuickGiftRequest request = token.getQuickGiftRequest();
+        // Named like every photo of an order: the doctor's pcode, then the AM who raised it.
+        String fileName = FileNaming.photoName(request.getRecipientPcode(), request.getRequestedBy(), contentType);
+        String key = "quick-gift-uploads/%s/%s/%s".formatted(request.getId(), UUID.randomUUID(), fileName);
         String uploadUrl = fileStorageService.presignUpload(key, contentType, UPLOAD_URL_EXPIRY);
         return new PresignSubmissionAttachmentResponse(uploadUrl, key);
     }
@@ -152,7 +155,7 @@ public class QuickGiftUploadService {
             fileStorageService.delete(quickGift.getPhotoKey());
         }
         quickGift.setPhotoKey(request.key());
-        quickGift.setPhotoFileName(request.fileName());
+        quickGift.setPhotoFileName(FileNaming.lastSegment(request.key()));
         quickGift.setPhotoContentType(request.mimeType());
         token.setUsedAt(Instant.now());
     }

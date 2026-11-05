@@ -64,11 +64,13 @@ public class QuickGiftService {
     private final VisibilityService visibilityService;
     private final WarehouseService warehouseService;
 
-    public PresignQuickGiftPhotoResponse presignPhoto(String contentType) {
+    /** The photo is stored as quick-gifts/.../PCODE_AMCODE_photo.ext, the same convention as a proof, so a download tells whose it is. */
+    public PresignQuickGiftPhotoResponse presignPhoto(String contentType, String pcode) {
         User user = currentUser();
-        String key = "quick-gifts/%s/%s/%s".formatted(user.getCompany().getId(), user.getId(), UUID.randomUUID());
+        String fileName = FileNaming.photoName(pcode, user, contentType);
+        String key = "quick-gifts/%s/%s/%s/%s".formatted(user.getCompany().getId(), user.getId(), UUID.randomUUID(), fileName);
         String uploadUrl = fileStorageService.presignUpload(key, contentType, PHOTO_UPLOAD_URL_EXPIRY);
-        return new PresignQuickGiftPhotoResponse(uploadUrl, key);
+        return new PresignQuickGiftPhotoResponse(uploadUrl, key, fileName);
     }
 
     /**
@@ -128,7 +130,8 @@ public class QuickGiftService {
         quickGift.setOrgUnit(requester.getOrgUnit());
         if (request.photo() != null) {
             quickGift.setPhotoKey(request.photo().key());
-            quickGift.setPhotoFileName(request.photo().fileName());
+            // The name comes from the stored key (the server's PCODE_AMCODE_photo name), never from what the client calls the file.
+            quickGift.setPhotoFileName(FileNaming.lastSegment(request.photo().key()));
             quickGift.setPhotoContentType(request.photo().contentType());
         }
         quickGift = quickGiftRequestRepository.saveAndFlush(quickGift);

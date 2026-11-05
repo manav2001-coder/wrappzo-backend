@@ -126,16 +126,8 @@ public class OrderDesignService {
     private String artworkFileName(Order order, int version) {
         QuickGiftRequest request = quickGiftRequestRepository.findByOrderId(order.getId()).orElse(null);
         String pcode = request != null ? request.getRecipientPcode() : null;
-        User am = order.getOwner();
-        String amCode = am.getEmployeeCode() != null && !am.getEmployeeCode().isBlank() ? am.getEmployeeCode() : am.getName();
         return "%s_%s_v%d.pdf".formatted(
-                fileNamePart(pcode != null && !pcode.isBlank() ? pcode : "ORD-" + order.getOrderNo()), fileNamePart(amCode), version);
-    }
-
-    /** Letters and digits only, runs of anything else collapsed to one hyphen: safe in a key, a URL and a download. */
-    private static String fileNamePart(String value) {
-        String part = value.trim().replaceAll("[^A-Za-z0-9]+", "-").replaceAll("^-+|-+$", "");
-        return part.isEmpty() ? "NA" : part;
+                FileNaming.part(pcode != null && !pcode.isBlank() ? pcode : "ORD-" + order.getOrderNo()), FileNaming.part(FileNaming.amCode(order.getOwner())), version);
     }
 
     @Transactional(readOnly = true)

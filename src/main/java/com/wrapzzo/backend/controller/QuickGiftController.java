@@ -32,7 +32,7 @@ public class QuickGiftController {
     @PostMapping("/presignPhoto")
     @RequiresPermission(Keys.QUICK_GIFT_CREATE)
     public PresignQuickGiftPhotoResponse presignPhoto(@Valid @RequestBody PresignQuickGiftPhotoRequest request) {
-        return quickGiftService.presignPhoto(request.contentType());
+        return quickGiftService.presignPhoto(request.contentType(), request.pcode());
     }
 
     @PostMapping

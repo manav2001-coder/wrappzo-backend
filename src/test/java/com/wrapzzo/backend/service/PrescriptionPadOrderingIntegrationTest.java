@@ -211,6 +211,15 @@ class PrescriptionPadOrderingIntegrationTest {
     }
 
     @Test
+    void theRecipientPhotoIsStoredUnderTheDoctorsPcodeAndTheAmsCode() {
+        actAs(mrNorth);
+        var presign = quickGiftService.presignPhoto("image/png", "PC-ASHA");
+
+        assertThat(presign.fileName()).isEqualTo("PC-ASHA_MR-North_photo.png");
+        assertThat(presign.key()).endsWith("/PC-ASHA_MR-North_photo.png");
+    }
+
+    @Test
     void aGiftOutsideTheRequestersVendorRosterCannotBeOrdered() {
         Vendor stranger = vendorRepository.save(new Vendor("Not Ours", "stranger-" + UUID.randomUUID() + "@test.com", null, "n/a", mrNorth));
         Gift foreignPad = savePad(stranger, false);
