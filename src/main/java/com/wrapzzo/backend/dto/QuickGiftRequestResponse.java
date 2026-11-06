@@ -1,6 +1,7 @@
 package com.wrapzzo.backend.dto;
 
 import com.wrapzzo.backend.model.Order;
+import com.wrapzzo.backend.model.OrderApprovalStatus;
 import com.wrapzzo.backend.model.QuickGiftRequest;
 import com.wrapzzo.backend.model.QuickGiftStatus;
 import java.time.Instant;
@@ -37,7 +38,9 @@ public record QuickGiftRequestResponse(
         Instant reviewedAt,
         Instant createdAt,
         /** Only set right after an approve() call that just issued a fresh recipient photo-upload link. */
-        String recipientUploadUrl) {
+        String recipientUploadUrl,
+        /** Whether the order is held for its approver (PENDING) or went straight to production; null before an order exists. */
+        OrderApprovalStatus orderApprovalStatus) {
 
     public static QuickGiftRequestResponse from(QuickGiftRequest request, String photoUrl) {
         return from(request, photoUrl, null);
@@ -72,6 +75,7 @@ public record QuickGiftRequestResponse(
                 request.getReviewedBy() != null ? request.getReviewedBy().getName() : null,
                 request.getReviewedAt(),
                 request.getCreatedAt(),
-                recipientUploadUrl);
+                recipientUploadUrl,
+                order != null ? order.getApprovalStatus() : null);
     }
 }
