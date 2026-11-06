@@ -136,6 +136,13 @@ public class Order {
     @Column(name = "approval_comment", columnDefinition = "text")
     private String approvalComment;
 
+    /** Reminder emails sent to the approver while the order waits (V75): a daily nudge, at most a few. */
+    @Column(name = "approval_reminders_sent", nullable = false)
+    private int approvalRemindersSent = 0;
+
+    @Column(name = "approval_last_reminder_at")
+    private Instant approvalLastReminderAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

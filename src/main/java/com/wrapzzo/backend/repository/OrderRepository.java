@@ -27,6 +27,9 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
 
     List<Order> findByCampaignIdOrderByCreatedAtDesc(UUID campaignId);
 
+    /** Every order still waiting on its approver that has had fewer than {@code max} reminders. */
+    List<Order> findByApprovalStatusAndApprovalRemindersSentLessThanOrderByCreatedAtAsc(OrderApprovalStatus approvalStatus, int max);
+
     /** A company's orders waiting on their approver (V74), oldest first -- the approvers' queue. */
     List<Order> findByCompanyIdAndApprovalStatusOrderByCreatedAtAsc(UUID companyId, OrderApprovalStatus approvalStatus);
 
