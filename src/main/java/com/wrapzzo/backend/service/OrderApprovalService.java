@@ -31,9 +31,9 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Order approval (V74): with it on for a company, a Quick Gift / PEL order waits for its approver -- a role found in the
  * requester's reporting line or division, an RM say -- and only their yes sends it on to the vendor, by the same
- * assignment as before. A no cancels it. The requester never decides their own order; someone holding Final Artwork
- * Approval who can see the order may decide it as cover (the same cover as for artwork), so an absent approver never
- * strands an order.
+ * assignment as before. A no cancels it. The requester never decides their own order. Only when nobody holds the approver
+ * role for the orderer may someone with Final Artwork Approval who can see the order decide it as cover, so an order
+ * with no approver is never stranded -- and one with an approver is never open to anyone else.
  */
 @Service
 @RequiredArgsConstructor
@@ -142,7 +142,11 @@ public class OrderApprovalService {
         if (keys.contains(Permission.APPROVAL_DECIDE.key()) && approverStage(order).includes(user)) {
             return true;
         }
-        return keys.contains(Permission.ARTWORK_FINAL_APPROVE.key()) && visibilityService.resolve(user).canSee(order.getOwner(), order.getOrgUnit());
+        // Cover only where nobody can decide it -- no one holds the approver role for this orderer. An order that has its
+        // approver is that person's alone: an HO, say, who holds Final Artwork Approval, does not see or decide it.
+        return keys.contains(Permission.ARTWORK_FINAL_APPROVE.key())
+                && awaitedApprovers(order).isEmpty()
+                && visibilityService.resolve(user).canSee(order.getOwner(), order.getOrgUnit());
     }
 
     /** One approver stage: who may decide, and how to name them (a person, or "RM of Summit"). */

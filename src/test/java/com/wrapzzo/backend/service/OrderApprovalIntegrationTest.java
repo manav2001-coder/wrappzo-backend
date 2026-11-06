@@ -77,6 +77,7 @@ class OrderApprovalIntegrationTest {
     private User rm;
     private User otherRm;
     private User divisionRm;
+    private User ho;
     private Gift pad;
     private Vendor printer;
 
@@ -95,6 +96,10 @@ class OrderApprovalIntegrationTest {
 
         rm = saveUser("RM North", rmRole, zone);
         otherRm = saveUser("RM Elsewhere", rmRole, zone);
+        Role hoRole = roleRepository.save(new Role(company, "HO"));
+        grant(hoRole, "approval.decide");
+        grant(hoRole, "artwork.final_approve");
+        ho = saveUser("HO", hoRole, division);
         divisionRm = saveUser("RM Division", rmRole, division);
         mr = saveUser("MR North", memberRole, areaOne);
         mr.setReportsTo(rm);
@@ -169,6 +174,11 @@ class OrderApprovalIntegrationTest {
         assertThat(orderApprovalService.listPending()).isEmpty();
         actAs(rm);
         assertThat(orderApprovalService.listPending()).extracting(p -> p.orderId()).containsExactly(order.getId());
+        // An HO holding Final Artwork Approval is not in this cycle: the order has its RM, so it is not theirs to see or decide.
+        actAs(ho);
+        assertThat(orderApprovalService.listPending()).isEmpty();
+        assertThatThrownBy(() -> orderApprovalService.approve(order.getId(), null)).isInstanceOf(ConflictException.class).hasMessageContaining("not waiting on you");
+        actAs(rm);
 
         // Platform staff cannot route it around the approver, one by one or in bulk.
         assertThatThrownBy(() -> orderService.autoAssignVendor(order.getId())).isInstanceOf(ConflictException.class).hasMessageContaining("waiting for its approver");
@@ -239,13 +249,18 @@ class OrderApprovalIntegrationTest {
     }
 
     @Test
-    void anOrderWithNoRmAboveTheRequesterWaitsForCoverInsteadOfGoingThrough() {
+    void anOrderWithNoRmAboveTheRequesterWaitsForTheHoToCover() {
         switchOn(ArtworkApprovalScope.REPORTING_LINE);
         Order order = place(lonelyMr);
 
         assertThat(order.getApprovalStatus()).isEqualTo(OrderApprovalStatus.PENDING);
         actAs(rm);
         assertThat(orderApprovalService.listPending()).isEmpty();
+        // With no RM to decide it, the HO covers.
+        actAs(ho);
+        assertThat(orderApprovalService.listPending()).extracting(p -> p.orderId()).containsExactly(order.getId());
+        orderApprovalService.approve(order.getId(), null);
+        assertThat(order.getAssignedVendor().getId()).isEqualTo(printer.getId());
     }
 
     @Test
