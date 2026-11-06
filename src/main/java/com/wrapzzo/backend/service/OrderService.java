@@ -12,6 +12,7 @@ import com.wrapzzo.backend.exception.OrderNotFoundException;
 import com.wrapzzo.backend.exception.VendorNotFoundException;
 import com.wrapzzo.backend.model.Order;
 import com.wrapzzo.backend.model.OrgUnit;
+import com.wrapzzo.backend.model.OrderApprovalStatus;
 import com.wrapzzo.backend.model.OrderAssignmentMode;
 import com.wrapzzo.backend.model.OrderStatus;
 import com.wrapzzo.backend.model.OrderStatusHistory;
@@ -232,6 +233,7 @@ public class OrderService {
     @Transactional
     public OrderResponse autoAssignVendor(UUID orderId) {
         Order order = getEntity(orderId);
+        requireApproved(order);
         applyAssignment(order, autoVendorFor(order), OrderAssignmentMode.AUTO);
         return toResponse(order);
     }
@@ -298,7 +300,10 @@ public class OrderService {
     }
 
     private List<Order> filterUnassigned(List<Order> orders) {
-        return orders.stream().filter(order -> order.getAssignedVendor() == null && order.getStatus() != OrderStatus.CANCELLED).toList();
+        return orders.stream()
+                .filter(order -> order.getAssignedVendor() == null && order.getStatus() != OrderStatus.CANCELLED
+                        && order.getApprovalStatus() != OrderApprovalStatus.PENDING)
+                .toList();
     }
 
     private List<OrderResponse> campaignOrders(UUID campaignId) {
@@ -404,6 +409,7 @@ public class OrderService {
 
     /** A hand-picked vendor must be active, serve the order's company, and the order must still be waiting on or in production. */
     private void requireCanAssign(Order order, Vendor vendor) {
+        requireApproved(order);
         if (vendor.getStatus() != VendorStatus.ACTIVE) {
             throw new ConflictException(vendor.getName() + " is suspended");
         }
@@ -417,6 +423,13 @@ public class OrderService {
         }
         if (order.getStatus() == OrderStatus.DISPATCHED || order.getStatus() == OrderStatus.DELIVERED || order.getStatus() == OrderStatus.CANCELLED) {
             throw new ConflictException("This order is already " + order.getStatus().name().toLowerCase() + " and can't be reassigned");
+        }
+    }
+
+    /** An order still waiting for its approver (V74) is not the platform's to route yet: it reaches a vendor only on that yes. */
+    private static void requireApproved(Order order) {
+        if (order.getApprovalStatus() == OrderApprovalStatus.PENDING) {
+            throw new ConflictException("ORD-" + order.getOrderNo() + " is still waiting for its approver, so it can't be sent to a vendor yet");
         }
     }
 

@@ -1,6 +1,7 @@
 package com.wrapzzo.backend.repository;
 
 import com.wrapzzo.backend.model.Order;
+import com.wrapzzo.backend.model.OrderApprovalStatus;
 import com.wrapzzo.backend.model.OrderStatus;
 import java.util.Collection;
 import java.util.List;
@@ -25,6 +26,9 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
             @Param("people") Collection<UUID> people, @Param("orgUnits") Collection<UUID> orgUnits);
 
     List<Order> findByCampaignIdOrderByCreatedAtDesc(UUID campaignId);
+
+    /** A company's orders waiting on their approver (V74), oldest first -- the approvers' queue. */
+    List<Order> findByCompanyIdAndApprovalStatusOrderByCreatedAtAsc(UUID companyId, OrderApprovalStatus approvalStatus);
 
     /** A company's warehouse-routed orders in the given stages -- the warehouse's work queue. */
     List<Order> findByCompanyIdAndWarehouseIsNotNullAndStatusInOrderByUpdatedAtDesc(UUID companyId, Collection<OrderStatus> statuses);

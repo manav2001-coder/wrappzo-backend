@@ -120,6 +120,22 @@ public class Order {
     @JoinColumn(name = "owner_id", nullable = false)
     private User owner;
 
+    /** Order approval (V74): PENDING keeps the order away from every vendor until the approver decides. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "approval_status", nullable = false, length = 16)
+    private OrderApprovalStatus approvalStatus = OrderApprovalStatus.NOT_REQUIRED;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "approval_decided_by_id")
+    private User approvalDecidedBy;
+
+    @Column(name = "approval_decided_at")
+    private Instant approvalDecidedAt;
+
+    /** The approver's note -- required when they turn the order down. */
+    @Column(name = "approval_comment", columnDefinition = "text")
+    private String approvalComment;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

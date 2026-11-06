@@ -2,6 +2,7 @@ package com.wrapzzo.backend.dto;
 
 import com.wrapzzo.backend.dto.DashboardResponse.StageEvent;
 import com.wrapzzo.backend.model.Order;
+import com.wrapzzo.backend.model.OrderApprovalStatus;
 import com.wrapzzo.backend.model.OrderAssignmentMode;
 import com.wrapzzo.backend.model.OrderSource;
 import com.wrapzzo.backend.model.OrderStatus;
@@ -47,7 +48,12 @@ public record OrderResponse(
         /** Every stage this order has actually passed through, oldest first -- same shape as the Dashboard's order timeline. */
         List<StageEvent> history,
         /** True if this order has an artwork version sitting in PENDING_REVIEW right now -- drives the Orders list's at-a-glance "needs design review" indicator. */
-        boolean hasPendingDesignReview) {
+        boolean hasPendingDesignReview,
+        /** Order approval (V74): PENDING = not with a vendor yet, waiting on the approver; REJECTED = cancelled by them. */
+        OrderApprovalStatus approvalStatus,
+        /** The approver's note, when they left one -- always there on a REJECTED order. */
+        String approvalComment,
+        String approvalDecidedByName) {
 
     public static OrderResponse from(
             Order order, String recipientPhotoUrl, String giftImageUrl, List<StageEvent> history, boolean hasPendingDesignReview, boolean showVendor) {
@@ -78,6 +84,9 @@ public record OrderResponse(
                 order.getAssignedAt(),
                 order.getCreatedAt(),
                 history,
-                hasPendingDesignReview);
+                hasPendingDesignReview,
+                order.getApprovalStatus(),
+                order.getApprovalComment(),
+                order.getApprovalDecidedBy() != null ? order.getApprovalDecidedBy().getName() : null);
     }
 }

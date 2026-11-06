@@ -4,9 +4,12 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
@@ -85,6 +88,19 @@ public class Company extends AuditNames {
     /** With Senior Artwork Approval on: how many managers above the MR sign off on artwork, 1-5 (V44). */
     @Column(name = "artwork_approval_levels", nullable = false)
     private int artworkApprovalLevels = 1;
+
+    /** Quick Gift / PEL orders wait for an approver's yes before they go to the vendor (V74). The company admin's to set. */
+    @Column(name = "order_approval_enabled", nullable = false)
+    private boolean orderApprovalEnabled = false;
+
+    /** Who approves those orders: this role, found per {@link #orderApprovalScope}. Null until the admin picks one. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "order_approval_role_id")
+    private Role orderApprovalRole;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "order_approval_scope", nullable = false, length = 20)
+    private ArtworkApprovalScope orderApprovalScope = ArtworkApprovalScope.REPORTING_LINE;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

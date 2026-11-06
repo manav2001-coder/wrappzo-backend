@@ -42,6 +42,8 @@ public enum Permission {
     APPROVAL_DECIDE(Keys.APPROVAL_DECIDE, true),
     ARTWORK_APPROVAL_VIEW(Keys.ARTWORK_APPROVAL_VIEW, true),
     ARTWORK_APPROVAL_CONFIGURE(Keys.ARTWORK_APPROVAL_CONFIGURE, true),
+    ORDER_APPROVAL_VIEW(Keys.ORDER_APPROVAL_VIEW, true),
+    ORDER_APPROVAL_CONFIGURE(Keys.ORDER_APPROVAL_CONFIGURE, true),
 
     DOCTOR_VIEW(Keys.DOCTOR_VIEW, true),
     DOCTOR_CREATE(Keys.DOCTOR_CREATE, true),
@@ -176,6 +178,9 @@ public enum Permission {
         public static final String APPROVAL_DECIDE = "approval.decide";
         public static final String ARTWORK_APPROVAL_VIEW = "artwork_approval.view";
         public static final String ARTWORK_APPROVAL_CONFIGURE = "artwork_approval.configure";
+        /** The order-approval setup (on/off and who approves) -- the company admin's. Deciding on an order is approval.decide. */
+        public static final String ORDER_APPROVAL_VIEW = "order_approval.view";
+        public static final String ORDER_APPROVAL_CONFIGURE = "order_approval.configure";
 
         public static final String DOCTOR_VIEW = "doctor.view";
         public static final String DOCTOR_CREATE = "doctor.create";

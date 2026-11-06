@@ -59,6 +59,7 @@ public class QuickGiftService {
     private final RecipientService recipientService;
     private final OrderStatusHistoryService orderStatusHistoryService;
     private final OrderService orderService;
+    private final OrderApprovalService orderApprovalService;
     private final GiftService giftService;
     private final CompanyFeatureFlagService companyFeatureFlagService;
     private final VisibilityService visibilityService;
@@ -137,9 +138,14 @@ public class QuickGiftService {
         quickGift = quickGiftRequestRepository.saveAndFlush(quickGift);
         recipientService.upsertFromSubmission(company, name, phone, email, address, dob, pcode, doctor, requester);
 
-        // There is no approval step: choosing the gift is choosing the vendor, and the order goes straight to it.
+        // Choosing the gift is choosing the vendor. With order approval on, the order first waits for the requester's approver
+        // (an RM, say) and goes to that vendor only on their yes; otherwise it goes straight there.
         Order order = placeOrder(quickGift, requester);
-        orderService.assignOnPlacement(order, gift.getVendor());
+        if (orderApprovalService.requiresApproval(order)) {
+            orderApprovalService.submit(order);
+        } else {
+            orderService.assignOnPlacement(order, gift.getVendor());
+        }
         String recipientUploadUrl = quickGiftUploadService.requestPhotoIfMissing(quickGift);
         return QuickGiftRequestResponse.from(quickGift, photoUrlOf(quickGift), recipientUploadUrl);
     }
