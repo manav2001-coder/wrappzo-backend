@@ -5,7 +5,7 @@ import java.util.Map;
 
 /**
  * How files tied to an order are named, so the vendor (and anyone who downloads them) can tell at a glance whose they are:
- * the doctor's pcode, then the ordering AM's code. A proof is PCODE_AMCODE_vN.pdf; the recipient's photo is PCODE_AMCODE_photo.jpg.
+ * the doctor's pcode, then the ordering AM's code. A proof is PCODE_AMCODE_vN.pdf; the recipient's photos are PCODE_AMCODE_photo.jpg, PCODE_AMCODE_photo_2.jpg, ....
  */
 public final class FileNaming {
 
@@ -29,8 +29,14 @@ public final class FileNaming {
 
     /** PCODE_AMCODE_photo.ext -- the pcode part is "NA" until a pcode is known. */
     public static String photoName(String pcode, User am, String contentType) {
+        return photoName(pcode, am, contentType, 1);
+    }
+
+    /** The first photo is PCODE_AMCODE_photo.ext, the next PCODE_AMCODE_photo_2.ext, and so on. */
+    public static String photoName(String pcode, User am, String contentType, int number) {
         String type = contentType == null ? "" : contentType.split(";")[0].trim().toLowerCase();
-        return "%s_%s_photo.%s".formatted(part(pcode == null ? "" : pcode), part(amCode(am)), EXTENSION_BY_CONTENT_TYPE.getOrDefault(type, "jpg"));
+        return "%s_%s_photo%s.%s".formatted(part(pcode == null ? "" : pcode), part(amCode(am)), number > 1 ? "_" + number : "",
+                EXTENSION_BY_CONTENT_TYPE.getOrDefault(type, "jpg"));
     }
 
     /** The last path segment of a storage key -- the name the file downloads as. */

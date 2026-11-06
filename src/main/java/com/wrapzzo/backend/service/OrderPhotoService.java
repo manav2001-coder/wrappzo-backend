@@ -1,5 +1,7 @@
 package com.wrapzzo.backend.service;
 
+import com.wrapzzo.backend.dto.PhotoResponse;
+import java.util.List;
 import com.wrapzzo.backend.exception.OrderNotFoundException;
 import com.wrapzzo.backend.model.Order;
 import com.wrapzzo.backend.model.OrderSource;
@@ -29,21 +31,22 @@ public class OrderPhotoService {
     private final RecipientUploadService recipientUploadService;
     private final QuickGiftUploadService quickGiftUploadService;
 
-    /** Null if no photo has been uploaded yet (or this order has no gift-personalization photo to speak of). */
+    /** Empty if no photo has been uploaded yet (or this order has no gift-personalization photo to speak of). */
     @Transactional(readOnly = true)
-    public String resolvePhotoUrl(Order order) {
+    public List<PhotoResponse> resolvePhotos(Order order) {
         if (order.getSource() == OrderSource.CAMPAIGN && order.getSubmission() != null) {
             return submissionAttachmentRepository.findBySubmissionId(order.getSubmission().getId()).stream()
                     .filter(a -> PHOTO_FIELD_KEY.equals(a.getCampaignField().getFieldKey()))
                     .findFirst()
-                    .map(a -> fileStorageService.publicUrl(a.getFileKey()))
-                    .orElse(null);
+                    .map(a -> new PhotoResponse(fileStorageService.publicUrl(a.getFileKey()), FileNaming.lastSegment(a.getFileKey())))
+                    .stream()
+                    .toList();
         }
         return quickGiftRequestRepository.findByOrderId(order.getId())
-                .map(QuickGiftRequest::getPhotoKey)
-                .filter(key -> key != null)
-                .map(fileStorageService::publicUrl)
-                .orElse(null);
+                .map(request -> request.getPhotos().stream()
+                        .map(photo -> new PhotoResponse(fileStorageService.publicUrl(photo.getPhotoKey()), photo.getFileName()))
+                        .toList())
+                .orElse(List.of());
     }
 
     /**

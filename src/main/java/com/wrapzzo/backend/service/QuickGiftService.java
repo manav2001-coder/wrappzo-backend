@@ -2,6 +2,7 @@ package com.wrapzzo.backend.service;
 
 import com.wrapzzo.backend.dto.CreateQuickGiftRequest;
 import com.wrapzzo.backend.dto.DoctorDetails;
+import com.wrapzzo.backend.dto.PhotoResponse;
 import com.wrapzzo.backend.dto.PresignQuickGiftPhotoResponse;
 import com.wrapzzo.backend.dto.QuickGiftRequestResponse;
 import com.wrapzzo.backend.dto.RecipientResponse;
@@ -66,9 +67,9 @@ public class QuickGiftService {
     private final WarehouseService warehouseService;
 
     /** The photo is stored as quick-gifts/.../PCODE_AMCODE_photo.ext, the same convention as a proof, so a download tells whose it is. */
-    public PresignQuickGiftPhotoResponse presignPhoto(String contentType, String pcode) {
+    public PresignQuickGiftPhotoResponse presignPhoto(String contentType, String pcode, int number) {
         User user = currentUser();
-        String fileName = FileNaming.photoName(pcode, user, contentType);
+        String fileName = FileNaming.photoName(pcode, user, contentType, number);
         String key = "quick-gifts/%s/%s/%s/%s".formatted(user.getCompany().getId(), user.getId(), UUID.randomUUID(), fileName);
         String uploadUrl = fileStorageService.presignUpload(key, contentType, PHOTO_UPLOAD_URL_EXPIRY);
         return new PresignQuickGiftPhotoResponse(uploadUrl, key, fileName);
@@ -116,7 +117,7 @@ public class QuickGiftService {
         }
 
         boolean hasEmail = email != null && !email.isBlank();
-        if (gift.isPhotoRequired() && request.photo() == null && !hasEmail) {
+        if (gift.isPhotoRequired() && (request.photos() == null || request.photos().isEmpty()) && !hasEmail) {
             throw new PhotoOrEmailRequiredException();
         }
 
@@ -129,11 +130,11 @@ public class QuickGiftService {
         quickGift.setRecipientClinicName(doctor.clinicName());
         quickGift.setQuantity(quantity);
         quickGift.setOrgUnit(requester.getOrgUnit());
-        if (request.photo() != null) {
-            quickGift.setPhotoKey(request.photo().key());
-            // The name comes from the stored key (the server's PCODE_AMCODE_photo name), never from what the client calls the file.
-            quickGift.setPhotoFileName(FileNaming.lastSegment(request.photo().key()));
-            quickGift.setPhotoContentType(request.photo().contentType());
+        if (request.photos() != null) {
+            for (CreateQuickGiftRequest.QuickGiftPhotoInput photo : request.photos()) {
+                // The name comes from the stored key (the server's PCODE_AMCODE_photo name), never from what the client calls the file.
+                quickGift.addPhoto(photo.key(), FileNaming.lastSegment(photo.key()), photo.contentType());
+            }
         }
         quickGift = quickGiftRequestRepository.saveAndFlush(quickGift);
         recipientService.upsertFromSubmission(company, name, phone, email, address, dob, pcode, doctor, requester);
@@ -147,7 +148,7 @@ public class QuickGiftService {
             orderService.assignOnPlacement(order, gift.getVendor());
         }
         String recipientUploadUrl = quickGiftUploadService.requestPhotoIfMissing(quickGift);
-        return QuickGiftRequestResponse.from(quickGift, photoUrlOf(quickGift), recipientUploadUrl);
+        return QuickGiftRequestResponse.from(quickGift, photosOf(quickGift), recipientUploadUrl);
     }
 
     /** Creates the request's Order and marks the request placed. */
@@ -210,8 +211,8 @@ public class QuickGiftService {
         return request;
     }
 
-    private String photoUrlOf(QuickGiftRequest request) {
-        return request.getPhotoKey() != null ? fileStorageService.publicUrl(request.getPhotoKey()) : null;
+    private List<PhotoResponse> photosOf(QuickGiftRequest request) {
+        return request.getPhotos().stream().map(photo -> new PhotoResponse(fileStorageService.publicUrl(photo.getPhotoKey()), photo.getFileName())).toList();
     }
 
     private QuickGiftRequest getEntity(UUID id) {
@@ -237,6 +238,6 @@ public class QuickGiftService {
     }
 
     private QuickGiftRequestResponse toResponse(QuickGiftRequest request) {
-        return QuickGiftRequestResponse.from(request, photoUrlOf(request));
+        return QuickGiftRequestResponse.from(request, photosOf(request));
     }
 }

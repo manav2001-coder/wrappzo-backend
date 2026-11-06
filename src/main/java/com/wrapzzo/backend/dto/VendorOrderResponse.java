@@ -39,6 +39,8 @@ public record VendorOrderResponse(
         String divisionName,
         /** Null until the recipient uploads one -- shown so the vendor can produce a personalized gift correctly. */
         String recipientPhotoUrl,
+        /** All of the recipient's photos, first one first -- recipientPhotoUrl is the first. */
+        List<PhotoResponse> recipientPhotos,
         /** The gift's raw price -- no markup, no commission. Null if the gift has no price set. */
         BigDecimal price,
         int quantity,
@@ -68,7 +70,7 @@ public record VendorOrderResponse(
      * {@code request} is the Quick Gift request the order came from, or null (a campaign order);
      * {@code designs} are the order's proofs, newest version first.
      */
-    public static VendorOrderResponse from(Order order, String recipientPhotoUrl, QuickGiftRequest request, List<OrderDesign> designs, OrgUnit division) {
+    public static VendorOrderResponse from(Order order, List<PhotoResponse> recipientPhotos, QuickGiftRequest request, List<OrderDesign> designs, OrgUnit division) {
         OrderDesign latest = designs.isEmpty() ? null : designs.get(0);
         boolean artworkApproved = designs.stream().anyMatch(d -> d.getStatus() == OrderDesignStatus.APPROVED);
         return new VendorOrderResponse(
@@ -86,7 +88,8 @@ public record VendorOrderResponse(
                 order.getOwner().getOrgUnit() != null ? order.getOwner().getOrgUnit().getName() : null,
                 division != null ? division.getId() : null,
                 division != null ? division.getName() : null,
-                recipientPhotoUrl,
+                recipientPhotos.isEmpty() ? null : recipientPhotos.get(0).url(),
+                recipientPhotos,
                 order.getGift() != null ? order.getGift().getPrice() : null,
                 order.getQuantity(),
                 request != null ? request.getDeliveryAddress() : null,

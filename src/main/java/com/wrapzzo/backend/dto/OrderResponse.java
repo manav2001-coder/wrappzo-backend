@@ -28,6 +28,8 @@ public record OrderResponse(
         String recipientPhone,
         /** Null until the recipient (or someone on their behalf) uploads one -- see OrderPhotoService. */
         String recipientPhotoUrl,
+        /** All of the recipient's photos, first one first -- recipientPhotoUrl is the first. */
+        List<PhotoResponse> recipientPhotos,
         /** Snapshotted off the gift's total price at approval time -- see Order.totalPrice. */
         BigDecimal totalPrice,
         int quantity,
@@ -56,7 +58,7 @@ public record OrderResponse(
         String approvalDecidedByName) {
 
     public static OrderResponse from(
-            Order order, String recipientPhotoUrl, String giftImageUrl, List<StageEvent> history, boolean hasPendingDesignReview, boolean showVendor) {
+            Order order, List<PhotoResponse> recipientPhotos, String giftImageUrl, List<StageEvent> history, boolean hasPendingDesignReview, boolean showVendor) {
         return new OrderResponse(
                 order.getId(),
                 "ORD-" + order.getOrderNo(),
@@ -70,7 +72,8 @@ public record OrderResponse(
                 giftImageUrl,
                 order.getRecipientName(),
                 order.getRecipientPhone(),
-                recipientPhotoUrl,
+                recipientPhotos.isEmpty() ? null : recipientPhotos.get(0).url(),
+                recipientPhotos,
                 order.getTotalPrice(),
                 order.getQuantity(),
                 order.getOrgUnit() != null ? order.getOrgUnit().getName() : null,

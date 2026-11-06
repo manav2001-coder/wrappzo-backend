@@ -3,6 +3,7 @@ package com.wrapzzo.backend.service;
 import com.wrapzzo.backend.dto.BulkAssignResponse;
 import com.wrapzzo.backend.dto.DashboardResponse.StageEvent;
 import com.wrapzzo.backend.dto.OrderResponse;
+import com.wrapzzo.backend.dto.PhotoResponse;
 import com.wrapzzo.backend.dto.VendorOrderResponse;
 import com.wrapzzo.backend.exception.ArtworkNotApprovedException;
 import com.wrapzzo.backend.exception.ConflictException;
@@ -140,7 +141,7 @@ public class OrderService {
         Map<UUID, OrgUnit> divisions = new HashMap<>();
         return orders.stream()
                 .map(o -> VendorOrderResponse.from(
-                        o, orderPhotoService.resolvePhotoUrl(o), requestByOrderId.get(o.getId()), designsByOrderId.getOrDefault(o.getId(), List.of()),
+                        o, orderPhotoService.resolvePhotos(o), requestByOrderId.get(o.getId()), designsByOrderId.getOrDefault(o.getId(), List.of()),
                         divisionOf(o, divisions)))
                 .toList();
     }
@@ -181,7 +182,7 @@ public class OrderService {
     private VendorOrderResponse toVendorResponse(Order order) {
         QuickGiftRequest request = quickGiftRequestRepository.findByOrderId(order.getId()).orElse(null);
         List<OrderDesign> designs = orderDesignRepository.findByOrder_IdOrderByVersionNoDesc(order.getId());
-        return VendorOrderResponse.from(order, orderPhotoService.resolvePhotoUrl(order), request, designs, divisionOf(order, new HashMap<>()));
+        return VendorOrderResponse.from(order, orderPhotoService.resolvePhotos(order), request, designs, divisionOf(order, new HashMap<>()));
     }
 
     /** The division (level-1 org unit) an order was raised in: its own unit, else its owner's; null when placed nowhere. */
@@ -317,7 +318,7 @@ public class OrderService {
     private OrderResponse toResponse(Order order) {
         String giftImageUrl = order.getGift() != null ? firstImageUrlByGiftId(List.of(order.getGift().getId())).get(order.getGift().getId()) : null;
         boolean pending = !orderDesignRepository.findByOrder_IdInAndStatus(List.of(order.getId()), OrderDesignStatus.PENDING_REVIEW).isEmpty();
-        return OrderResponse.from(order, orderPhotoService.resolvePhotoUrl(order), giftImageUrl, stageEventsFor(order.getId()), pending,
+        return OrderResponse.from(order, orderPhotoService.resolvePhotos(order), giftImageUrl, stageEventsFor(order.getId()), pending,
                 vendorIdentityPolicy.canSee());
     }
 
@@ -335,7 +336,7 @@ public class OrderService {
         return orders.stream()
                 .map(o -> OrderResponse.from(
                         o,
-                        orderPhotoService.resolvePhotoUrl(o),
+                        orderPhotoService.resolvePhotos(o),
                         o.getGift() != null ? firstImageUrlByGiftId.get(o.getGift().getId()) : null,
                         toStageEvents(historyByOrderId.getOrDefault(o.getId(), List.of())),
                         ordersPendingDesignReview.contains(o.getId()),

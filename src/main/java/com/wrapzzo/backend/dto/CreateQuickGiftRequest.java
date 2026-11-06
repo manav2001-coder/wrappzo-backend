@@ -7,6 +7,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -26,7 +27,8 @@ public record CreateQuickGiftRequest(
         LocalDate recipientDob,
         String giftMessage,
         String internalNotes,
-        @Valid QuickGiftPhotoInput photo,
+        /** The recipient's photos (up to 10), each already presigned and uploaded -- optional; with none, a self-upload link goes to the recipient. */
+        @Size(max = 10, message = "An order can carry at most 10 photos.") List<@Valid QuickGiftPhotoInput> photos,
         /** Print details for a new doctor; ignored (the directory's own are used) when recipientId is set. */
         @Valid DoctorDetails doctor,
         /** Units to order -- pads, say. Null means 1. */

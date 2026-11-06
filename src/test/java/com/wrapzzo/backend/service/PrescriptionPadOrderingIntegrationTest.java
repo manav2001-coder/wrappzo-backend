@@ -213,10 +213,33 @@ class PrescriptionPadOrderingIntegrationTest {
     @Test
     void theRecipientPhotoIsStoredUnderTheDoctorsPcodeAndTheAmsCode() {
         actAs(mrNorth);
-        var presign = quickGiftService.presignPhoto("image/png", "PC-ASHA");
+        var presign = quickGiftService.presignPhoto("image/png", "PC-ASHA", 1);
 
         assertThat(presign.fileName()).isEqualTo("PC-ASHA_MR-North_photo.png");
         assertThat(presign.key()).endsWith("/PC-ASHA_MR-North_photo.png");
+        // More photos of the same order are numbered, so none overwrites another.
+        assertThat(quickGiftService.presignPhoto("image/jpeg", "PC-ASHA", 2).fileName()).isEqualTo("PC-ASHA_MR-North_photo_2.jpg");
+    }
+
+    @Test
+    void anOrderCanCarryManyRecipientPhotosAndTheVendorSeesThemAllInOrder() {
+        actAs(mrNorth);
+        var first = quickGiftService.presignPhoto("image/png", "PC-ASHA", 1);
+        var second = quickGiftService.presignPhoto("image/jpeg", "PC-ASHA", 2);
+        var request = padOrder(pad, 1);
+        var placed = quickGiftService.create(new CreateQuickGiftRequest(
+                request.giftId(), null, request.recipientName(), request.recipientPhone(), request.recipientPcode(), null, request.deliveryAddress(), null, null, null,
+                List.of(new CreateQuickGiftRequest.QuickGiftPhotoInput(first.key(), "a.png", "image/png"),
+                        new CreateQuickGiftRequest.QuickGiftPhotoInput(second.key(), "b.jpg", "image/jpeg")),
+                request.doctor(), 1));
+
+        assertThat(placed.photos()).extracting(p -> p.fileName()).containsExactly("PC-ASHA_MR-North_photo.png", "PC-ASHA_MR-North_photo_2.jpg");
+        assertThat(placed.photoFileName()).isEqualTo("PC-ASHA_MR-North_photo.png");
+
+        actAsVendor(printer);
+        VendorOrderResponse vendorView = orderService.getForVendor(placed.orderId(), printer.getId());
+        assertThat(vendorView.recipientPhotos()).extracting(p -> p.fileName()).containsExactly("PC-ASHA_MR-North_photo.png", "PC-ASHA_MR-North_photo_2.jpg");
+        assertThat(vendorView.recipientPhotoUrl()).isEqualTo(vendorView.recipientPhotos().get(0).url());
     }
 
     @Test

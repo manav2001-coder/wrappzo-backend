@@ -1,5 +1,6 @@
 package com.wrapzzo.backend.model;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -10,11 +11,15 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.time.LocalDate;
 import java.util.UUID;
 import lombok.Getter;
@@ -105,14 +110,10 @@ public class QuickGiftRequest {
     @Column(name = "internal_notes")
     private String internalNotes;
 
-    @Column(name = "photo_key")
-    private String photoKey;
-
-    @Column(name = "photo_file_name")
-    private String photoFileName;
-
-    @Column(name = "photo_content_type")
-    private String photoContentType;
+    /** The recipient's photos (V76), in the order they were added. */
+    @OneToMany(mappedBy = "quickGiftRequest", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("position ASC")
+    private List<QuickGiftPhoto> photos = new ArrayList<>();
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
@@ -156,7 +157,16 @@ public class QuickGiftRequest {
     }
 
     public boolean hasPhoto() {
-        return photoKey != null;
+        return !photos.isEmpty();
+    }
+
+    public void addPhoto(String key, String fileName, String contentType) {
+        photos.add(new QuickGiftPhoto(this, photos.size() + 1, key, fileName, contentType));
+    }
+
+    /** Drops every photo (the recipient's own upload replaces what the AM added). The caller deletes the stored files. */
+    public void clearPhotos() {
+        photos.clear();
     }
 
     @PrePersist

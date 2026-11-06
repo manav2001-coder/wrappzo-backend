@@ -6,6 +6,7 @@ import com.wrapzzo.backend.model.QuickGiftRequest;
 import com.wrapzzo.backend.model.QuickGiftStatus;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 public record QuickGiftRequestResponse(
@@ -30,8 +31,10 @@ public record QuickGiftRequestResponse(
         String orgUnitName,
         String giftMessage,
         String internalNotes,
+        /** The first photo, for screens that show one; {@code photos} has them all. */
         String photoUrl,
         String photoFileName,
+        List<PhotoResponse> photos,
         QuickGiftStatus status,
         String rejectionReason,
         String reviewedByName,
@@ -42,11 +45,11 @@ public record QuickGiftRequestResponse(
         /** Whether the order is held for its approver (PENDING) or went straight to production; null before an order exists. */
         OrderApprovalStatus orderApprovalStatus) {
 
-    public static QuickGiftRequestResponse from(QuickGiftRequest request, String photoUrl) {
-        return from(request, photoUrl, null);
+    public static QuickGiftRequestResponse from(QuickGiftRequest request, List<PhotoResponse> photos) {
+        return from(request, photos, null);
     }
 
-    public static QuickGiftRequestResponse from(QuickGiftRequest request, String photoUrl, String recipientUploadUrl) {
+    public static QuickGiftRequestResponse from(QuickGiftRequest request, List<PhotoResponse> photos, String recipientUploadUrl) {
         Order order = request.getOrder();
         return new QuickGiftRequestResponse(
                 request.getId(),
@@ -68,8 +71,9 @@ public record QuickGiftRequestResponse(
                 request.getOrgUnit() != null ? request.getOrgUnit().getName() : null,
                 request.getGiftMessage(),
                 request.getInternalNotes(),
-                photoUrl,
-                request.getPhotoFileName(),
+                photos.isEmpty() ? null : photos.get(0).url(),
+                photos.isEmpty() ? null : photos.get(0).fileName(),
+                photos,
                 request.getStatus(),
                 request.getRejectionReason(),
                 request.getReviewedBy() != null ? request.getReviewedBy().getName() : null,

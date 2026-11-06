@@ -151,12 +151,9 @@ public class QuickGiftUploadService {
         QuickGiftRequest quickGift = token.getQuickGiftRequest();
 
         // A re-request (requestAgain) can land here a second time -- replace, don't leak the old file.
-        if (quickGift.getPhotoKey() != null) {
-            fileStorageService.delete(quickGift.getPhotoKey());
-        }
-        quickGift.setPhotoKey(request.key());
-        quickGift.setPhotoFileName(FileNaming.lastSegment(request.key()));
-        quickGift.setPhotoContentType(request.mimeType());
+        quickGift.getPhotos().forEach(photo -> fileStorageService.delete(photo.getPhotoKey()));
+        quickGift.clearPhotos();
+        quickGift.addPhoto(request.key(), FileNaming.lastSegment(request.key()), request.mimeType());
         token.setUsedAt(Instant.now());
     }
 
