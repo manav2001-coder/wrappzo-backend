@@ -2,6 +2,10 @@ package com.wrapzzo.backend.controller;
 
 import com.wrapzzo.backend.dto.UpdateOrderStatusRequest;
 import com.wrapzzo.backend.dto.WarehouseOrderResponse;
+import com.wrapzzo.backend.list.ListQueryParams;
+import com.wrapzzo.backend.list.PageResponse;
+import com.wrapzzo.backend.model.OrderStatus;
+import java.util.Map;
 import com.wrapzzo.backend.dto.WarehouseRequest;
 import com.wrapzzo.backend.dto.WarehouseResponse;
 import com.wrapzzo.backend.security.Permission.Keys;
@@ -45,10 +49,18 @@ public class WarehouseController {
         return warehouseService.update(id, request);
     }
 
-    @GetMapping("/orders")
+    /** One page of the warehouse queue: ?page=0&size=25&search=&sort=updatedAt&dir=desc&filters=[{field,operator,value}]. */
+    @GetMapping("/orders/page")
     @RequiresPermission(Keys.WAREHOUSE_VIEW)
-    public List<WarehouseOrderResponse> orders() {
-        return warehouseService.listOrders();
+    public PageResponse<WarehouseOrderResponse> orders(ListQueryParams params) {
+        return warehouseService.pageOrders(params.toQuery());
+    }
+
+    /** How many orders are in each stage of the queue. */
+    @GetMapping("/orders/summary")
+    @RequiresPermission(Keys.WAREHOUSE_VIEW)
+    public Map<OrderStatus, Long> orderCounts() {
+        return warehouseService.orderCounts();
     }
 
     @PostMapping("/orders/{orderId}/status")

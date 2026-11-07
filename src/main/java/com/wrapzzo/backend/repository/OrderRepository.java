@@ -66,9 +66,6 @@ public interface OrderRepository extends JpaRepository<Order, UUID>, org.springf
     /** A company's orders waiting on their approver (V74), oldest first -- the approvers' queue. */
     List<Order> findByCompanyIdAndApprovalStatusOrderByCreatedAtAsc(UUID companyId, OrderApprovalStatus approvalStatus);
 
-    /** A company's warehouse-routed orders in the given stages -- the warehouse's work queue. */
-    List<Order> findByCompanyIdAndWarehouseIsNotNullAndStatusInOrderByUpdatedAtDesc(UUID companyId, Collection<OrderStatus> statuses);
-
     /** A company's Quick Gift orders -- no campaign to key off, so this is the bulk-assign source for that pseudo-group. */
     List<Order> findByCompanyIdAndCampaignIdIsNullOrderByCreatedAtDesc(UUID companyId);
 

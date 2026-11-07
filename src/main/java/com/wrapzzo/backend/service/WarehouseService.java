@@ -1,6 +1,11 @@
 package com.wrapzzo.backend.service;
 
 import com.wrapzzo.backend.dto.WarehouseOrderResponse;
+import com.wrapzzo.backend.list.ListQuery;
+import com.wrapzzo.backend.list.ListSpecs;
+import com.wrapzzo.backend.list.PageResponse;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import com.wrapzzo.backend.dto.WarehouseRequest;
 import com.wrapzzo.backend.dto.WarehouseResponse;
 import com.wrapzzo.backend.exception.InvalidOrderStatusTransitionException;
@@ -122,21 +127,32 @@ public class WarehouseService {
         order.setWarehouse(nearest);
     }
 
-    /** Warehouse-routed orders the caller can see (see Visibility), from production through delivery. */
+    /** One page of the warehouse-routed orders the caller can see (see Visibility), from production through delivery. */
     @Transactional(readOnly = true)
-    public List<WarehouseOrderResponse> listOrders() {
+    public PageResponse<WarehouseOrderResponse> pageOrders(ListQuery query) {
+        return ListSpecs.page(orderRepository, queueScope(), query, WarehouseOrderListFields.fields(), Sort.by(Sort.Direction.DESC, "updatedAt"), orders -> {
+            Map<UUID, QuickGiftRequest> requestByOrderId = quickGiftRequestRepository
+                    .findByOrder_IdIn(orders.stream().map(Order::getId).toList())
+                    .stream()
+                    .collect(Collectors.toMap(r -> r.getOrder().getId(), Function.identity()));
+            return orders.stream().map(o -> WarehouseOrderResponse.from(o, requestByOrderId.get(o.getId()))).toList();
+        });
+    }
+
+    /** How many orders are in each stage of the queue, counted in the database. */
+    @Transactional(readOnly = true)
+    public Map<OrderStatus, Long> orderCounts() {
+        Specification<Order> scope = queueScope();
+        Map<OrderStatus, Long> counts = new java.util.EnumMap<>(OrderStatus.class);
+        for (OrderStatus status : QUEUE_STATUSES) {
+            counts.put(status, orderRepository.count(scope.and((root, query, cb) -> cb.equal(root.get("status"), status))));
+        }
+        return counts;
+    }
+
+    private Specification<Order> queueScope() {
         User user = currentUser();
-        Visibility visibility = visibilityService.resolve(user);
-        List<Order> orders = orderRepository
-                .findByCompanyIdAndWarehouseIsNotNullAndStatusInOrderByUpdatedAtDesc(user.getCompany().getId(), QUEUE_STATUSES)
-                .stream()
-                .filter(o -> visibility.canSee(o.getOwner(), o.getOrgUnit()))
-                .toList();
-        Map<UUID, QuickGiftRequest> requestByOrderId = quickGiftRequestRepository
-                .findByOrder_IdIn(orders.stream().map(Order::getId).toList())
-                .stream()
-                .collect(Collectors.toMap(r -> r.getOrder().getId(), Function.identity()));
-        return orders.stream().map(o -> WarehouseOrderResponse.from(o, requestByOrderId.get(o.getId()))).toList();
+        return OrderListFields.visibleIn(user.getCompany().getId(), visibilityService.resolve(user)).and(WarehouseOrderListFields.inQueue(QUEUE_STATUSES));
     }
 
     /** One step along the warehouse leg; anything but the next stage from the current one is a 409. */

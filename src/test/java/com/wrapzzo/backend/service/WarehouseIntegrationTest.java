@@ -1,5 +1,6 @@
 package com.wrapzzo.backend.service;
 
+import com.wrapzzo.backend.list.ListQuery;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -180,10 +181,11 @@ class WarehouseIntegrationTest {
                 .isInstanceOf(InvalidOrderStatusTransitionException.class);
 
         actAs(warehouseAdmin);
-        assertThat(warehouseService.listOrders()).extracting(WarehouseOrderResponse::id).contains(orderId);
+        assertThat(warehouseService.pageOrders(ListQuery.firstPage(100)).data()).extracting(WarehouseOrderResponse::id).contains(orderId);
         // No skipping a stage.
         assertThatThrownBy(() -> warehouseService.advance(orderId, OrderStatus.OUT_FOR_DELIVERY))
                 .isInstanceOf(InvalidOrderStatusTransitionException.class);
+        assertThat(warehouseService.orderCounts()).containsEntry(OrderStatus.DISPATCHED, 1L).containsEntry(OrderStatus.DELIVERED, 0L);
         warehouseService.advance(orderId, OrderStatus.RECEIVED_AT_WAREHOUSE);
         warehouseService.advance(orderId, OrderStatus.OUT_FOR_DELIVERY);
         WarehouseOrderResponse delivered = warehouseService.advance(orderId, OrderStatus.DELIVERED);
