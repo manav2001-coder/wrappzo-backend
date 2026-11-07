@@ -4,6 +4,8 @@ import com.wrapzzo.backend.dto.BulkDoctorsRequest;
 import com.wrapzzo.backend.dto.BulkDoctorsResponse;
 import com.wrapzzo.backend.dto.CreateRecipientRequest;
 import com.wrapzzo.backend.dto.RecipientResponse;
+import com.wrapzzo.backend.list.ListQueryParams;
+import com.wrapzzo.backend.list.PageResponse;
 import com.wrapzzo.backend.dto.UpcomingBirthdayResponse;
 import com.wrapzzo.backend.dto.UpdateRecipientRequest;
 import com.wrapzzo.backend.security.Permission.Keys;
@@ -34,10 +36,18 @@ public class RecipientController {
 
     private final RecipientService recipientService;
 
-    @GetMapping
+    /** One page: ?page=0&size=25&search=&sort=name&dir=asc&filters=[{field,operator,value}]. */
+    @GetMapping("/page")
     @RequiresPermission(Keys.DOCTOR_VIEW)
-    public List<RecipientResponse> list() {
-        return recipientService.list();
+    public PageResponse<RecipientResponse> page(ListQueryParams params) {
+        return recipientService.page(params.toQuery());
+    }
+
+    /** One page of the doctors on the caller's own list -- for the Quick Gift form's picker. */
+    @GetMapping("/mine/page")
+    @PreAuthorize("hasAnyAuthority('" + Keys.DOCTOR_VIEW + "', '" + Keys.QUICK_GIFT_CREATE + "')")
+    public PageResponse<RecipientResponse> minePage(ListQueryParams params) {
+        return recipientService.pageMine(params.toQuery());
     }
 
     /** "Pick an existing doctor" for the Quick Gift form -- anyone who can send a gift can search, not just doctor.view holders. */
@@ -45,13 +55,6 @@ public class RecipientController {
     @PreAuthorize("hasAnyAuthority('" + Keys.DOCTOR_VIEW + "', '" + Keys.QUICK_GIFT_CREATE + "')")
     public List<RecipientResponse> search(@RequestParam String q) {
         return recipientService.search(q);
-    }
-
-    /** The doctors on the caller's own list (recipient_assignments) -- who the Quick Gift form offers first. */
-    @GetMapping("/mine")
-    @PreAuthorize("hasAnyAuthority('" + Keys.DOCTOR_VIEW + "', '" + Keys.QUICK_GIFT_CREATE + "')")
-    public List<RecipientResponse> mine() {
-        return recipientService.listMine();
     }
 
     /** Adds a doctor and puts them on the caller's list -- no approval step. */

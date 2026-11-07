@@ -1,5 +1,6 @@
 package com.wrapzzo.backend.service;
 
+import com.wrapzzo.backend.list.ListQuery;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
@@ -312,11 +313,11 @@ class PrescriptionPadOrderingIntegrationTest {
         UUID northOrder = quickGiftService.create(padOrder(pad, 1)).orderId();
 
         actAs(zonalManagerNorth);
-        assertThat(orderService.list()).extracting(OrderResponse::id).contains(northOrder);
+        assertThat(orderService.page(ListQuery.firstPage(100)).data()).extracting(OrderResponse::id).contains(northOrder);
         assertThat(orderService.get(northOrder).orgUnitName()).isEqualTo("N1");
 
         actAs(mrSouth);
-        assertThat(orderService.list()).extracting(OrderResponse::id).doesNotContain(northOrder);
+        assertThat(orderService.page(ListQuery.firstPage(100)).data()).extracting(OrderResponse::id).doesNotContain(northOrder);
         assertThatThrownBy(() -> orderService.get(northOrder)).isInstanceOf(OrderNotFoundException.class);
     }
 
@@ -332,7 +333,7 @@ class PrescriptionPadOrderingIntegrationTest {
         headOffice = userRepository.save(headOffice);
 
         actAs(headOffice);
-        assertThat(orderService.list()).extracting(OrderResponse::id).contains(northOrder);
+        assertThat(orderService.page(ListQuery.firstPage(100)).data()).extracting(OrderResponse::id).contains(northOrder);
     }
 
     @Test
@@ -400,11 +401,11 @@ class PrescriptionPadOrderingIntegrationTest {
         actAs(mrNorth);
         assertThatThrownBy(() -> orderDesignService.approve(orderId, proof.getId())).isInstanceOf(AccessDeniedException.class);
         actAs(mrSouth);
-        assertThat(orderDesignService.listPendingFinalApproval()).isEmpty();
+        assertThat(orderDesignService.pagePendingFinalApproval(ListQuery.firstPage(100)).data()).isEmpty();
         assertThatThrownBy(() -> orderDesignService.approve(orderId, proof.getId())).isInstanceOf(AccessDeniedException.class);
 
         actAs(zonalManagerNorth);
-        assertThat(orderDesignService.listPendingFinalApproval())
+        assertThat(orderDesignService.pagePendingFinalApproval(ListQuery.firstPage(100)).data())
                 .extracting(PendingArtworkApprovalResponse::designId, PendingArtworkApprovalResponse::mrApprovedByName)
                 .containsExactly(tuple(proof.getId(), "MR North"));
         assertThat(orderDesignService.approve(orderId, proof.getId()).status()).isEqualTo(OrderDesignStatus.APPROVED);
@@ -424,7 +425,7 @@ class PrescriptionPadOrderingIntegrationTest {
         actAs(zonalManagerNorth);
         assertThat(orderDesignService.reject(orderId, proof.getId(), "Use the clinic's new address").status())
                 .isEqualTo(OrderDesignStatus.REJECTED);
-        assertThat(orderDesignService.listPendingFinalApproval()).isEmpty();
+        assertThat(orderDesignService.pagePendingFinalApproval(ListQuery.firstPage(100)).data()).isEmpty();
     }
 
     @Test
@@ -479,15 +480,15 @@ class PrescriptionPadOrderingIntegrationTest {
 
         assertThat(orderDesignService.approve(orderId, proof.getId()).waitingOnName()).isEqualTo("RM North");
         actAs(zonalManagerNorth);
-        assertThat(orderDesignService.listPendingFinalApproval()).isEmpty();
+        assertThat(orderDesignService.pagePendingFinalApproval(ListQuery.firstPage(100)).data()).isEmpty();
         assertThatThrownBy(() -> orderDesignService.approve(orderId, proof.getId())).isInstanceOf(AccessDeniedException.class);
 
         actAs(rm);
         assertThat(orderDesignService.approve(orderId, proof.getId()).waitingOnName()).isEqualTo("HO of Division");
         actAs(hoOther);
-        assertThat(orderDesignService.listPendingFinalApproval()).isEmpty();
+        assertThat(orderDesignService.pagePendingFinalApproval(ListQuery.firstPage(100)).data()).isEmpty();
         actAs(hoOne);
-        assertThat(orderDesignService.listPendingFinalApproval()).hasSize(1);
+        assertThat(orderDesignService.pagePendingFinalApproval(ListQuery.firstPage(100)).data()).hasSize(1);
         assertThat(orderDesignService.approve(orderId, proof.getId()).status()).isEqualTo(OrderDesignStatus.APPROVED);
         actAs(hoTwo);
         assertThatThrownBy(() -> orderDesignService.approve(orderId, proof.getId())).isInstanceOf(OrderDesignAlreadyReviewedException.class);

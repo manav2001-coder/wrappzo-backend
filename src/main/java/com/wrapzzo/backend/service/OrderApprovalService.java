@@ -2,6 +2,9 @@ package com.wrapzzo.backend.service;
 
 import com.wrapzzo.backend.dto.PendingOrderApprovalResponse;
 import com.wrapzzo.backend.exception.ConflictException;
+import com.wrapzzo.backend.list.ListInMemory;
+import com.wrapzzo.backend.list.ListQuery;
+import com.wrapzzo.backend.list.PageResponse;
 import com.wrapzzo.backend.exception.OrderNotFoundException;
 import com.wrapzzo.backend.model.ArtworkApprovalScope;
 import com.wrapzzo.backend.model.Company;
@@ -19,7 +22,10 @@ import com.wrapzzo.backend.repository.UserRepository;
 import com.wrapzzo.backend.security.CurrentUser;
 import com.wrapzzo.backend.security.Permission;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.HashSet;
+import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -66,16 +72,36 @@ public class OrderApprovalService {
         eventPublisher.publishEvent(new OrderAwaitingApprovalEvent(order.getId()));
     }
 
-    /** The orders waiting on the caller: the ones they are the approver of, or can cover. */
+    /**
+     * One page of the orders waiting on the caller. Narrowed in the database to orders within their reach (an approver sees their
+     * team's), then to the ones that are theirs to decide; only the page is turned into a response.
+     */
     @Transactional(readOnly = true)
-    public List<PendingOrderApprovalResponse> listPending() {
+    public PageResponse<PendingOrderApprovalResponse> pagePending(ListQuery query) {
         User user = currentUser();
-        List<Order> waiting = orderRepository.findByCompanyIdAndApprovalStatusOrderByCreatedAtAsc(user.getCompany().getId(), OrderApprovalStatus.PENDING);
         Set<String> keys = accessControlCacheService.resolveEffectiveKeys(user);
-        return waiting.stream()
+        if (!keys.contains(Permission.APPROVAL_DECIDE.key()) && !keys.contains(Permission.ARTWORK_FINAL_APPROVE.key())) {
+            return new PageResponse<>(List.of(), 0, query.page(), query.size(), false);
+        }
+        Visibility visibility = visibilityService.resolve(user);
+        List<Order> mine = orderRepository
+                .findPendingApprovalVisible(user.getCompany().getId(), visibility.companyWide(), visibility.peopleForQuery(), visibility.orgUnitsForQuery())
+                .stream()
                 .filter(order -> mayDecide(order, user, keys))
-                .map(order -> PendingOrderApprovalResponse.from(order, quickGiftRequestRepository.findByOrderId(order.getId()).orElse(null)))
                 .toList();
+        Map<UUID, QuickGiftRequest> requests = quickGiftRequestRepository.findByOrder_IdIn(mine.stream().map(Order::getId).toList()).stream()
+                .collect(Collectors.toMap(r -> r.getOrder().getId(), r -> r));
+        ListInMemory<Order> list = new ListInMemory<Order>()
+                .column("displayId", o -> "ORD-" + o.getOrderNo(), true)
+                .column("giftName", o -> o.getGift() != null ? o.getGift().getName() : null, true)
+                .column("recipientName", Order::getRecipientName, true)
+                .column("recipientPcode", o -> requests.containsKey(o.getId()) ? requests.get(o.getId()).getRecipientPcode() : null, true)
+                .column("requestedByName", o -> o.getOwner().getName(), true)
+                .column("orgUnitName", o -> o.getOrgUnit() != null ? o.getOrgUnit().getName() : null, true)
+                .column("quantity", Order::getQuantity, false)
+                .column("requestedAt", Order::getCreatedAt, false);
+        return list.page(mine, query, Comparator.comparing(Order::getCreatedAt))
+                .map(page -> page.stream().map(order -> PendingOrderApprovalResponse.from(order, requests.get(order.getId()))).toList());
     }
 
     @Transactional

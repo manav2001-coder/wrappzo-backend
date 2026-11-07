@@ -11,7 +11,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-public interface OrderRepository extends JpaRepository<Order, UUID> {
+public interface OrderRepository extends JpaRepository<Order, UUID>, org.springframework.data.jpa.repository.JpaSpecificationExecutor<Order> {
 
     List<Order> findByCompanyIdOrderByCreatedAtDesc(UUID companyId);
 
@@ -23,6 +23,47 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
             order by o.createdAt desc
             """)
     List<Order> findVisibleInCompany(@Param("companyId") UUID companyId, @Param("companyWide") boolean companyWide,
+            @Param("people") Collection<UUID> people, @Param("orgUnits") Collection<UUID> orgUnits);
+
+    /** Counts per status of the orders a caller can see -- the stat cards over a list, without loading it. */
+    @Query("""
+            select o.status, count(o) from Order o
+            where o.company.id = :companyId
+              and (:companyWide = true or o.owner.id in :people or o.orgUnit.id in :orgUnits)
+            group by o.status
+            """)
+    List<Object[]> countVisibleByStatus(@Param("companyId") UUID companyId, @Param("companyWide") boolean companyWide,
+            @Param("people") Collection<UUID> people, @Param("orgUnits") Collection<UUID> orgUnits);
+
+    @Query("""
+            select count(o) from Order o
+            where o.company.id = :companyId
+              and (:companyWide = true or o.owner.id in :people or o.orgUnit.id in :orgUnits)
+              and exists (select 1 from OrderDesign d where d.order = o and d.status = com.wrapzzo.backend.model.OrderDesignStatus.PENDING_REVIEW)
+            """)
+    long countVisibleAwaitingReview(@Param("companyId") UUID companyId, @Param("companyWide") boolean companyWide,
+            @Param("people") Collection<UUID> people, @Param("orgUnits") Collection<UUID> orgUnits);
+
+    @Query("select o.status, count(o) from Order o where o.company.id = :companyId group by o.status")
+    List<Object[]> countByStatusInCompany(@Param("companyId") UUID companyId);
+
+    /** Live orders with no vendor yet that are not held for their approver. */
+    @Query("""
+            select count(o) from Order o
+            where o.company.id = :companyId and o.assignedVendor is null
+              and o.status <> com.wrapzzo.backend.model.OrderStatus.CANCELLED
+              and o.approvalStatus <> com.wrapzzo.backend.model.OrderApprovalStatus.PENDING
+            """)
+    long countUnassignedInCompany(@Param("companyId") UUID companyId);
+
+    /** Orders waiting on an approver, within a caller's reach -- the candidates for their queue, which is then narrowed to the ones that are theirs to decide. */
+    @Query("""
+            select o from Order o
+            where o.company.id = :companyId and o.approvalStatus = com.wrapzzo.backend.model.OrderApprovalStatus.PENDING
+              and (:companyWide = true or o.owner.id in :people or o.orgUnit.id in :orgUnits)
+            order by o.createdAt asc
+            """)
+    List<Order> findPendingApprovalVisible(@Param("companyId") UUID companyId, @Param("companyWide") boolean companyWide,
             @Param("people") Collection<UUID> people, @Param("orgUnits") Collection<UUID> orgUnits);
 
     List<Order> findByCampaignIdOrderByCreatedAtDesc(UUID campaignId);
@@ -45,7 +86,6 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
     Optional<Order> findBySubmissionId(UUID submissionId);
 
     /** Cross-company -- Admin's Orders oversight (PRD Part 1.5), not scoped to one company. */
-    List<Order> findAllByOrderByCreatedAtDesc();
 
     /** Naive load-balancing input for auto-assign: how many in-flight orders a vendor already has. */
     long countByAssignedVendorIdAndStatusIn(UUID vendorId, List<OrderStatus> statuses);

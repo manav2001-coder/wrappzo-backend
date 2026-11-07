@@ -3,6 +3,11 @@ package com.wrapzzo.backend.service;
 import com.wrapzzo.backend.dto.BulkAssignResponse;
 import com.wrapzzo.backend.dto.DashboardResponse.StageEvent;
 import com.wrapzzo.backend.dto.OrderResponse;
+import com.wrapzzo.backend.dto.OrderSummaryResponse;
+import com.wrapzzo.backend.list.ListQuery;
+import com.wrapzzo.backend.list.ListSpecs;
+import com.wrapzzo.backend.list.PageResponse;
+import org.springframework.data.domain.Sort;
 import com.wrapzzo.backend.dto.PhotoResponse;
 import com.wrapzzo.backend.dto.VendorOrderResponse;
 import com.wrapzzo.backend.exception.ArtworkNotApprovedException;
@@ -87,13 +92,49 @@ public class OrderService {
     private final OrderDesignRepository orderDesignRepository;
     private final FileStorageService fileStorageService;
 
-    /** The orders the caller can see (see Visibility), newest first. */
+    /** One page of the orders the caller can see (see Visibility), searched, filtered and sorted in the database. */
     @Transactional(readOnly = true)
-    public List<OrderResponse> list() {
+    public PageResponse<OrderResponse> page(ListQuery query) {
+        User user = currentUser();
+        return ListSpecs.page(orderRepository, OrderListFields.visibleIn(user.getCompany().getId(), visibilityService.resolve(user)), query,
+                OrderListFields.of(vendorIdentityPolicy.canSee(), false), Sort.by(Sort.Direction.DESC, "createdAt"), this::toResponseList);
+    }
+
+    /** The figures over the same orders: counted in the database, whatever page the list is on. */
+    @Transactional(readOnly = true)
+    public OrderSummaryResponse summary() {
         User user = currentUser();
         Visibility visibility = visibilityService.resolve(user);
-        return toResponseList(orderRepository.findVisibleInCompany(
-                user.getCompany().getId(), visibility.companyWide(), visibility.peopleForQuery(), visibility.orgUnitsForQuery()));
+        UUID companyId = user.getCompany().getId();
+        Map<OrderStatus, Long> byStatus = tally(orderRepository.countVisibleByStatus(companyId, visibility.companyWide(), visibility.peopleForQuery(), visibility.orgUnitsForQuery()));
+        long awaitingReview = orderRepository.countVisibleAwaitingReview(companyId, visibility.companyWide(), visibility.peopleForQuery(), visibility.orgUnitsForQuery());
+        return new OrderSummaryResponse(byStatus.values().stream().mapToLong(Long::longValue).sum(), byStatus, awaitingReview, 0);
+    }
+
+    private static Map<OrderStatus, Long> tally(List<Object[]> rows) {
+        Map<OrderStatus, Long> byStatus = new java.util.EnumMap<>(OrderStatus.class);
+        for (Object[] row : rows) {
+            byStatus.put((OrderStatus) row[0], (Long) row[1]);
+        }
+        return byStatus;
+    }
+
+    /** One page of every company's orders for Wrappzo staff -- narrow it to a company with the companyId filter. */
+    @Transactional(readOnly = true)
+    public PageResponse<OrderResponse> pageForPlatform(ListQuery query) {
+        return ListSpecs.page(orderRepository, (root, q, cb) -> cb.conjunction(), query, OrderListFields.of(true, true),
+                Sort.by(Sort.Direction.DESC, "createdAt"), this::toResponseList);
+    }
+
+    @Transactional(readOnly = true)
+    public OrderResponse getForPlatform(UUID id) {
+        return toResponse(getEntity(id));
+    }
+
+    @Transactional(readOnly = true)
+    public OrderSummaryResponse summaryForPlatform(UUID companyId) {
+        Map<OrderStatus, Long> byStatus = tally(orderRepository.countByStatusInCompany(companyId));
+        return new OrderSummaryResponse(byStatus.values().stream().mapToLong(Long::longValue).sum(), byStatus, 0, orderRepository.countUnassignedInCompany(companyId));
     }
 
     @Transactional(readOnly = true)
@@ -205,12 +246,7 @@ public class OrderService {
 
     // --- Admin/platform side: every company's orders, for fulfillment assignment. ---
 
-    @Transactional(readOnly = true)
-    public List<OrderResponse> listAllForPlatform() {
-        return toResponseList(orderRepository.findAllByOrderByCreatedAtDesc());
-    }
-
-    /** Unscoped by company, matching listAllForPlatform() -- platform admin can chase a photo for any order. */
+    /** Unscoped by company -- platform admin can chase a photo for any order. */
     @Transactional
     public String requestPhotoLinkForPlatform(UUID id) {
         return orderPhotoService.requestPhotoLink(getEntity(id));

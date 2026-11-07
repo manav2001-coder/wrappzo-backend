@@ -1,5 +1,6 @@
 package com.wrapzzo.backend.service;
 
+import com.wrapzzo.backend.list.ListQuery;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -207,7 +208,7 @@ class UserServiceIntegrationTest {
                 company.getId(),
                 List.of(new BulkImportUserRow("Listed Person", "listed@nanz-test.com", null, "KAM", "Member", null, null, null)));
 
-        List<UserResponse> listed = userService.listByCompany(company.getId());
+        List<UserResponse> listed = userService.pageByCompany(company.getId(), ListQuery.firstPage(100)).data();
         assertThat(listed).extracting(UserResponse::email).contains("listed@nanz-test.com");
     }
 

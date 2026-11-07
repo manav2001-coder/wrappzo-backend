@@ -3,6 +3,9 @@ package com.wrapzzo.backend.service;
 import com.wrapzzo.backend.dto.BulkImportUserRow;
 import com.wrapzzo.backend.dto.BulkImportUsersResponse;
 import com.wrapzzo.backend.dto.UserResponse;
+import com.wrapzzo.backend.list.ListQuery;
+import com.wrapzzo.backend.list.ListSpecs;
+import com.wrapzzo.backend.list.PageResponse;
 import com.wrapzzo.backend.exception.CannotDeleteSelfException;
 import com.wrapzzo.backend.exception.CompanyNotFoundException;
 import com.wrapzzo.backend.exception.ConflictException;
@@ -229,18 +232,13 @@ public class UserService {
         return UserResponse.from(user);
     }
 
+    /** One page of the company's people the caller looks after, searched, filtered and sorted in the database. */
     @Transactional(readOnly = true)
-    public List<UserResponse> listByCompany(UUID companyId) {
+    public PageResponse<UserResponse> pageByCompany(UUID companyId, ListQuery query) {
         companyAccessGuard.requireOwnCompanyOrPlatformStaff(companyId);
         User caller = currentUser();
-        Visibility visibility = visibilityService.resolve(caller);
-        // The caller owns themselves for visibility, but the Users list is "the people I look after".
-        return userRepository
-                .findVisibleInCompany(companyId, visibility.companyWide(), visibility.peopleForQuery(), visibility.orgUnitsForQuery())
-                .stream()
-                .filter(user -> !user.getId().equals(caller.getId()))
-                .map(UserResponse::from)
-                .toList();
+        return ListSpecs.page(userRepository, UserListFields.lookedAfterBy(companyId, visibilityService.resolve(caller), caller.getId()), query,
+                UserListFields.fields(), org.springframework.data.domain.Sort.by("name"), users -> users.stream().map(UserResponse::from).toList());
     }
 
     /**

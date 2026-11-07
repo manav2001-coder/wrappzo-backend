@@ -9,7 +9,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-public interface UserRepository extends JpaRepository<User, UUID> {
+public interface UserRepository extends JpaRepository<User, UUID>, org.springframework.data.jpa.repository.JpaSpecificationExecutor<User> {
 
     Optional<User> findByEmail(String email);
 
@@ -49,14 +49,4 @@ public interface UserRepository extends JpaRepository<User, UUID> {
             SELECT id FROM reporting_line
             """, nativeQuery = true)
     List<UUID> findReportingLineIds(@Param("managerId") UUID managerId);
-
-    /** A company's users the caller can see (see Visibility) -- a user counts as owned by themselves, in their own unit. */
-    @Query("""
-            select u from User u
-            where u.company.id = :companyId
-              and (:companyWide = true or u.id in :people or u.orgUnit.id in :orgUnits)
-            order by u.name asc
-            """)
-    List<User> findVisibleInCompany(@Param("companyId") UUID companyId, @Param("companyWide") boolean companyWide,
-            @Param("people") Collection<UUID> people, @Param("orgUnits") Collection<UUID> orgUnits);
 }

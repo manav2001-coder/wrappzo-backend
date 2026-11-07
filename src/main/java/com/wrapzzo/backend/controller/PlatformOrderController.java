@@ -3,6 +3,10 @@ package com.wrapzzo.backend.controller;
 import com.wrapzzo.backend.dto.AssignOrderVendorRequest;
 import com.wrapzzo.backend.dto.BulkAssignResponse;
 import com.wrapzzo.backend.dto.OrderResponse;
+import com.wrapzzo.backend.dto.OrderSummaryResponse;
+import com.wrapzzo.backend.list.ListQueryParams;
+import com.wrapzzo.backend.list.PageResponse;
+import org.springframework.web.bind.annotation.RequestParam;
 import com.wrapzzo.backend.dto.RequestPhotoLinkResponse;
 import com.wrapzzo.backend.security.Permission.Keys;
 import com.wrapzzo.backend.security.RequiresPermission;
@@ -26,10 +30,23 @@ public class PlatformOrderController {
 
     private final OrderService orderService;
 
-    @GetMapping
+    /** One page of every company's orders; narrow to a company with a companyId filter. */
+    @GetMapping("/page")
     @RequiresPermission(Keys.PLATFORM_ORDER_VIEW)
-    public List<OrderResponse> list() {
-        return orderService.listAllForPlatform();
+    public PageResponse<OrderResponse> page(ListQueryParams params) {
+        return orderService.pageForPlatform(params.toQuery());
+    }
+
+    @GetMapping("/summary")
+    @RequiresPermission(Keys.PLATFORM_ORDER_VIEW)
+    public OrderSummaryResponse summary(@RequestParam UUID companyId) {
+        return orderService.summaryForPlatform(companyId);
+    }
+
+    @GetMapping("/{id}")
+    @RequiresPermission(Keys.PLATFORM_ORDER_VIEW)
+    public OrderResponse get(@PathVariable UUID id) {
+        return orderService.getForPlatform(id);
     }
 
     @PostMapping("/{id}/requestPhotoLink")

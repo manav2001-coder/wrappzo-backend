@@ -10,9 +10,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.repository.query.Param;
 import org.springframework.data.jpa.repository.Query;
 
-public interface QuickGiftRequestRepository extends JpaRepository<QuickGiftRequest, UUID> {
+public interface QuickGiftRequestRepository extends JpaRepository<QuickGiftRequest, UUID>, org.springframework.data.jpa.repository.JpaSpecificationExecutor<QuickGiftRequest> {
 
-    List<QuickGiftRequest> findByRequestedByIdOrderByCreatedAtDesc(UUID userId);
 
     List<QuickGiftRequest> findByCompanyIdOrderByCreatedAtDesc(UUID companyId);
 

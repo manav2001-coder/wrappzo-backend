@@ -20,6 +20,17 @@ public interface OrderDesignRepository extends JpaRepository<OrderDesign, UUID> 
 
     List<OrderDesign> findByStatusAndOrder_Company_IdOrderByUpdatedAtAsc(OrderDesignStatus status, UUID companyId);
 
+    /** Proofs at a given status whose order is within a caller's reach -- the candidates for their queue, narrowed afterwards to the ones that are theirs to sign. */
+    @org.springframework.data.jpa.repository.Query("""
+            select d from OrderDesign d
+            where d.status = :status and d.order.company.id = :companyId
+              and (:companyWide = true or d.order.owner.id in :people or d.order.orgUnit.id in :orgUnits)
+            order by d.updatedAt asc
+            """)
+    List<OrderDesign> findByStatusVisible(@org.springframework.data.repository.query.Param("status") OrderDesignStatus status,
+            @org.springframework.data.repository.query.Param("companyId") UUID companyId, @org.springframework.data.repository.query.Param("companyWide") boolean companyWide,
+            @org.springframework.data.repository.query.Param("people") Collection<UUID> people, @org.springframework.data.repository.query.Param("orgUnits") Collection<UUID> orgUnits);
+
     /** Every proof of several orders, newest version first within each -- one query for the vendor's order queue. */
     List<OrderDesign> findByOrder_IdInOrderByVersionNoDesc(Collection<UUID> orderIds);
 

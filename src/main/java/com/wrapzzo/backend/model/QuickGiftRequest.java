@@ -112,6 +112,7 @@ public class QuickGiftRequest {
 
     /** The recipient's photos (V76), in the order they were added. */
     @OneToMany(mappedBy = "quickGiftRequest", cascade = CascadeType.ALL, orphanRemoval = true)
+    @org.hibernate.annotations.BatchSize(size = 50)
     @OrderBy("position ASC")
     private List<QuickGiftPhoto> photos = new ArrayList<>();
 

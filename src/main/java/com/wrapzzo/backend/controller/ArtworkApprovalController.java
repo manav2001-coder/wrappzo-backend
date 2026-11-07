@@ -1,6 +1,8 @@
 package com.wrapzzo.backend.controller;
 
 import com.wrapzzo.backend.dto.PendingArtworkApprovalResponse;
+import com.wrapzzo.backend.list.ListQueryParams;
+import com.wrapzzo.backend.list.PageResponse;
 import com.wrapzzo.backend.security.Permission.Keys;
 import com.wrapzzo.backend.service.OrderDesignService;
 import java.util.List;
@@ -23,9 +25,9 @@ public class ArtworkApprovalController {
 
     private final OrderDesignService orderDesignService;
 
-    @GetMapping("/pending")
+    @GetMapping("/pending/page")
     @PreAuthorize("hasAuthority('" + Keys.APPROVAL_VIEW + "')")
-    public List<PendingArtworkApprovalResponse> pending() {
-        return orderDesignService.listPendingFinalApproval();
+    public PageResponse<PendingArtworkApprovalResponse> pendingPage(ListQueryParams params) {
+        return orderDesignService.pagePendingFinalApproval(params.toQuery());
     }
 }

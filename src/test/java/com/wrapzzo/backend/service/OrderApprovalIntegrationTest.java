@@ -1,5 +1,6 @@
 package com.wrapzzo.backend.service;
 
+import com.wrapzzo.backend.list.ListQuery;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -169,14 +170,14 @@ class OrderApprovalIntegrationTest {
 
         // Only the RM above the requester sees it waiting -- not the requester, not another RM.
         actAs(mr);
-        assertThat(orderApprovalService.listPending()).isEmpty();
+        assertThat(orderApprovalService.pagePending(ListQuery.firstPage(100)).data()).isEmpty();
         actAs(otherRm);
-        assertThat(orderApprovalService.listPending()).isEmpty();
+        assertThat(orderApprovalService.pagePending(ListQuery.firstPage(100)).data()).isEmpty();
         actAs(rm);
-        assertThat(orderApprovalService.listPending()).extracting(p -> p.orderId()).containsExactly(order.getId());
+        assertThat(orderApprovalService.pagePending(ListQuery.firstPage(100)).data()).extracting(p -> p.orderId()).containsExactly(order.getId());
         // An HO holding Final Artwork Approval is not in this cycle: the order has its RM, so it is not theirs to see or decide.
         actAs(ho);
-        assertThat(orderApprovalService.listPending()).isEmpty();
+        assertThat(orderApprovalService.pagePending(ListQuery.firstPage(100)).data()).isEmpty();
         assertThatThrownBy(() -> orderApprovalService.approve(order.getId(), null)).isInstanceOf(ConflictException.class).hasMessageContaining("not waiting on you");
         actAs(rm);
 
@@ -192,7 +193,30 @@ class OrderApprovalIntegrationTest {
         assertThat(order.getApprovalDecidedBy().getId()).isEqualTo(rm.getId());
         assertThat(order.getAssignedVendor().getId()).isEqualTo(printer.getId());
         assertThat(order.getStatus()).isEqualTo(OrderStatus.PRODUCTION_QUEUE);
-        assertThat(orderApprovalService.listPending()).isEmpty();
+        assertThat(orderApprovalService.pagePending(ListQuery.firstPage(100)).data()).isEmpty();
+    }
+
+    @Test
+    void theQueueIsPagedAndSearchableAndOnlyHoldsOrdersWithinTheApproversReach() {
+        switchOn(ArtworkApprovalScope.REPORTING_LINE);
+        place(mr);
+        place(mr);
+        place(mr);
+
+        actAs(rm);
+        var first = orderApprovalService.pagePending(new com.wrapzzo.backend.list.ListQueryParams(0, 2, null, null, null, null).toQuery());
+        assertThat(first.total()).isEqualTo(3);
+        assertThat(first.data()).hasSize(2);
+        assertThat(first.hasMore()).isTrue();
+        assertThat(orderApprovalService.pagePending(new com.wrapzzo.backend.list.ListQueryParams(0, 10, "PC-ASHA", null, null, null).toQuery()).total()).isEqualTo(3);
+        assertThat(orderApprovalService.pagePending(new com.wrapzzo.backend.list.ListQueryParams(0, 10, "nobody", null, null, null).toQuery()).total()).isZero();
+
+        // An RM in another team has none of them within reach.
+        actAs(otherRm);
+        assertThat(orderApprovalService.pagePending(new com.wrapzzo.backend.list.ListQueryParams(0, 10, null, null, null, null).toQuery()).total()).isZero();
+        // Someone without the decide key has no queue at all.
+        actAs(mr);
+        assertThat(orderApprovalService.pagePending(new com.wrapzzo.backend.list.ListQueryParams(0, 10, null, null, null, null).toQuery()).total()).isZero();
     }
 
     @Test
@@ -231,9 +255,9 @@ class OrderApprovalIntegrationTest {
 
         // Whoever holds the role in the requester's division (the top of their tree) may decide -- here the one placed in it.
         actAs(divisionRm);
-        assertThat(orderApprovalService.listPending()).extracting(p -> p.orderId()).containsExactly(order.getId());
+        assertThat(orderApprovalService.pagePending(ListQuery.firstPage(100)).data()).extracting(p -> p.orderId()).containsExactly(order.getId());
         actAs(otherRm);
-        assertThat(orderApprovalService.listPending()).isEmpty();
+        assertThat(orderApprovalService.pagePending(ListQuery.firstPage(100)).data()).isEmpty();
         actAs(divisionRm);
         orderApprovalService.approve(order.getId(), null);
         assertThat(order.getAssignedVendor().getId()).isEqualTo(printer.getId());
@@ -255,10 +279,10 @@ class OrderApprovalIntegrationTest {
 
         assertThat(order.getApprovalStatus()).isEqualTo(OrderApprovalStatus.PENDING);
         actAs(rm);
-        assertThat(orderApprovalService.listPending()).isEmpty();
+        assertThat(orderApprovalService.pagePending(ListQuery.firstPage(100)).data()).isEmpty();
         // With no RM to decide it, the HO covers.
         actAs(ho);
-        assertThat(orderApprovalService.listPending()).extracting(p -> p.orderId()).containsExactly(order.getId());
+        assertThat(orderApprovalService.pagePending(ListQuery.firstPage(100)).data()).extracting(p -> p.orderId()).containsExactly(order.getId());
         orderApprovalService.approve(order.getId(), null);
         assertThat(order.getAssignedVendor().getId()).isEqualTo(printer.getId());
     }

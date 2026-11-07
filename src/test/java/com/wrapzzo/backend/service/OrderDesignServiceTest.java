@@ -1,8 +1,10 @@
 package com.wrapzzo.backend.service;
 
+import com.wrapzzo.backend.list.ListQuery;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -111,7 +113,7 @@ class OrderDesignServiceTest {
         when(approvals.existsByDesign_IdAndDecidedBy_Id(eq(design.getId()), any()))
                 .thenAnswer(inv -> trail.stream().anyMatch(a -> a.getDecidedBy().getId().equals(inv.getArgument(1))));
         when(approvals.findByDesign_IdInOrderByDecidedAtAsc(anyCollection())).thenAnswer(inv -> List.copyOf(trail));
-        when(designs.findByStatusAndOrder_Company_IdOrderByUpdatedAtAsc(OrderDesignStatus.PENDING_FINAL_APPROVAL, company.getId()))
+        when(designs.findByStatusVisible(eq(OrderDesignStatus.PENDING_FINAL_APPROVAL), eq(company.getId()), anyBoolean(), anyCollection(), anyCollection()))
                 .thenAnswer(inv -> design.getStatus() == OrderDesignStatus.PENDING_FINAL_APPROVAL ? List.of(design) : List.of());
     }
 
@@ -169,7 +171,7 @@ class OrderDesignServiceTest {
     void aFinalApprovalHolderCoversALevelAndTheTrailSaysForWhom() {
         approveAs(aditi);
         as(neha);
-        List<PendingArtworkApprovalResponse> queue = service.listPendingFinalApproval();
+        List<PendingArtworkApprovalResponse> queue = service.pagePendingFinalApproval(ListQuery.firstPage(100)).data();
         assertThat(queue).singleElement().satisfies(item -> {
             assertThat(item.covering()).isTrue();
             assertThat(item.waitingOnName()).isEqualTo("Sanjay");
@@ -187,12 +189,12 @@ class OrderDesignServiceTest {
     void onlyTheManagerTheLevelWaitsOnSeesItInTheirQueue() {
         approveAs(aditi);
         as(sanjay);
-        assertThat(service.listPendingFinalApproval()).singleElement().satisfies(item -> assertThat(item.covering()).isFalse());
+        assertThat(service.pagePendingFinalApproval(ListQuery.firstPage(100)).data()).singleElement().satisfies(item -> assertThat(item.covering()).isFalse());
         as(ravi);
-        assertThat(service.listPendingFinalApproval()).isEmpty();
+        assertThat(service.pagePendingFinalApproval(ListQuery.firstPage(100)).data()).isEmpty();
         assertThatThrownBy(() -> approveAs(ravi)).isInstanceOf(AccessDeniedException.class).hasMessageContaining("Sanjay");
         as(aditi);
-        assertThat(service.listPendingFinalApproval()).isEmpty();
+        assertThat(service.pagePendingFinalApproval(ListQuery.firstPage(100)).data()).isEmpty();
     }
 
     @Test
@@ -209,7 +211,7 @@ class OrderDesignServiceTest {
         when(keys.resolveEffectiveKeys(sanjay)).thenReturn(Set.of("artwork.review"));
         assertThatThrownBy(() -> approveAs(sanjay)).isInstanceOf(AccessDeniedException.class).hasMessageContaining("Approve artwork");
         as(sanjay);
-        assertThat(service.listPendingFinalApproval()).isEmpty();
+        assertThat(service.pagePendingFinalApproval(ListQuery.firstPage(100)).data()).isEmpty();
 
         // With the cycle permission he can.
         when(keys.resolveEffectiveKeys(sanjay)).thenReturn(Set.of("approval.decide"));
@@ -300,9 +302,9 @@ class OrderDesignServiceTest {
 
         // The ZM watches: not his to sign, and not in his queue.
         assertThatThrownBy(() -> approveAs(zm)).isInstanceOf(AccessDeniedException.class).hasMessageContaining("Ravi RM");
-        assertThat(service.listPendingFinalApproval()).isEmpty();
+        assertThat(service.pagePendingFinalApproval(ListQuery.firstPage(100)).data()).isEmpty();
         as(hoOne);
-        assertThat(service.listPendingFinalApproval()).isEmpty();
+        assertThat(service.pagePendingFinalApproval(ListQuery.firstPage(100)).data()).isEmpty();
 
         OrderDesignResponse afterRm = approveAs(rm);
         assertThat(afterRm.approvalLevel()).isEqualTo(2);
@@ -311,13 +313,13 @@ class OrderDesignServiceTest {
         // Both HOs of the division see it as theirs; the other division's HO and the ZM do not.
         for (User ho : List.of(hoOne, hoTwo)) {
             as(ho);
-            assertThat(service.listPendingFinalApproval()).singleElement().satisfies(item -> {
+            assertThat(service.pagePendingFinalApproval(ListQuery.firstPage(100)).data()).singleElement().satisfies(item -> {
                 assertThat(item.covering()).isFalse();
                 assertThat(item.waitingOnName()).isEqualTo("HO of Summit");
             });
         }
         as(hoElsewhere);
-        assertThat(service.listPendingFinalApproval()).isEmpty();
+        assertThat(service.pagePendingFinalApproval(ListQuery.firstPage(100)).data()).isEmpty();
         assertThatThrownBy(() -> approveAs(hoElsewhere)).isInstanceOf(AccessDeniedException.class).hasMessageContaining("HO of Summit");
 
         // The first HO to act decides.

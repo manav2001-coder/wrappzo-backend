@@ -4,6 +4,8 @@ import com.wrapzzo.backend.dto.OrderApprovalDecisionRequest;
 import com.wrapzzo.backend.dto.OrderApprovalSettingsRequest;
 import com.wrapzzo.backend.dto.OrderApprovalSettingsResponse;
 import com.wrapzzo.backend.dto.PendingOrderApprovalResponse;
+import com.wrapzzo.backend.list.ListQueryParams;
+import com.wrapzzo.backend.list.PageResponse;
 import com.wrapzzo.backend.security.Permission.Keys;
 import com.wrapzzo.backend.security.RequiresPermission;
 import com.wrapzzo.backend.service.OrderApprovalService;
@@ -30,10 +32,10 @@ public class OrderApprovalController {
     private final OrderApprovalService orderApprovalService;
     private final OrderApprovalSettingsService settingsService;
 
-    @GetMapping("/pending")
+    @GetMapping("/pending/page")
     @RequiresPermission(Keys.APPROVAL_VIEW)
-    public List<PendingOrderApprovalResponse> pending() {
-        return orderApprovalService.listPending();
+    public PageResponse<PendingOrderApprovalResponse> pendingPage(ListQueryParams params) {
+        return orderApprovalService.pagePending(params.toQuery());
     }
 
     @PostMapping("/{orderId}/approve")

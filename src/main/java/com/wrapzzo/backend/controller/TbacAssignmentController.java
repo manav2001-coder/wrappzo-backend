@@ -7,6 +7,8 @@ import com.wrapzzo.backend.dto.IdListResponse;
 import com.wrapzzo.backend.dto.RoleResponse;
 import com.wrapzzo.backend.dto.TbacTemplateResponse;
 import com.wrapzzo.backend.dto.UserResponse;
+import com.wrapzzo.backend.list.ListQueryParams;
+import com.wrapzzo.backend.list.PageResponse;
 import com.wrapzzo.backend.security.Permission.Keys;
 import com.wrapzzo.backend.security.RequiresPermission;
 import com.wrapzzo.backend.security.TbacAccess;
@@ -80,10 +82,10 @@ public class TbacAssignmentController {
 
     // --- users ---
 
-    @GetMapping("/users")
+    @GetMapping("/users/page")
     @PreAuthorize(TbacAccess.USER_READ)
-    public List<UserResponse> users(@RequestParam(required = false) UUID companyId) {
-        return userService.listByCompany(templateService.requireCompanyScope(companyId));
+    public PageResponse<UserResponse> usersPage(@RequestParam(required = false) UUID companyId, ListQueryParams params) {
+        return userService.pageByCompany(templateService.requireCompanyScope(companyId), params.toQuery());
     }
 
     @GetMapping("/users/{userId}")

@@ -6,6 +6,8 @@ import com.wrapzzo.backend.dto.ChangeUserRoleRequest;
 import com.wrapzzo.backend.dto.SetExtraOrgUnitsRequest;
 import com.wrapzzo.backend.dto.SetCompanyWideRequest;
 import com.wrapzzo.backend.dto.UserResponse;
+import com.wrapzzo.backend.list.ListQueryParams;
+import com.wrapzzo.backend.list.PageResponse;
 import com.wrapzzo.backend.security.Permission.Keys;
 import com.wrapzzo.backend.security.RequiresPermission;
 import com.wrapzzo.backend.service.UserService;
@@ -36,10 +38,11 @@ public class UserController {
         return userService.bulkImport(companyId, request.rows());
     }
 
-    @GetMapping("/list")
+    /** One page: ?page=0&size=25&search=&sort=name&dir=asc&filters=[{field,operator,value}]. */
+    @GetMapping("/page")
     @RequiresPermission(Keys.USER_VIEW)
-    public List<UserResponse> list(@PathVariable UUID companyId) {
-        return userService.listByCompany(companyId);
+    public PageResponse<UserResponse> page(@PathVariable UUID companyId, ListQueryParams params) {
+        return userService.pageByCompany(companyId, params.toQuery());
     }
 
     @PostMapping("/{userId}/makeCompanyAdmin")

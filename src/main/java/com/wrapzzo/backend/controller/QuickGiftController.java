@@ -4,6 +4,8 @@ import com.wrapzzo.backend.dto.CreateQuickGiftRequest;
 import com.wrapzzo.backend.dto.PresignQuickGiftPhotoRequest;
 import com.wrapzzo.backend.dto.PresignQuickGiftPhotoResponse;
 import com.wrapzzo.backend.dto.QuickGiftRequestResponse;
+import com.wrapzzo.backend.list.ListQueryParams;
+import com.wrapzzo.backend.list.PageResponse;
 import com.wrapzzo.backend.dto.RejectQuickGiftRequest;
 import com.wrapzzo.backend.dto.RequestPhotoLinkResponse;
 import com.wrapzzo.backend.security.Permission.Keys;
@@ -41,10 +43,11 @@ public class QuickGiftController {
         return quickGiftService.create(request);
     }
 
-    @GetMapping("/mine")
+    /** One page of the caller's own requests: ?page=0&size=25&search=&sort=createdAt&dir=desc&filters=[{field,operator,value}]. */
+    @GetMapping("/mine/page")
     @RequiresPermission(Keys.QUICK_GIFT_CREATE)
-    public List<QuickGiftRequestResponse> mine() {
-        return quickGiftService.listMine();
+    public PageResponse<QuickGiftRequestResponse> minePage(ListQueryParams params) {
+        return quickGiftService.pageMine(params.toQuery());
     }
 
     @GetMapping("/{id}")

@@ -1,11 +1,13 @@
 package com.wrapzzo.backend.controller;
 
 import com.wrapzzo.backend.dto.OrderResponse;
+import com.wrapzzo.backend.dto.OrderSummaryResponse;
+import com.wrapzzo.backend.list.ListQueryParams;
+import com.wrapzzo.backend.list.PageResponse;
 import com.wrapzzo.backend.dto.RequestPhotoLinkResponse;
 import com.wrapzzo.backend.security.Permission.Keys;
 import com.wrapzzo.backend.security.RequiresPermission;
 import com.wrapzzo.backend.service.OrderService;
-import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,9 +30,16 @@ public class OrderController {
 
     private final OrderService orderService;
 
-    @GetMapping
-    public List<OrderResponse> list() {
-        return orderService.list();
+    /** One page: ?page=0&size=25&search=&sort=createdAt&dir=desc&filters=[{field,operator,value}]. */
+    @GetMapping("/page")
+    public PageResponse<OrderResponse> page(ListQueryParams params) {
+        return orderService.page(params.toQuery());
+    }
+
+    /** The figures over the list (counts by status, proofs waiting), whatever page it is on. */
+    @GetMapping("/summary")
+    public OrderSummaryResponse summary() {
+        return orderService.summary();
     }
 
     @GetMapping("/{id}")

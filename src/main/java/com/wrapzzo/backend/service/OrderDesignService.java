@@ -6,6 +6,9 @@ import com.wrapzzo.backend.dto.OrderDesignResponse;
 import com.wrapzzo.backend.dto.PendingArtworkApprovalResponse;
 import com.wrapzzo.backend.dto.PresignOrderDesignResponse;
 import com.wrapzzo.backend.exception.ConflictException;
+import com.wrapzzo.backend.list.ListInMemory;
+import com.wrapzzo.backend.list.ListQuery;
+import com.wrapzzo.backend.list.PageResponse;
 import com.wrapzzo.backend.exception.InvalidArtworkFileException;
 import com.wrapzzo.backend.exception.OrderDesignAlreadyReviewedException;
 import com.wrapzzo.backend.exception.OrderDesignNotFoundException;
@@ -37,6 +40,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -212,13 +216,15 @@ public class OrderDesignService {
      * manager, or for an MR with no one above them).
      */
     @Transactional(readOnly = true)
-    public List<PendingArtworkApprovalResponse> listPendingFinalApproval() {
+    private List<PendingArtworkApprovalResponse> listPendingFinalApproval() {
         User reviewer = currentUser();
         if (reviewer.getCompany() == null) {
             return List.of();
         }
-        List<OrderDesign> pending = orderDesignRepository
-                .findByStatusAndOrder_Company_IdOrderByUpdatedAtAsc(OrderDesignStatus.PENDING_FINAL_APPROVAL, reviewer.getCompany().getId());
+        // Only proofs of orders in the reviewer's reach can be theirs (the manager a level waits on sees their team's orders; cover is gated on seeing the order).
+        Visibility visibility = visibilityService.resolve(reviewer);
+        List<OrderDesign> pending = orderDesignRepository.findByStatusVisible(OrderDesignStatus.PENDING_FINAL_APPROVAL, reviewer.getCompany().getId(),
+                visibility.companyWide(), visibility.peopleForQuery(), visibility.orgUnitsForQuery());
         Map<UUID, List<ArtworkApprovalStep>> trails = trailsOf(pending);
         List<PendingArtworkApprovalResponse> queue = new ArrayList<>();
         for (OrderDesign design : pending) {
@@ -232,6 +238,21 @@ public class OrderDesignService {
                     trails.getOrDefault(design.getId(), List.of())));
         }
         return queue;
+    }
+
+    /** One page of the proofs waiting on the caller, searched, filtered and sorted. Bounded by what is waiting on them, not by all there ever was. */
+    @Transactional(readOnly = true)
+    public PageResponse<PendingArtworkApprovalResponse> pagePendingFinalApproval(ListQuery query) {
+        return new ListInMemory<PendingArtworkApprovalResponse>()
+                .column("orderDisplayId", PendingArtworkApprovalResponse::orderDisplayId, true)
+                .column("giftName", PendingArtworkApprovalResponse::giftName, true)
+                .column("recipientName", PendingArtworkApprovalResponse::recipientName, true)
+                .column("requestedByName", PendingArtworkApprovalResponse::requestedByName, true)
+                .column("quantity", PendingArtworkApprovalResponse::quantity, false)
+                .column("versionNo", PendingArtworkApprovalResponse::versionNo, false)
+                .column("approvalLevel", PendingArtworkApprovalResponse::approvalLevel, false)
+                .column("mrApprovedAt", PendingArtworkApprovalResponse::mrApprovedAt, false)
+                .page(listPendingFinalApproval(), query, Comparator.comparing(PendingArtworkApprovalResponse::mrApprovedAt, Comparator.nullsLast(Comparator.naturalOrder())).reversed());
     }
 
     /**

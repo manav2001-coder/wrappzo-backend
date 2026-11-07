@@ -3,6 +3,10 @@ package com.wrapzzo.backend.service;
 import com.wrapzzo.backend.dto.CreateQuickGiftRequest;
 import com.wrapzzo.backend.dto.DoctorDetails;
 import com.wrapzzo.backend.dto.PhotoResponse;
+import com.wrapzzo.backend.list.ListQuery;
+import com.wrapzzo.backend.list.ListSpecs;
+import com.wrapzzo.backend.list.PageResponse;
+import org.springframework.data.domain.Sort;
 import com.wrapzzo.backend.dto.PresignQuickGiftPhotoResponse;
 import com.wrapzzo.backend.dto.QuickGiftRequestResponse;
 import com.wrapzzo.backend.dto.RecipientResponse;
@@ -170,12 +174,11 @@ public class QuickGiftService {
         return order;
     }
 
+    /** One page of the caller's own Quick Gift requests, newest first unless sorted otherwise -- searched, filtered and sorted in the database. */
     @Transactional(readOnly = true)
-    public List<QuickGiftRequestResponse> listMine() {
-        User user = currentUser();
-        return quickGiftRequestRepository.findByRequestedByIdOrderByCreatedAtDesc(user.getId()).stream()
-                .map(this::toResponse)
-                .toList();
+    public PageResponse<QuickGiftRequestResponse> pageMine(ListQuery query) {
+        return ListSpecs.page(quickGiftRequestRepository, QuickGiftListFields.requestedBy(currentUser().getId()), query, QuickGiftListFields.fields(),
+                Sort.by(Sort.Direction.DESC, "createdAt"), requests -> requests.stream().map(this::toResponse).toList());
     }
 
     @Transactional(readOnly = true)

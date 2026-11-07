@@ -1,5 +1,6 @@
 package com.wrapzzo.backend.service;
 
+import com.wrapzzo.backend.list.ListQuery;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -172,7 +173,7 @@ class OrgScopeIntegrationTest {
         UUID southOrder = placeOrder(mrSouth);
 
         actAs(manager);
-        assertThat(orderService.list()).extracting(OrderResponse::id).contains(northOrder).doesNotContain(southOrder);
+        assertThat(orderService.page(ListQuery.firstPage(100)).data()).extracting(OrderResponse::id).contains(northOrder).doesNotContain(southOrder);
 
         actAs(platformAdmin);
         UserResponse updated = userService.setExtraOrgUnits(company.getId(), manager.getId(), List.of(south.getId(), north.getId()));
@@ -183,7 +184,7 @@ class OrgScopeIntegrationTest {
         visibilityService.onCompanyStructureChanged(new CompanyStructureChangedEvent(company.getId()));
 
         actAs(manager);
-        assertThat(orderService.list()).extracting(OrderResponse::id).contains(northOrder, southOrder);
+        assertThat(orderService.page(ListQuery.firstPage(100)).data()).extracting(OrderResponse::id).contains(northOrder, southOrder);
     }
 
     @Test
@@ -237,29 +238,29 @@ class OrgScopeIntegrationTest {
         RecipientResponse added = recipientService.createMine(new CreateRecipientRequest(
                 "Dr. Meera Iyer", "9800000077", "PC-777", null, "Clinic Road", null, new DoctorDetails(null, null, null)));
         assertThat(added.inMyList()).isTrue();
-        assertThat(recipientService.list()).extracting(RecipientResponse::id).contains(added.id());
+        assertThat(recipientService.page(ListQuery.firstPage(100)).data()).extracting(RecipientResponse::id).contains(added.id());
 
         // A peer in another zone never sees it; the manager of the zone does, without it being on their own list.
         actAs(mrSouth);
-        assertThat(recipientService.list()).extracting(RecipientResponse::id).doesNotContain(added.id());
+        assertThat(recipientService.page(ListQuery.firstPage(100)).data()).extracting(RecipientResponse::id).doesNotContain(added.id());
         actAs(manager);
-        RecipientResponse seenByManager = recipientService.list().stream().filter(r -> r.id().equals(added.id())).findFirst().orElseThrow();
+        RecipientResponse seenByManager = recipientService.page(ListQuery.firstPage(100)).data().stream().filter(r -> r.id().equals(added.id())).findFirst().orElseThrow();
         assertThat(seenByManager.inMyList()).isFalse();
 
         // Taking it off their list makes it disappear for them, and leaves it with the manager.
         actAs(mrNorth);
         recipientService.removeMine(added.id());
-        assertThat(recipientService.list()).extracting(RecipientResponse::id).doesNotContain(added.id());
+        assertThat(recipientService.page(ListQuery.firstPage(100)).data()).extracting(RecipientResponse::id).doesNotContain(added.id());
         actAs(manager);
-        assertThat(recipientService.list()).extracting(RecipientResponse::id).contains(added.id());
+        assertThat(recipientService.page(ListQuery.firstPage(100)).data()).extracting(RecipientResponse::id).contains(added.id());
     }
 
     @Test
     void aDoctorAddedThroughAQuickGiftIsOnTheAddersList() {
         placeOrder(mrNorth);
         actAs(mrNorth);
-        assertThat(recipientService.list()).extracting(RecipientResponse::name).contains("Dr. " + mrNorth.getName());
-        assertThat(recipientService.list()).allSatisfy(r -> assertThat(r.inMyList()).isTrue());
+        assertThat(recipientService.page(ListQuery.firstPage(100)).data()).extracting(RecipientResponse::name).contains("Dr. " + mrNorth.getName());
+        assertThat(recipientService.page(ListQuery.firstPage(100)).data()).allSatisfy(r -> assertThat(r.inMyList()).isTrue());
     }
 
     @Test

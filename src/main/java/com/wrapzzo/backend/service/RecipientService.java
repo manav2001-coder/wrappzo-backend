@@ -5,6 +5,9 @@ import com.wrapzzo.backend.dto.BulkDoctorsResponse;
 import com.wrapzzo.backend.dto.CreateRecipientRequest;
 import com.wrapzzo.backend.dto.DoctorDetails;
 import com.wrapzzo.backend.dto.RecipientResponse;
+import com.wrapzzo.backend.list.ListQuery;
+import com.wrapzzo.backend.list.ListSpecs;
+import com.wrapzzo.backend.list.PageResponse;
 import com.wrapzzo.backend.dto.UpcomingBirthdayResponse;
 import com.wrapzzo.backend.dto.UpdateRecipientRequest;
 import com.wrapzzo.backend.exception.RecipientAlreadyExistsException;
@@ -45,36 +48,33 @@ public class RecipientService {
     private final UserRepository userRepository;
     private final VisibilityService visibilityService;
 
+    /**
+     * One page of the doctors the caller can reach, searched, filtered and sorted in the database. Someone with nobody below them
+     * (an AM or MR) gets their own list; managers everything in reach (their team and org units).
+     */
     @Transactional(readOnly = true)
-    public List<RecipientResponse> list() {
+    public PageResponse<RecipientResponse> page(ListQuery query) {
         User user = currentUser();
         Visibility visibility = visibilityService.resolve(user);
-        // Someone with nobody below them (an AM or MR) sees their own list -- the doctors they added or are mapped to --
-        // so taking a doctor off it makes them disappear. Managers see everything in reach (their team and org units).
-        if (visibility.ownRecordsOnly()) {
-            return listMine();
-        }
-        Set<UUID> onMyList = myListIds(user);
-        return recipientRepository
-                .findVisible(user.getCompany().getId(), visibility.companyWide(), visibility.peopleForQuery(), visibility.orgUnitsForQuery())
-                .stream()
-                .map(r -> RecipientResponse.from(r, onMyList.contains(r.getId())))
-                .toList();
+        var scope = visibility.ownRecordsOnly()
+                ? RecipientListFields.onListOf(user.getId())
+                : RecipientListFields.visibleIn(user.getCompany().getId(), visibility);
+        return pageOf(scope, query, user);
     }
 
-    /** The doctors on the caller's own list (recipient_assignments) -- a subset of what list() shows. */
+    /** One page of just the doctors on the caller's own list -- who the Quick Gift form offers first. */
     @Transactional(readOnly = true)
-    public List<RecipientResponse> listMine() {
+    public PageResponse<RecipientResponse> pageMine(ListQuery query) {
         User user = currentUser();
-        return recipientAssignmentRepository.findByMrUser_IdOrderByAssignedAtDesc(user.getId()).stream()
-                .map(a -> RecipientResponse.from(a.getRecipient(), true))
-                .toList();
+        return pageOf(RecipientListFields.onListOf(user.getId()), query, user);
     }
 
-    private Set<UUID> myListIds(User user) {
-        return recipientAssignmentRepository.findByMrUser_IdOrderByAssignedAtDesc(user.getId()).stream()
-                .map(a -> a.getRecipient().getId())
-                .collect(Collectors.toSet());
+    private PageResponse<RecipientResponse> pageOf(org.springframework.data.jpa.domain.Specification<Recipient> scope, ListQuery query, User user) {
+        return ListSpecs.page(recipientRepository, scope, query, RecipientListFields.fields(), org.springframework.data.domain.Sort.by("name"), recipients -> {
+            Set<UUID> onMyList = new java.util.HashSet<>(recipientAssignmentRepository.findRecipientIdsOnList(
+                    user.getId(), recipients.stream().map(Recipient::getId).toList()));
+            return recipients.stream().map(r -> RecipientResponse.from(r, onMyList.contains(r.getId()))).toList();
+        });
     }
 
     private static final int SEARCH_LIMIT = 10;
@@ -89,9 +89,8 @@ public class RecipientService {
         Visibility visibility = visibilityService.resolve(user);
         return recipientRepository
                 .searchVisible(user.getCompany().getId(), query.trim(), visibility.companyWide(), visibility.peopleForQuery(),
-                        visibility.orgUnitsForQuery())
+                        visibility.orgUnitsForQuery(), org.springframework.data.domain.PageRequest.of(0, SEARCH_LIMIT))
                 .stream()
-                .limit(SEARCH_LIMIT)
                 .map(RecipientResponse::from)
                 .toList();
     }
@@ -297,18 +296,31 @@ public class RecipientService {
         User user = currentUser();
         LocalDate today = LocalDate.now();
         Visibility visibility = visibilityService.resolve(user);
-        List<Recipient> recipients = recipientRepository.findVisibleWithDateOfBirth(
-                user.getCompany().getId(), visibility.companyWide(), visibility.peopleForQuery(), visibility.orgUnitsForQuery());
-        if (visibility.ownRecordsOnly()) {
-            Set<UUID> onMyList = myListIds(user);
-            recipients = recipients.stream().filter(r -> onMyList.contains(r.getId())).toList();
-        }
+        // Only the doctors whose birthday falls in the window are read from the database -- not every doctor in reach.
+        Set<Integer> codes = birthdayCodes(today, daysAhead);
+        List<Recipient> recipients = visibility.ownRecordsOnly()
+                ? recipientRepository.findOnListWithBirthdayIn(user.getId(), codes)
+                : recipientRepository.findVisibleWithBirthdayIn(user.getCompany().getId(), visibility.companyWide(), visibility.peopleForQuery(),
+                        visibility.orgUnitsForQuery(), codes);
         return recipients.stream()
                 .map(r -> Map.entry(r, daysUntilNextBirthday(r.getDateOfBirth(), today)))
                 .filter(e -> e.getValue() <= daysAhead)
                 .sorted(Comparator.comparingInt(e -> e.getValue()))
                 .map(e -> UpcomingBirthdayResponse.from(e.getKey(), e.getValue()))
                 .toList();
+    }
+
+    /** Every month*100+day that falls from today through {@code daysAhead} days on -- a Feb 29 birthday counts on Feb 28 in a year without one. */
+    static Set<Integer> birthdayCodes(LocalDate today, int daysAhead) {
+        Set<Integer> codes = new java.util.HashSet<>();
+        for (int i = 0; i <= Math.max(daysAhead, 0); i++) {
+            LocalDate day = today.plusDays(i);
+            codes.add(day.getMonthValue() * 100 + day.getDayOfMonth());
+            if (day.getMonthValue() == 2 && day.getDayOfMonth() == 28 && !day.isLeapYear()) {
+                codes.add(229);
+            }
+        }
+        return codes;
     }
 
     /** Handles Feb 29 birthdays in a non-leap year via MonthDay.atYear's built-in clamp to Feb 28. */

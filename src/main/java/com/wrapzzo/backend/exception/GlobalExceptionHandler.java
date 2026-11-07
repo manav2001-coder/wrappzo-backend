@@ -365,6 +365,11 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
     }
 
+    @ExceptionHandler(com.wrapzzo.backend.list.InvalidListQueryException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidListQuery(com.wrapzzo.backend.list.InvalidListQueryException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+    }
+
     @ExceptionHandler(InvalidOrderApprovalSettingsException.class)
     public ResponseEntity<Map<String, String>> handleInvalidOrderApprovalSettings(InvalidOrderApprovalSettingsException e) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
