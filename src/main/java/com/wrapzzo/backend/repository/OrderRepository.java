@@ -13,18 +13,6 @@ import org.springframework.data.repository.query.Param;
 
 public interface OrderRepository extends JpaRepository<Order, UUID>, org.springframework.data.jpa.repository.JpaSpecificationExecutor<Order> {
 
-    List<Order> findByCompanyIdOrderByCreatedAtDesc(UUID companyId);
-
-    /** A company's orders the caller can see (see Visibility): by owner, or by the org unit they're stamped with. */
-    @Query("""
-            select o from Order o
-            where o.company.id = :companyId
-              and (:companyWide = true or o.owner.id in :people or o.orgUnit.id in :orgUnits)
-            order by o.createdAt desc
-            """)
-    List<Order> findVisibleInCompany(@Param("companyId") UUID companyId, @Param("companyWide") boolean companyWide,
-            @Param("people") Collection<UUID> people, @Param("orgUnits") Collection<UUID> orgUnits);
-
     /** Counts per status of the orders a caller can see -- the stat cards over a list, without loading it. */
     @Query("""
             select o.status, count(o) from Order o

@@ -18,6 +18,7 @@ import com.wrapzzo.backend.model.OrderSource;
 import com.wrapzzo.backend.model.OrderStatus;
 import com.wrapzzo.backend.model.GiftImage;
 import com.wrapzzo.backend.model.OrderStatusHistory;
+import com.wrapzzo.backend.service.DashboardQueries.Reach;
 import com.wrapzzo.backend.model.OrgUnit;
 import com.wrapzzo.backend.model.QuickGiftRequest;
 import com.wrapzzo.backend.model.QuickGiftStatus;
@@ -75,7 +76,6 @@ public class DashboardService {
     private final CampaignRepository campaignRepository;
     private final CampaignFormRepository campaignFormRepository;
     private final CampaignFieldRepository campaignFieldRepository;
-    private final SubmissionRepository submissionRepository;
     private final OrderRepository orderRepository;
     private final QuickGiftRequestRepository quickGiftRequestRepository;
     private final UserRepository userRepository;
@@ -84,57 +84,35 @@ public class DashboardService {
     private final GiftImageRepository giftImageRepository;
     private final FileStorageService fileStorageService;
     private final VisibilityService visibilityService;
+    private final DashboardQueries queries;
 
-    /** Everything the dashboard reads, already scoped to company-wide or just-this-viewer. */
-    private record ScopedData(
-            Company company,
-            boolean companyWide,
-            List<Campaign> campaigns,
-            List<Order> orders,
-            List<QuickGiftRequest> quickGifts,
-            List<Submission> submissions,
-            Map<UUID, User> quickGiftRequesterByOrderId) {
+    /** Who the dashboard is for and which campaigns they see. The records themselves are never loaded: the figures come from {@link DashboardQueries}. */
+    private record Scope(Company company, boolean companyWide, Reach reach, List<Campaign> campaigns) {
     }
 
     @Transactional(readOnly = true)
     public DashboardResponse summary() {
-        ScopedData data = resolveScopedData();
+        Scope data = resolveScope();
+        Reach reach = data.reach();
         List<Campaign> campaigns = data.campaigns();
-        List<Order> orders = data.orders();
-        List<QuickGiftRequest> quickGifts = data.quickGifts();
-        List<Submission> submissions = data.submissions();
 
+        Map<OrderStatus, Long> byStatus = queries.ordersByStatus(reach);
         long campaignsRunning = campaigns.stream().filter(c -> c.getStatus() == CampaignStatus.ACTIVE).count();
-        long giftsInProgress = orders.stream().filter(o -> IN_PROGRESS_STATUSES.contains(o.getStatus())).count();
-        long dispatched = orders.stream().filter(o -> IN_TRANSIT_STATUSES.contains(o.getStatus())).count();
-        long delivered = orders.stream().filter(o -> o.getStatus() == OrderStatus.DELIVERED).count();
+        long giftsInProgress = countOf(byStatus, IN_PROGRESS_STATUSES);
+        long dispatched = countOf(byStatus, IN_TRANSIT_STATUSES);
+        long delivered = byStatus.getOrDefault(OrderStatus.DELIVERED, 0L);
 
-        long submissionsPending = submissions.stream()
-                .filter(s -> s.getStatus() == SubmissionStatus.SUBMITTED || s.getStatus() == SubmissionStatus.RESUBMITTED)
-                .count();
+        Map<SubmissionStatus, Long> submissionsByStatus = queries.submissionsByStatus(reach);
+        Map<String, Long> submissionStatusBreakdown = new HashMap<>();
+        submissionsByStatus.forEach((status, count) -> submissionStatusBreakdown.merge(submissionBucket(status), count, Long::sum));
+        long submissionsPending = submissionStatusBreakdown.getOrDefault("PENDING", 0L);
 
-        Instant monthStart = monthStart();
-        long quickGiftsThisMonth = quickGifts.stream().filter(q -> !q.getCreatedAt().isBefore(monthStart)).count();
-        long quickGiftsPending = quickGifts.stream().filter(q -> q.getStatus() == QuickGiftStatus.SUBMITTED).count();
+        Map<String, Long> quickGiftStatusBreakdown = queries.quickGiftsByStatus(reach);
+        long quickGiftsThisMonth = queries.quickGiftsSince(reach, monthStart());
+        long quickGiftsPending = quickGiftStatusBreakdown.getOrDefault(QuickGiftStatus.SUBMITTED.name(), 0L);
 
         // An Order only exists once approved (automatic for a Campaign submission, manual for a Quick Gift),
         // so every non-cancelled order is a PEL request; delivered ones are served.
-        List<Order> requested = orders.stream().filter(DashboardService::isRequested).toList();
-        long pelsRequested = requested.stream().mapToLong(Order::getQuantity).sum();
-        long doctorsRequested = requested.stream().filter(DashboardService::hasDoctor).map(DashboardService::doctorKey).distinct().count();
-        List<Order> served = orders.stream().filter(o -> o.getStatus() == OrderStatus.DELIVERED).toList();
-        long pelsServed = served.stream().mapToLong(Order::getQuantity).sum();
-        long doctorsServed = served.stream().filter(DashboardService::hasDoctor).map(DashboardService::doctorKey).distinct().count();
-
-        Map<String, Long> orderSourceBreakdown = orders.stream()
-                .collect(Collectors.groupingBy(o -> o.getSource().name(), Collectors.counting()));
-        Map<String, Long> quickGiftStatusBreakdown = quickGifts.stream()
-                .collect(Collectors.groupingBy(q -> q.getStatus().name(), Collectors.counting()));
-        Map<String, Long> submissionStatusBreakdown = new HashMap<>();
-        for (Submission s : submissions) {
-            submissionStatusBreakdown.merge(submissionBucket(s), 1L, Long::sum);
-        }
-
         return new DashboardResponse(
                 data.company().getName(),
                 data.companyWide(),
@@ -145,59 +123,72 @@ public class DashboardService {
                 submissionsPending,
                 quickGiftsThisMonth,
                 quickGiftsPending,
-                pelsRequested,
-                doctorsRequested,
-                pelsServed,
-                doctorsServed,
-                orderSourceBreakdown,
+                queries.pels(reach, false),
+                queries.doctors(reach, false),
+                queries.pels(reach, true),
+                queries.doctors(reach, true),
+                queries.ordersBySource(reach),
                 quickGiftStatusBreakdown,
                 submissionStatusBreakdown,
-                activityTrend(submissions, quickGifts),
-                topGifts(orders),
-                topCampaigns(orders, campaigns),
-                topDepartments(orders, data.quickGiftRequesterByOrderId()),
+                activityTrend(reach),
+                topGifts(reach),
+                topCampaigns(reach, campaigns),
+                topDepartments(reach),
                 upcomingDeadlines(campaigns),
                 recentCampaigns(campaigns),
-                recentActivity(campaigns, orders, quickGifts, submissions),
-                recentOrderTimeline(orders, data.quickGiftRequesterByOrderId()));
+                recentActivity(reach, campaigns),
+                recentOrderTimeline(reach));
+    }
+
+    private static long countOf(Map<OrderStatus, Long> byStatus, Set<OrderStatus> statuses) {
+        return statuses.stream().mapToLong(status -> byStatus.getOrDefault(status, 0L)).sum();
     }
 
     /**
      * The records behind one clicked chart datapoint -- same scoping as summary(), so a
      * Member drilling into a slice only ever sees rows that were already counted in their
-     * own numbers.
+     * own numbers. Only the newest {@value #DRILLDOWN_LIMIT} are read.
      */
     @Transactional(readOnly = true)
     public DashboardDrilldownResponse drilldown(String dimension, String value) {
-        ScopedData data = resolveScopedData();
+        Reach reach = resolveScope().reach();
         return switch (dimension) {
-            case "orderSource" -> ordersDrilldown(
-                    data.orders().stream().filter(o -> o.getSource().name().equals(value)).toList(),
-                    "Orders — " + titleCase(value));
-            case "quickGiftStatus" -> quickGiftsDrilldown(
-                    data.quickGifts().stream().filter(q -> q.getStatus().name().equals(value)).toList(),
-                    "Quick Gift requests — " + titleCase(value));
+            case "orderSource" -> ordersDrilldown(sourceOrders(reach, value), "Orders — " + titleCase(value));
+            case "quickGiftStatus" -> quickGiftsDrilldown(quickGiftsOfStatus(reach, value), "Quick Gift requests — " + titleCase(value));
             case "submissionStatus" -> submissionsDrilldown(
-                    data.submissions().stream().filter(s -> submissionBucket(s).equals(value)).toList(),
-                    "Campaign submissions — " + titleCase(value));
-            case "topGift" -> ordersDrilldown(
-                    data.orders().stream().filter(o -> o.getGift() != null && o.getGift().getName().equals(value)).toList(),
-                    "Orders — " + value);
-            case "topDepartment" -> ordersDrilldown(
-                    data.orders().stream().filter(o -> departmentOf(o, data.quickGiftRequesterByOrderId()).equals(value)).toList(),
-                    "Orders — " + value);
-            case "week" -> weekDrilldown(value, data.submissions(), data.quickGifts());
-            case "pelsRequested" -> pelsPerDoctorDrilldown(data.orders().stream().filter(DashboardService::isRequested).toList(), "PELs created per doctor");
-            case "pelsServed" -> pelsPerDoctorDrilldown(
-                    data.orders().stream().filter(o -> o.getStatus() == OrderStatus.DELIVERED).toList(), "PELs served per doctor");
+                    queries.submissionsWithStatus(reach, submissionStatusesOf(value), DRILLDOWN_LIMIT), "Campaign submissions — " + titleCase(value));
+            case "topGift" -> ordersDrilldown(queries.ordersOfGift(reach, value, DRILLDOWN_LIMIT), "Orders — " + value);
+            case "topDepartment" -> ordersDrilldown(queries.ordersOfDepartment(reach, value, DRILLDOWN_LIMIT), "Orders — " + value);
+            case "week" -> weekDrilldown(value, reach);
+            case "pelsRequested" -> pelsPerDoctorDrilldown(queries.pelsPerDoctor(reach, false, DRILLDOWN_LIMIT), "PELs created per doctor");
+            case "pelsServed" -> pelsPerDoctorDrilldown(queries.pelsPerDoctor(reach, true, DRILLDOWN_LIMIT), "PELs served per doctor");
             case "pipelineStage" -> ordersDrilldown(
-                    data.orders().stream().filter(o -> pipelineStageMatches(o.getStatus(), value)).toList(),
+                    queries.ordersWithStatus(reach, java.util.Arrays.stream(OrderStatus.values()).filter(s -> pipelineStageMatches(s, value)).toList(), DRILLDOWN_LIMIT),
                     "Orders — " + pipelineStageTitle(value));
-            case "quickGiftsThisMonth" -> quickGiftsDrilldown(
-                    data.quickGifts().stream().filter(q -> !q.getCreatedAt().isBefore(monthStart())).toList(),
-                    "Quick Gifts this month");
+            case "quickGiftsThisMonth" -> quickGiftsDrilldown(queries.quickGiftsCreatedSince(reach, monthStart(), DRILLDOWN_LIMIT), "Quick Gifts this month");
             default -> new DashboardDrilldownResponse(value, List.of());
         };
+    }
+
+    private List<Order> sourceOrders(Reach reach, String source) {
+        try {
+            return queries.ordersFromSource(reach, source, DRILLDOWN_LIMIT);
+        } catch (IllegalArgumentException e) {
+            return List.of();
+        }
+    }
+
+    private List<QuickGiftRequest> quickGiftsOfStatus(Reach reach, String status) {
+        try {
+            return queries.quickGiftsWithStatus(reach, QuickGiftStatus.valueOf(status), DRILLDOWN_LIMIT);
+        } catch (IllegalArgumentException e) {
+            return List.of();
+        }
+    }
+
+    /** The submission statuses a chart bucket stands for: "PENDING" is submitted or resubmitted. */
+    private List<SubmissionStatus> submissionStatusesOf(String bucket) {
+        return java.util.Arrays.stream(SubmissionStatus.values()).filter(status -> submissionBucket(status).equals(bucket)).toList();
     }
 
     /**
@@ -205,35 +196,15 @@ public class DashboardService {
      * the same rule as the Orders list and the approval queues. Someone who sees only their own
      * records gets a personal dashboard; anyone who sees more gets the team view.
      */
-    private ScopedData resolveScopedData() {
+    private Scope resolveScope() {
         User user = currentUser();
         Company company = user.getCompany();
-        UUID companyId = company.getId();
         Visibility visibility = visibilityService.resolve(user);
-        boolean companyWide = !visibility.ownRecordsOnly();
-
-        List<Campaign> campaigns = campaignService.visibleCampaigns(user);
-        List<Order> orders = orderRepository.findVisibleInCompany(
-                companyId, visibility.companyWide(), visibility.peopleForQuery(), visibility.orgUnitsForQuery());
-        List<QuickGiftRequest> quickGifts = quickGiftRequestRepository.findByCompanyIdOrderByCreatedAtDesc(companyId).stream()
-                .filter(q -> visibility.canSee(q.getRequestedBy(), q.getOrgUnit()))
-                .toList();
-        List<Submission> submissions = submissionRepository.findByCompanyIdOrderByCreatedAtDesc(companyId).stream()
-                .filter(sub -> visibility.canSee(sub.getSubmittedBy(), sub.getOrgUnit()))
-                .toList();
-
-        // Quick Gift orders' createdBy is whoever approved them -- departments and names go by the requester.
-        Map<UUID, User> quickGiftRequesterByOrderId = quickGifts.stream()
-                .filter(q -> q.getOrder() != null)
-                .collect(Collectors.toMap(q -> q.getOrder().getId(), QuickGiftRequest::getRequestedBy));
-
-        return new ScopedData(company, companyWide, campaigns, orders, quickGifts, submissions, quickGiftRequesterByOrderId);
+        return new Scope(company, !visibility.ownRecordsOnly(), Reach.of(company.getId(), visibility), campaignService.visibleCampaigns(user));
     }
 
-    private String submissionBucket(Submission s) {
-        return (s.getStatus() == SubmissionStatus.SUBMITTED || s.getStatus() == SubmissionStatus.RESUBMITTED)
-                ? "PENDING"
-                : s.getStatus().name();
+    private String submissionBucket(SubmissionStatus status) {
+        return (status == SubmissionStatus.SUBMITTED || status == SubmissionStatus.RESUBMITTED) ? "PENDING" : status.name();
     }
 
     /** Matches PipelineFlow's three stages -- "inProgress" groups PROCESSING+PRODUCTION_QUEUE, same as summary()'s own count. */
@@ -314,41 +285,32 @@ public class DashboardService {
         return new DashboardDrilldownResponse(title, rows);
     }
 
-    /** A cancelled order was never a PEL request. */
-    private static boolean isRequested(Order order) {
-        return order.getStatus() != OrderStatus.CANCELLED;
-    }
-
-    private static boolean hasDoctor(Order order) {
-        return (order.getRecipientPhone() != null && !order.getRecipientPhone().isBlank())
-                || (order.getRecipientName() != null && !order.getRecipientName().isBlank());
-    }
-
-    /** One doctor per phone number (their name when there is none), so a doctor who is sent PELs twice counts once. */
-    private static String doctorKey(Order order) {
-        String phone = order.getRecipientPhone() == null ? "" : order.getRecipientPhone().replaceAll("\\D", "");
-        if (!phone.isEmpty()) {
-            return "p:" + phone;
-        }
-        return "n:" + (order.getRecipientName() == null ? "" : order.getRecipientName().trim().toLowerCase());
-    }
-
-    /** One row per doctor: how many PELs these orders carry for them, most first. */
-    private DashboardDrilldownResponse pelsPerDoctorDrilldown(List<Order> orders, String title) {
-        List<Row> rows = orders.stream()
-                .filter(DashboardService::hasDoctor)
-                .collect(Collectors.groupingBy(DashboardService::doctorKey))
-                .values().stream()
-                .map(group -> {
-                    Order latest = group.stream().max(Comparator.comparing(Order::getCreatedAt)).orElseThrow();
-                    String name = latest.getRecipientName() != null && !latest.getRecipientName().isBlank() ? latest.getRecipientName() : latest.getRecipientPhone();
-                    long pels = group.stream().mapToLong(Order::getQuantity).sum();
-                    return new Row(null, name, group.size() + (group.size() == 1 ? " order" : " orders"), null, latest.getCreatedAt(), null, pels);
+    /** One row per doctor: how many PELs these orders carry for them, most first. Rows are (name, phone, orders, PELs, latest order). */
+    private DashboardDrilldownResponse pelsPerDoctorDrilldown(List<Object[]> doctors, String title) {
+        List<Row> rows = doctors.stream()
+                .map(doctor -> {
+                    String name = doctor[0] != null && !doctor[0].toString().isBlank() ? doctor[0].toString() : (doctor[1] == null ? null : doctor[1].toString());
+                    long orders = ((Number) doctor[2]).longValue();
+                    long pels = ((Number) doctor[3]).longValue();
+                    return new Row(null, name, orders + (orders == 1 ? " order" : " orders"), null, instantOf(doctor[4]), null, pels);
                 })
                 .sorted(Comparator.comparing(Row::quantity).reversed())
                 .limit(DRILLDOWN_LIMIT)
                 .toList();
         return new DashboardDrilldownResponse(title, rows);
+    }
+
+    private static Instant instantOf(Object value) {
+        if (value instanceof Instant instant) {
+            return instant;
+        }
+        if (value instanceof java.sql.Timestamp timestamp) {
+            return timestamp.toInstant();
+        }
+        if (value instanceof java.time.OffsetDateTime offset) {
+            return offset.toInstant();
+        }
+        return value instanceof java.time.LocalDateTime local ? local.toInstant(ZoneOffset.UTC) : null;
     }
 
     /** CAMPAIGN orders attribute to the submitter; Quick Gift orders to the requester -- who asked for it, not the recipient. */
@@ -366,8 +328,10 @@ public class DashboardService {
      * as a distinct terminal state rather than progress along the pipeline, but hiding them
      * here would make an order someone knows exists just silently vanish from the list.
      */
-    private List<DashboardResponse.OrderTimelineItem> recentOrderTimeline(List<Order> orders, Map<UUID, User> quickGiftRequesterByOrderId) {
-        List<Order> recent = orders.stream().sorted(Comparator.comparing(Order::getUpdatedAt).reversed()).limit(RECENT_ORDER_LIMIT).toList();
+    private List<DashboardResponse.OrderTimelineItem> recentOrderTimeline(Reach reach) {
+        List<Order> recent = queries.recentOrders(reach, RECENT_ORDER_LIMIT);
+        Map<UUID, User> quickGiftRequesterByOrderId = quickGiftRequestRepository.findByOrder_IdIn(recent.stream().map(Order::getId).toList()).stream()
+                .collect(Collectors.toMap(q -> q.getOrder().getId(), QuickGiftRequest::getRequestedBy));
         Map<UUID, List<OrderStatusHistory>> historyByOrderId =
                 orderStatusHistoryService.historyByOrderId(recent.stream().map(Order::getId).toList());
 
@@ -406,7 +370,7 @@ public class DashboardService {
      * click on the Quick Gift requests line shows only that week's requests -- never both,
      * even when both lines have data the same week.
      */
-    private DashboardDrilldownResponse weekDrilldown(String rawValue, List<Submission> submissions, List<QuickGiftRequest> quickGifts) {
+    private DashboardDrilldownResponse weekDrilldown(String rawValue, Reach reach) {
         String[] parts = rawValue.split(":", 2);
         LocalDate weekStart;
         try {
@@ -418,96 +382,42 @@ public class DashboardService {
         Instant start = weekStart.atStartOfDay(ZoneOffset.UTC).toInstant();
         Instant end = weekStart.plusWeeks(1).atStartOfDay(ZoneOffset.UTC).toInstant();
         String weekLabel = weekStart.format(DateTimeFormatter.ofPattern("dd MMM yyyy"));
-
-        List<Row> rows = new ArrayList<>();
-        String title;
         if ("QUICK_GIFT".equals(seriesKey)) {
-            for (QuickGiftRequest q : quickGifts) {
-                if (!q.getCreatedAt().isBefore(start) && q.getCreatedAt().isBefore(end)) {
-                    rows.add(new Row("QG-" + q.getRequestNo(), q.getGift().getName(), q.getRecipientName(), q.getStatus().name(), q.getCreatedAt(), null, (long) q.getQuantity()));
-                }
-            }
-            title = "Quick Gift requests — week of " + weekLabel;
-        } else {
-            for (Submission s : submissions) {
-                if (s.getSubmittedAt() != null && !s.getSubmittedAt().isBefore(start) && s.getSubmittedAt().isBefore(end)) {
-                    rows.add(new Row(null, s.getCampaign().getName(), s.getSubmittedBy().getName(), s.getStatus().name(), s.getSubmittedAt(), s.getCampaign().getId(), null));
-                }
-            }
-            title = "Campaign submissions — week of " + weekLabel;
+            return quickGiftsDrilldown(queries.quickGiftsBetween(reach, start, end, DRILLDOWN_LIMIT), "Quick Gift requests — week of " + weekLabel);
         }
-        List<Row> sorted = rows.stream().sorted(Comparator.comparing(Row::at).reversed()).limit(DRILLDOWN_LIMIT).toList();
-        return new DashboardDrilldownResponse(title, sorted);
+        return submissionsDrilldown(queries.submissionsSubmittedBetween(reach, start, end, DRILLDOWN_LIMIT), "Campaign submissions — week of " + weekLabel);
     }
 
     /** Last TREND_WEEKS calendar weeks (Monday-start), oldest first -- how much is actually happening, week over week. */
-    private List<TrendPoint> activityTrend(List<Submission> submissions, List<QuickGiftRequest> quickGifts) {
+    private List<TrendPoint> activityTrend(Reach reach) {
         LocalDate currentWeekStart = LocalDate.now().with(DayOfWeek.MONDAY);
+        LocalDate firstWeek = currentWeekStart.minusWeeks(TREND_WEEKS - 1L);
+        Instant since = firstWeek.atStartOfDay(ZoneOffset.UTC).toInstant();
+        Map<LocalDate, Long> submissions = queries.submissionsPerWeek(reach, since);
+        Map<LocalDate, Long> quickGifts = queries.quickGiftsPerWeek(reach, since);
         DateTimeFormatter labelFormat = DateTimeFormatter.ofPattern("dd MMM");
         List<TrendPoint> points = new ArrayList<>();
         for (int i = TREND_WEEKS - 1; i >= 0; i--) {
             LocalDate weekStart = currentWeekStart.minusWeeks(i);
-            Instant start = weekStart.atStartOfDay(ZoneOffset.UTC).toInstant();
-            Instant end = weekStart.plusWeeks(1).atStartOfDay(ZoneOffset.UTC).toInstant();
-            long submissionCount = submissions.stream()
-                    .filter(s -> s.getSubmittedAt() != null && !s.getSubmittedAt().isBefore(start) && s.getSubmittedAt().isBefore(end))
-                    .count();
-            long quickGiftCount = quickGifts.stream()
-                    .filter(q -> !q.getCreatedAt().isBefore(start) && q.getCreatedAt().isBefore(end))
-                    .count();
-            points.add(new TrendPoint(weekStart.format(labelFormat), weekStart.toString(), submissionCount, quickGiftCount));
+            points.add(new TrendPoint(weekStart.format(labelFormat), weekStart.toString(), submissions.getOrDefault(weekStart, 0L), quickGifts.getOrDefault(weekStart, 0L)));
         }
         return points;
     }
 
-    private List<TopGift> topGifts(List<Order> orders) {
-        Map<String, Long> counts = orders.stream()
-                .filter(o -> o.getGift() != null)
-                .collect(Collectors.groupingBy(o -> o.getGift().getName(), Collectors.counting()));
-        return counts.entrySet().stream()
-                .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
-                .limit(TOP_N)
-                .map(e -> new TopGift(e.getKey(), e.getValue()))
-                .toList();
+    private List<TopGift> topGifts(Reach reach) {
+        return queries.topGifts(reach, TOP_N).stream().map(row -> new TopGift((String) row[0], (Long) row[1])).toList();
     }
 
-    private List<TopCampaign> topCampaigns(List<Order> orders, List<Campaign> campaigns) {
-        Map<UUID, Long> counts = orders.stream()
-                .filter(o -> o.getCampaign() != null)
-                .collect(Collectors.groupingBy(o -> o.getCampaign().getId(), Collectors.counting()));
+    private List<TopCampaign> topCampaigns(Reach reach, List<Campaign> campaigns) {
         Map<UUID, String> names = campaigns.stream().collect(Collectors.toMap(Campaign::getId, Campaign::getName, (a, b) -> a));
-        return counts.entrySet().stream()
-                .sorted(Map.Entry.<UUID, Long>comparingByValue().reversed())
-                .limit(TOP_N)
-                .map(e -> new TopCampaign(e.getKey(), names.getOrDefault(e.getKey(), "—"), e.getValue()))
+        return queries.topCampaigns(reach, TOP_N).stream()
+                .map(row -> new TopCampaign((UUID) row[0], names.getOrDefault((UUID) row[0], "—"), (Long) row[1]))
                 .toList();
-    }
-
-    /** The unit the order was raised from (stamped since V36); older orders fall back to their requester's current unit. */
-    private String departmentOf(Order order, Map<UUID, User> quickGiftRequesterByOrderId) {
-        OrgUnit unit;
-        if (order.getOrgUnit() != null) {
-            unit = order.getOrgUnit();
-        } else if (order.getSource() == OrderSource.CAMPAIGN && order.getSubmission() != null) {
-            unit = order.getSubmission().getSubmittedBy().getOrgUnit();
-        } else {
-            User requester = quickGiftRequesterByOrderId.get(order.getId());
-            unit = requester != null ? requester.getOrgUnit() : null;
-        }
-        return unit != null ? unit.getName() : "Unassigned";
     }
 
     /** CAMPAIGN orders attribute to the submitter's department; Quick Gift orders to the requester's. */
-    private List<TopDepartment> topDepartments(List<Order> orders, Map<UUID, User> quickGiftRequesterByOrderId) {
-        Map<String, Long> counts = new HashMap<>();
-        for (Order order : orders) {
-            counts.merge(departmentOf(order, quickGiftRequesterByOrderId), 1L, Long::sum);
-        }
-        return counts.entrySet().stream()
-                .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
-                .limit(TOP_N)
-                .map(e -> new TopDepartment(e.getKey(), e.getValue()))
-                .toList();
+    private List<TopDepartment> topDepartments(Reach reach) {
+        return queries.topDepartments(reach, TOP_N).stream().map(row -> new TopDepartment((String) row[0], (Long) row[1])).toList();
     }
 
     private List<UpcomingDeadline> upcomingDeadlines(List<Campaign> campaigns) {
@@ -546,14 +456,18 @@ public class DashboardService {
      * submitting/resubmitting a recipient, approving/rejecting a submission or Quick Gift
      * request, and an order moving to dispatched/delivered. Rebuilt fresh on every read, so it
      * always reflects whatever just happened -- there's no separate audit-log table to fall
-     * behind or go stale.
+     * behind or go stale. Each kind contributes only its newest few: the feed shows the newest
+     * {@value #RECENT_ACTIVITY_LIMIT} overall, which can come from no deeper than that in any one kind.
      */
-    private List<ActivityItem> recentActivity(List<Campaign> campaigns, List<Order> orders, List<QuickGiftRequest> quickGifts, List<Submission> submissions) {
+    private List<ActivityItem> recentActivity(Reach reach, List<Campaign> campaigns) {
         List<ActivityItem> activity = new ArrayList<>();
         for (Campaign c : campaigns) {
             activity.add(new ActivityItem(c.getCreatedBy().getName(), "created campaign", c.getName(), c.getCreatedAt(), c.getId(), null));
         }
-        for (Submission s : submissions) {
+        Map<UUID, Submission> submissions = new java.util.LinkedHashMap<>();
+        queries.newestSubmitted(reach, RECENT_ACTIVITY_LIMIT).forEach(s -> submissions.putIfAbsent(s.getId(), s));
+        queries.newestDecidedSubmissions(reach, RECENT_ACTIVITY_LIMIT).forEach(s -> submissions.putIfAbsent(s.getId(), s));
+        for (Submission s : submissions.values()) {
             if (s.getSubmittedAt() != null) {
                 String verb = s.getStatus() == SubmissionStatus.RESUBMITTED ? "resubmitted a recipient for" : "submitted a recipient for";
                 activity.add(new ActivityItem(s.getSubmittedBy().getName(), verb, s.getCampaign().getName(), s.getSubmittedAt(), s.getCampaign().getId(), null));
@@ -567,7 +481,7 @@ public class DashboardService {
                 }
             }
         }
-        for (Order o : orders) {
+        for (Order o : queries.recentMovedOrders(reach, RECENT_ACTIVITY_LIMIT)) {
             String verb = switch (o.getStatus()) {
                 case DISPATCHED -> "dispatched order";
                 case RECEIVED_AT_WAREHOUSE -> "received at warehouse order";
@@ -581,7 +495,10 @@ public class DashboardService {
                 activity.add(new ActivityItem(actor, verb, "ORD-" + o.getOrderNo(), o.getUpdatedAt(), campaignId, null));
             }
         }
-        for (QuickGiftRequest q : quickGifts) {
+        Map<UUID, QuickGiftRequest> quickGifts = new java.util.LinkedHashMap<>();
+        queries.newestQuickGifts(reach, RECENT_ACTIVITY_LIMIT).forEach(q -> quickGifts.putIfAbsent(q.getId(), q));
+        queries.newestDecidedQuickGifts(reach, RECENT_ACTIVITY_LIMIT).forEach(q -> quickGifts.putIfAbsent(q.getId(), q));
+        for (QuickGiftRequest q : quickGifts.values()) {
             activity.add(new ActivityItem(q.getRequestedBy().getName(), "requested Quick Gift", q.getGift().getName(), q.getCreatedAt(), null, q.getId()));
             if (q.getReviewedAt() != null && q.getReviewedBy() != null) {
                 String verb = q.getStatus() == QuickGiftStatus.APPROVED ? "approved Quick Gift"

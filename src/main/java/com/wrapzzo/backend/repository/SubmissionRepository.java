@@ -23,7 +23,6 @@ public interface SubmissionRepository extends JpaRepository<Submission, UUID> {
     List<Submission> findVisibleByCampaign(@Param("campaignId") UUID campaignId, @Param("companyWide") boolean companyWide,
             @Param("people") Collection<UUID> people, @Param("orgUnits") Collection<UUID> orgUnits);
 
-    List<Submission> findByCompanyIdOrderByCreatedAtDesc(UUID companyId);
 
     List<Submission> findBySubmittedByIdOrderByCreatedAtDesc(UUID userId);
 
