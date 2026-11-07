@@ -54,6 +54,10 @@ public interface OrderRepository extends JpaRepository<Order, UUID>, org.springf
     List<Order> findPendingApprovalVisible(@Param("companyId") UUID companyId, @Param("companyWide") boolean companyWide,
             @Param("people") Collection<UUID> people, @Param("orgUnits") Collection<UUID> orgUnits);
 
+    /** How many orders the vendor has from each division (V78). */
+    @Query("select o.divisionId, count(o) from Order o where o.assignedVendor.id = :vendorId and o.divisionId is not null group by o.divisionId")
+    List<Object[]> countByDivisionForVendor(@Param("vendorId") UUID vendorId);
+
     List<Order> findByCampaignIdOrderByCreatedAtDesc(UUID campaignId);
 
     /** Every order still waiting on its approver that has had fewer than {@code max} reminders. */

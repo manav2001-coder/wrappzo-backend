@@ -86,6 +86,9 @@ public final class ListSpecs {
             if (field.flag() != null) {
                 return flagPredicate(field, filter, root, query, cb);
             }
+            if (field.choice() != null) {
+                return choicePredicate(field, filter, root, query, cb);
+            }
             Expression<?> expression = field.path().of(root, cb);
             return switch (field.type()) {
                 case TEXT -> text(expression.as(String.class), filter, cb);
@@ -95,6 +98,7 @@ public final class ListSpecs {
                 case BOOLEAN -> bool(expression, filter, cb);
                 case ENUM -> enumeration(field, expression, filter, cb);
                 case UUID -> uuid(field, expression, filter, cb);
+                case CHOICE -> throw new IllegalStateException("A choice is answered before its expression is read");
             };
         };
     }
@@ -105,6 +109,26 @@ public final class ListSpecs {
         }
         Predicate holds = field.flag().holds(root, query, cb);
         return wantedBoolean(filter, field.name()) ? holds : cb.not(holds);
+    }
+
+    private static <E> Predicate choicePredicate(Field<E> field, ListFilter filter, Root<E> root, jakarta.persistence.criteria.CriteriaQuery<?> query, CriteriaBuilder cb) {
+        List<String> values;
+        if (filter.operator() == FilterOperator.EQUALS) {
+            values = List.of(string(filter));
+        } else if (filter.operator() == FilterOperator.IN) {
+            values = strings(filter);
+        } else {
+            throw new InvalidListQueryException("'" + field.name() + "' can be filtered with equals or in.");
+        }
+        List<Predicate> any = new ArrayList<>();
+        for (String value : values) {
+            Predicate holds = field.choice().holds(value, root, query, cb);
+            if (holds == null) {
+                throw new InvalidListQueryException("'" + value + "' is not a value of '" + field.name() + "'.");
+            }
+            any.add(holds);
+        }
+        return any.size() == 1 ? any.get(0) : cb.or(any.toArray(Predicate[]::new));
     }
 
     // --- by type ---

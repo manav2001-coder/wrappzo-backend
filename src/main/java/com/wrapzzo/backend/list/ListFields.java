@@ -19,7 +19,7 @@ import java.util.stream.Collectors;
  */
 public final class ListFields<E> {
 
-    public enum Type { TEXT, NUMBER, DATE, DAY, BOOLEAN, ENUM, UUID }
+    public enum Type { TEXT, NUMBER, DATE, DAY, BOOLEAN, ENUM, UUID, CHOICE }
 
     /** Where a field lives. May join; {@link #join} reuses a join already made on the query. */
     @FunctionalInterface
@@ -33,44 +33,55 @@ public final class ListFields<E> {
         Predicate holds(Root<E> root, CriteriaQuery<?> query, CriteriaBuilder cb);
     }
 
-    record Field<E>(String name, Type type, Class<? extends Enum<?>> enumType, Path<E> path, Flag<E> flag, String sortPath, boolean searchable) {
+    /** A named value that is a rule, not a column (an order's stage): the predicate for one of its values, or null if there is no such value. */
+    @FunctionalInterface
+    public interface Choice<E> {
+        Predicate holds(String value, Root<E> root, CriteriaQuery<?> query, CriteriaBuilder cb);
+    }
+
+    record Field<E>(String name, Type type, Class<? extends Enum<?>> enumType, Path<E> path, Flag<E> flag, Choice<E> choice, String sortPath, boolean searchable) {
     }
 
     private final Map<String, Field<E>> fields = new LinkedHashMap<>();
 
     public ListFields<E> text(String name, Path<E> path, String sortPath, boolean searchable) {
-        return add(new Field<>(name, Type.TEXT, null, path, null, sortPath, searchable));
+        return add(new Field<>(name, Type.TEXT, null, path, null, null, sortPath, searchable));
     }
 
     public ListFields<E> number(String name, Path<E> path, String sortPath) {
-        return add(new Field<>(name, Type.NUMBER, null, path, null, sortPath, false));
+        return add(new Field<>(name, Type.NUMBER, null, path, null, null, sortPath, false));
     }
 
     public ListFields<E> date(String name, Path<E> path, String sortPath) {
-        return add(new Field<>(name, Type.DATE, null, path, null, sortPath, false));
+        return add(new Field<>(name, Type.DATE, null, path, null, null, sortPath, false));
     }
 
     /** A calendar date with no time (a date of birth). */
     public ListFields<E> day(String name, Path<E> path, String sortPath) {
-        return add(new Field<>(name, Type.DAY, null, path, null, sortPath, false));
+        return add(new Field<>(name, Type.DAY, null, path, null, null, sortPath, false));
     }
 
     public ListFields<E> bool(String name, Path<E> path, String sortPath) {
-        return add(new Field<>(name, Type.BOOLEAN, null, path, null, sortPath, false));
+        return add(new Field<>(name, Type.BOOLEAN, null, path, null, null, sortPath, false));
     }
 
     public ListFields<E> enumeration(String name, Class<? extends Enum<?>> enumType, Path<E> path, String sortPath) {
-        return add(new Field<>(name, Type.ENUM, enumType, path, null, sortPath, false));
+        return add(new Field<>(name, Type.ENUM, enumType, path, null, null, sortPath, false));
     }
 
     /** An id column (a company, a vendor): matched exactly, never by text, so the index is used. */
     public ListFields<E> id(String name, Path<E> path, String sortPath) {
-        return add(new Field<>(name, Type.UUID, null, path, null, sortPath, false));
+        return add(new Field<>(name, Type.UUID, null, path, null, null, sortPath, false));
+    }
+
+    /** A rule with named values (an order's stage): filtered with equals or in; not sortable. */
+    public ListFields<E> choice(String name, Choice<E> choice) {
+        return add(new Field<>(name, Type.CHOICE, null, null, null, choice, null, false));
     }
 
     /** A derived yes/no filter (not sortable, not searched). */
     public ListFields<E> flag(String name, Flag<E> flag) {
-        return add(new Field<>(name, Type.BOOLEAN, null, null, flag, null, false));
+        return add(new Field<>(name, Type.BOOLEAN, null, null, flag, null, null, false));
     }
 
     private ListFields<E> add(Field<E> field) {

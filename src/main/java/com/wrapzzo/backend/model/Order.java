@@ -78,6 +78,13 @@ public class Order {
     @Column(nullable = false)
     private int quantity = 1;
 
+    /**
+     * The division (top of the org tree) the order was raised in -- its unit's top ancestor, else its owner's unit's (V78). Set when
+     * the order is saved; what the vendor portal filters and counts by.
+     */
+    @Column(name = "division_id")
+    private UUID divisionId;
+
     /** The requester's org unit when the order was raised -- what org-scoped visibility and review go by (V36). */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "org_unit_id")
@@ -189,6 +196,10 @@ public class Order {
 
     @PrePersist
     void onCreate() {
+        if (divisionId == null) {
+            OrgUnit unit = orgUnit != null ? orgUnit : (owner != null ? owner.getOrgUnit() : null);
+            divisionId = unit == null ? null : (unit.getAncestorIds().isEmpty() ? unit.getId() : unit.getAncestorIds().get(0));
+        }
         Instant now = Instant.now();
         createdAt = now;
         updatedAt = now;

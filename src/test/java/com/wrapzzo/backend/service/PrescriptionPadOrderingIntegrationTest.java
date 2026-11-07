@@ -285,7 +285,7 @@ class PrescriptionPadOrderingIntegrationTest {
         Order order = orderRepository.findById(orderId).orElseThrow();
 
         actAsVendor(printer);
-        VendorOrderResponse before = orderService.listForVendor(printer.getId()).stream().filter(o -> o.id().equals(orderId)).findFirst().orElseThrow();
+        VendorOrderResponse before = orderService.pageForVendor(printer.getId(), ListQuery.firstPage(100)).data().stream().filter(o -> o.id().equals(orderId)).findFirst().orElseThrow();
         assertThat(before.latestDesignStatus()).isNull();
         assertThat(before.designVersions()).isZero();
 
@@ -295,7 +295,7 @@ class PrescriptionPadOrderingIntegrationTest {
         orderDesignRepository.save(rejected);
         orderDesignRepository.save(new OrderDesign(order, 2, "designs/v2.pdf", "v2.pdf", printer));
 
-        VendorOrderResponse after = orderService.listForVendor(printer.getId()).stream().filter(o -> o.id().equals(orderId)).findFirst().orElseThrow();
+        VendorOrderResponse after = orderService.pageForVendor(printer.getId(), ListQuery.firstPage(100)).data().stream().filter(o -> o.id().equals(orderId)).findFirst().orElseThrow();
         assertThat(after.designVersions()).isEqualTo(2);
         assertThat(after.latestDesignStatus()).isEqualTo(OrderDesignStatus.PENDING_REVIEW);
         assertThat(after.artworkApproved()).isFalse();

@@ -1,7 +1,12 @@
 package com.wrapzzo.backend.controller;
 
 import com.wrapzzo.backend.dto.UpdateOrderStatusRequest;
+import com.wrapzzo.backend.dto.VendorOrderDivisionResponse;
 import com.wrapzzo.backend.dto.VendorOrderResponse;
+import com.wrapzzo.backend.dto.VendorOrderSummaryResponse;
+import com.wrapzzo.backend.list.ListQueryParams;
+import com.wrapzzo.backend.list.PageResponse;
+import org.springframework.web.bind.annotation.RequestParam;
 import com.wrapzzo.backend.security.CurrentVendor;
 import com.wrapzzo.backend.security.VendorEndpoint;
 import com.wrapzzo.backend.service.OrderService;
@@ -25,9 +30,22 @@ public class VendorOrderController {
 
     private final OrderService orderService;
 
-    @GetMapping("/list")
-    public List<VendorOrderResponse> list() {
-        return orderService.listForVendor(CurrentVendor.id());
+    /** One page of the vendor's orders: ?page=0&size=25&search=&sort=createdAt&dir=desc&filters=[{field,operator,value}] (stage and divisionId among them). */
+    @GetMapping("/page")
+    public PageResponse<VendorOrderResponse> page(ListQueryParams params) {
+        return orderService.pageForVendor(CurrentVendor.id(), params.toQuery());
+    }
+
+    /** How many orders are at each stage, optionally within one division. */
+    @GetMapping("/summary")
+    public VendorOrderSummaryResponse summary(@RequestParam(required = false) UUID divisionId) {
+        return orderService.summaryForVendor(CurrentVendor.id(), divisionId);
+    }
+
+    /** The divisions the vendor's orders come from. */
+    @GetMapping("/divisions")
+    public List<VendorOrderDivisionResponse> divisions() {
+        return orderService.orderDivisionsForVendor(CurrentVendor.id());
     }
 
     @GetMapping("/view/{id}")

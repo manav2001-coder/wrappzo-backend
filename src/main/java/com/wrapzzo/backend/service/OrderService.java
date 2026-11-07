@@ -4,6 +4,9 @@ import com.wrapzzo.backend.dto.BulkAssignResponse;
 import com.wrapzzo.backend.dto.DashboardResponse.StageEvent;
 import com.wrapzzo.backend.dto.OrderResponse;
 import com.wrapzzo.backend.dto.OrderSummaryResponse;
+import com.wrapzzo.backend.dto.VendorOrderDivisionResponse;
+import com.wrapzzo.backend.dto.VendorOrderSummaryResponse;
+import org.springframework.data.jpa.domain.Specification;
 import com.wrapzzo.backend.list.ListQuery;
 import com.wrapzzo.backend.list.ListSpecs;
 import com.wrapzzo.backend.list.PageResponse;
@@ -170,10 +173,42 @@ public class OrderService {
 
     // --- Vendor self-service side: only orders routed to this vendor, and moving them through fulfillment. ---
 
-    /** Each order's originating request and its proofs are fetched in one query apiece, not one per order. */
+    /** One page of the vendor's own orders, searched, filtered (by stage, division...) and sorted in the database. */
     @Transactional(readOnly = true)
-    public List<VendorOrderResponse> listForVendor(UUID vendorId) {
-        List<Order> orders = orderRepository.findByAssignedVendorIdOrderByCreatedAtDesc(vendorId);
+    public PageResponse<VendorOrderResponse> pageForVendor(UUID vendorId, ListQuery query) {
+        return ListSpecs.page(orderRepository, VendorOrderListFields.ofVendor(vendorId), query, VendorOrderListFields.fields(),
+                Sort.by(Sort.Direction.DESC, "createdAt"), this::toVendorResponses);
+    }
+
+    /** How many of the vendor's orders are at each stage (narrowed to a division when given), counted in the database. */
+    @Transactional(readOnly = true)
+    public VendorOrderSummaryResponse summaryForVendor(UUID vendorId, UUID divisionId) {
+        Specification<Order> scope = VendorOrderListFields.ofVendor(vendorId);
+        if (divisionId != null) {
+            scope = scope.and(VendorOrderListFields.inDivision(divisionId));
+        }
+        Map<String, Long> byStage = new java.util.LinkedHashMap<>();
+        for (String stage : VendorOrderListFields.STAGES) {
+            byStage.put(stage, orderRepository.count(scope.and(VendorOrderListFields.atStage(stage))));
+        }
+        return new VendorOrderSummaryResponse(orderRepository.count(scope), byStage);
+    }
+
+    /** The divisions the vendor's orders were raised in, with how many from each -- what the portal's division filter is built from. */
+    @Transactional(readOnly = true)
+    public List<VendorOrderDivisionResponse> orderDivisionsForVendor(UUID vendorId) {
+        Map<UUID, Long> counts = new HashMap<>();
+        for (Object[] row : orderRepository.countByDivisionForVendor(vendorId)) {
+            counts.put((UUID) row[0], (Long) row[1]);
+        }
+        return orgUnitRepository.findAllById(counts.keySet()).stream()
+                .map(unit -> new VendorOrderDivisionResponse(unit.getId(), unit.getName(), counts.get(unit.getId())))
+                .sorted(java.util.Comparator.comparingLong(VendorOrderDivisionResponse::count).reversed().thenComparing(VendorOrderDivisionResponse::name))
+                .toList();
+    }
+
+    /** Each order's originating request and its proofs are fetched in one query apiece, not one per order. */
+    private List<VendorOrderResponse> toVendorResponses(List<Order> orders) {
         List<UUID> orderIds = orders.stream().map(Order::getId).toList();
         Map<UUID, QuickGiftRequest> requestByOrderId = quickGiftRequestRepository.findByOrder_IdIn(orderIds).stream()
                 .collect(Collectors.toMap(r -> r.getOrder().getId(), r -> r));

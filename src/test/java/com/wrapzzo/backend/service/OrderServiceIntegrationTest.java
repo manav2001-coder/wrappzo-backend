@@ -1,5 +1,6 @@
 package com.wrapzzo.backend.service;
 
+import com.wrapzzo.backend.list.ListQuery;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -99,7 +100,7 @@ class OrderServiceIntegrationTest {
         newOrder(null, OrderStatus.PROCESSING);
 
         actAsVendor(vendor);
-        List<VendorOrderResponse> orders = orderService.listForVendor(vendor.getId());
+        List<VendorOrderResponse> orders = orderService.pageForVendor(vendor.getId(), ListQuery.firstPage(100)).data();
 
         assertThat(orders).hasSize(1);
         assertThat(orders.get(0).id()).isEqualTo(mine.getId());
@@ -191,7 +192,7 @@ class OrderServiceIntegrationTest {
         newOrder(vendor, OrderStatus.PRODUCTION_QUEUE);
 
         actAsVendor(vendor);
-        List<VendorOrderResponse> orders = orderService.listForVendor(vendor.getId());
+        List<VendorOrderResponse> orders = orderService.pageForVendor(vendor.getId(), ListQuery.firstPage(100)).data();
 
         // Raw gift price only -- neither the 20% markup nor the 10% commission enters the vendor's number.
         assertThat(orders.get(0).price()).isEqualByComparingTo(BigDecimal.valueOf(1000));
