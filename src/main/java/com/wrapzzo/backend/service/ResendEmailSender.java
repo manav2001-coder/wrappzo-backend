@@ -17,7 +17,7 @@ import org.springframework.stereotype.Service;
 /** Talks to Resend's HTTP API directly -- no SDK needed for something this small. */
 @Service
 @Slf4j
-public class ResendEmailSender implements EmailSender {
+public class ResendEmailSender implements EmailTransport {
 
     private static final URI RESEND_ENDPOINT = URI.create("https://api.resend.com/emails");
 

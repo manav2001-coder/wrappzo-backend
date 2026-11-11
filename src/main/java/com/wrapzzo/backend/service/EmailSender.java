@@ -1,10 +1,9 @@
 package com.wrapzzo.backend.service;
 
 /**
- * Seam over the actual email provider. {@link ResendEmailSender} is the real
- * implementation; tests substitute a recording double rather than hitting
- * Resend's real API on every run, the same way local dev substitutes MinIO
- * for S3 -- a third-party network dependency, not our own DB/cache.
+ * How the app sends an email. {@link OutboxEmailSender} is the real implementation: it saves the email to
+ * the outbox and returns, and the {@link EmailOutboxDispatcher} sends it afterwards, with retries. So a
+ * call here never fails because the email provider is down. Tests substitute a recording double.
  */
 public interface EmailSender {
 
