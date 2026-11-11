@@ -37,17 +37,30 @@ public class BackgroundJobRunner {
 
     private final JobRunRepository runs;
     private final UserRepository users;
+    private final JobLock lock;
     private final Map<String, BackgroundJob> jobsByName;
 
-    public BackgroundJobRunner(JobRunRepository runs, UserRepository users, List<BackgroundJob> jobs) {
+    public BackgroundJobRunner(JobRunRepository runs, UserRepository users, JobLock lock, List<BackgroundJob> jobs) {
         this.runs = runs;
         this.users = users;
+        this.lock = lock;
         this.jobsByName = jobs.stream().collect(Collectors.toMap(BackgroundJob::name, Function.identity()));
     }
 
-    /** The scheduler's entry point: run the job and record how it went. */
+    /**
+     * The scheduler's entry point: run the job and record how it went. With several replicas every one
+     * of them calls this at the same moment; only the one that takes the job's lock runs it.
+     */
     public void runScheduled(BackgroundJob job) {
-        execute(runs.save(new JobRun(job.name(), SCHEDULE)), job);
+        if (!lock.tryAcquire(job.name())) {
+            log.info("Background job {} is being run by another replica; skipping it here", job.name());
+            return;
+        }
+        try {
+            execute(runs.save(new JobRun(job.name(), SCHEDULE)), job);
+        } finally {
+            lock.release(job.name());
+        }
     }
 
     public List<JobRunResponse> list() {

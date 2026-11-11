@@ -29,6 +29,7 @@ class BackgroundJobRunnerTest {
 
     private final JobRunRepository runs = mock(JobRunRepository.class);
     private final UserRepository users = mock(UserRepository.class);
+    private final JobLock lock = mock(JobLock.class);
     private final AtomicBoolean fail = new AtomicBoolean(false);
 
     private final BackgroundJob job = new BackgroundJob() {
@@ -44,7 +45,8 @@ class BackgroundJobRunnerTest {
 
     @BeforeEach
     void setUp() {
-        runner = new BackgroundJobRunner(runs, users, List.of(job));
+        runner = new BackgroundJobRunner(runs, users, lock, List.of(job));
+        when(lock.tryAcquire("demo")).thenReturn(true);
         when(runs.save(any(JobRun.class))).thenAnswer(call -> call.getArgument(0));
     }
 
@@ -64,6 +66,25 @@ class BackgroundJobRunnerTest {
         assertThat(last.getTriggeredBy()).isEqualTo("Schedule");
         assertThat(last.getResult()).isEqualTo("did the work");
         assertThat(last.getFinishedAt()).isNotNull();
+    }
+
+    @Test
+    void aReplicaThatDoesNotGetTheLockDoesNotRunTheJobOrRecordARun() {
+        when(lock.tryAcquire("demo")).thenReturn(false);
+
+        runner.runScheduled(job);
+
+        verify(runs, never()).save(any(JobRun.class));
+        verify(lock, never()).release(any());
+    }
+
+    @Test
+    void theLockIsReleasedAfterTheJobEvenWhenItFails() {
+        fail.set(true);
+
+        runner.runScheduled(job);
+
+        verify(lock).release("demo");
     }
 
     @Test
