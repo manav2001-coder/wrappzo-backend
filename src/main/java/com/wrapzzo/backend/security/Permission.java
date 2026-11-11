@@ -38,6 +38,7 @@ public enum Permission {
     ORDER_REQUEST_PHOTO(Keys.ORDER_REQUEST_PHOTO, true),
     ARTWORK_REVIEW(Keys.ARTWORK_REVIEW, true),
     ARTWORK_FINAL_APPROVE(Keys.ARTWORK_FINAL_APPROVE, true),
+    ARTWORK_OVERRIDE(Keys.ARTWORK_OVERRIDE, true),
     APPROVAL_VIEW(Keys.APPROVAL_VIEW, true),
     APPROVAL_DECIDE(Keys.APPROVAL_DECIDE, true),
     ARTWORK_APPROVAL_VIEW(Keys.ARTWORK_APPROVAL_VIEW, true),
@@ -172,6 +173,8 @@ public enum Permission {
         public static final String ORDER_REQUEST_PHOTO = "order.request_photo";
         public static final String ARTWORK_REVIEW = "artwork.review";
         public static final String ARTWORK_FINAL_APPROVE = "artwork.final_approve";
+        /** Approve a proof still waiting on the MR or a lower level of the cycle, in place of the people there; the proof moves on to the next level above the approver. */
+        public static final String ARTWORK_OVERRIDE = "artwork.override";
         /** The Approvals page -- the manager-level queue of proofs waiting on someone. Not the approval-steps setup (artwork_approval.*). */
         public static final String APPROVAL_VIEW = "approval.view";
         /** Approve or send back a proof at a manager level of the approval cycle. The MR's own first review is artwork.review. */

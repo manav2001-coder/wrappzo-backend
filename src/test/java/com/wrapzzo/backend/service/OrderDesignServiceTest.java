@@ -360,6 +360,221 @@ class OrderDesignServiceTest {
         assertThat(rejected.reviewComment()).isEqualTo("Logo is off-brand");
     }
 
+    // ---- Approving in place of the levels below (artwork.override) ----
+
+    /** AM Aditi -> RM Ravi (level 1, in her line) -> HO of the AM's division (level 2). Ravi and the HOs hold artwork.override. */
+    private record Cast(User am, User rm, User ho, User hoElsewhere, User zm) {
+    }
+
+    private Cast amRmHo() {
+        Role amRole = role("AM"), rmRole = role("RM"), zmRole = role("ZM"), hoRole = role("HO");
+        OrgUnit summit = unit("Summit", null), maxis = unit("Maxis", null);
+        User zm = user("Zara ZM", null), rm = user("Ravi RM", zm), am = user("Aditi AM", rm), ho = user("Hari HO", null), hoElsewhere = user("Omar HO", null);
+        zm.setRole(zmRole);
+        rm.setRole(rmRole);
+        am.setRole(amRole);
+        am.setOrgUnit(summit);
+        ho.setRole(hoRole);
+        ho.setOrgUnit(summit);
+        hoElsewhere.setRole(hoRole);
+        hoElsewhere.setOrgUnit(maxis);
+        for (User u : List.of(zm, rm, am, ho, hoElsewhere)) {
+            u.setCompany(company);
+            when(users.findById(u.getId())).thenReturn(Optional.of(u));
+            when(keys.resolveEffectiveKeys(u)).thenReturn(u == rm || u == ho || u == hoElsewhere || u == zm
+                    ? Set.of("artwork.review", "approval.decide", "artwork.override")
+                    : Set.of("artwork.review", "approval.decide"));
+            when(visibility.resolve(u)).thenReturn(Visibility.everything(u.getId()));
+        }
+        when(orgUnits.findById(summit.getId())).thenReturn(Optional.of(summit));
+        when(users.findByCompanyIdAndRoleId(company.getId(), hoRole.getId())).thenReturn(List.of(ho, hoElsewhere));
+        when(steps.findByCompany_IdOrderByStepNoAsc(company.getId())).thenReturn(List.of(
+                new CompanyArtworkApprovalStep(company, 1, rmRole, ArtworkApprovalScope.REPORTING_LINE),
+                new CompanyArtworkApprovalStep(company, 2, hoRole, ArtworkApprovalScope.DIVISION)));
+        when(designs.findByStatusVisible(eq(OrderDesignStatus.PENDING_REVIEW), eq(company.getId()), anyBoolean(), anyCollection(), anyCollection()))
+                .thenAnswer(inv -> design.getStatus() == OrderDesignStatus.PENDING_REVIEW ? List.of(design) : List.of());
+        order.setOwner(am);
+        order.setCreatedBy(am);
+        return new Cast(am, rm, ho, hoElsewhere, zm);
+    }
+
+    private OrderDesignResponse overrideAs(User reviewer, String comment) {
+        as(reviewer);
+        return service.override(order.getId(), design.getId(), comment);
+    }
+
+    private List<Object> publishedEvents() {
+        org.mockito.ArgumentCaptor<Object> captured = org.mockito.ArgumentCaptor.forClass(Object.class);
+        org.mockito.Mockito.verify(events, org.mockito.Mockito.atLeast(0)).publishEvent(captured.capture());
+        return captured.getAllValues();
+    }
+
+    private static String step(com.wrapzzo.backend.dto.ArtworkApprovalStep step) {
+        return step.level() + ":" + step.decision() + ":" + step.decidedByName() + (step.onBehalfOfName() != null ? "(for " + step.onBehalfOfName() + ")" : "");
+    }
+
+    @Test
+    void theFirstPersonInTheCycleCanApproveInPlaceOfTheMrAndTheProofGoesToTheNextLevel() {
+        Cast c = amRmHo();
+
+        OrderDesignResponse after = overrideAs(c.rm(), "AM is on leave");
+
+        assertThat(after.status()).isEqualTo(OrderDesignStatus.PENDING_FINAL_APPROVAL);
+        assertThat(after.approvalLevel()).isEqualTo(2);
+        assertThat(after.waitingOnName()).isEqualTo("HO of Summit");
+        assertThat(after.approvals()).extracting(OrderDesignServiceTest::step)
+                .containsExactly("0:BYPASSED:Ravi RM(for Aditi AM)", "1:APPROVED:Ravi RM");
+        assertThat(after.approvals().get(0).comment()).isEqualTo("AM is on leave");
+        // The MR's review is done, by the person who skipped it.
+        assertThat(design.getFirstApprovedBy()).isSameAs(c.rm());
+        assertThat(publishedEvents()).anySatisfy(event -> assertThat(event).isInstanceOf(ArtworkAwaitingApprovalEvent.class));
+        assertThat(publishedEvents()).filteredOn(ArtworkBypassedEvent.class::isInstance).singleElement().satisfies(event -> {
+            ArtworkBypassedEvent bypassed = (ArtworkBypassedEvent) event;
+            assertThat(bypassed.skippedUserIds()).containsExactly(c.am().getId());
+            assertThat(bypassed.bypassedById()).isEqualTo(c.rm().getId());
+        });
+        // The vendor is not told: only the final approval does that.
+        assertThat(publishedEvents()).noneMatch(event -> event instanceof VendorProofDecidedEvent);
+    }
+
+    @Test
+    void theSecondLevelCanApproveInPlaceOfTheMrAndLevelOneAndTheProofGoesToTheVendor() {
+        Cast c = amRmHo();
+
+        OrderDesignResponse done = overrideAs(c.ho(), null);
+
+        assertThat(done.status()).isEqualTo(OrderDesignStatus.APPROVED);
+        assertThat(done.reviewedByUserName()).isEqualTo("Hari HO");
+        assertThat(done.approvals()).extracting(OrderDesignServiceTest::step)
+                .containsExactly("0:BYPASSED:Hari HO(for Aditi AM)", "1:BYPASSED:Hari HO(for Ravi RM)", "2:APPROVED:Hari HO");
+        assertThat(publishedEvents()).filteredOn(VendorProofDecidedEvent.class::isInstance).singleElement()
+                .satisfies(event -> assertThat(((VendorProofDecidedEvent) event).approved()).isTrue());
+        assertThat(publishedEvents()).filteredOn(ArtworkBypassedEvent.class::isInstance).singleElement()
+                .satisfies(event -> assertThat(((ArtworkBypassedEvent) event).skippedUserIds()).containsExactlyInAnyOrder(c.am().getId(), c.rm().getId()));
+    }
+
+    @Test
+    void theSecondLevelCanApproveInPlaceOfLevelOneWhenTheMrHasAlreadyApproved() {
+        Cast c = amRmHo();
+        approveAs(c.am());
+
+        OrderDesignResponse done = overrideAs(c.ho(), "RM unreachable");
+
+        assertThat(done.status()).isEqualTo(OrderDesignStatus.APPROVED);
+        assertThat(done.approvals()).extracting(OrderDesignServiceTest::step)
+                .containsExactly("0:APPROVED:Aditi AM", "1:BYPASSED:Hari HO(for Ravi RM)", "2:APPROVED:Hari HO");
+    }
+
+    @Test
+    void aLevelCannotBypassItself_onlyThoseBelowIt() {
+        Cast c = amRmHo();
+        approveAs(c.am()); // now waiting on the RM, level 1
+
+        assertThatThrownBy(() -> overrideAs(c.rm(), null)).isInstanceOf(AccessDeniedException.class).hasMessageContaining("level 1 (Ravi RM)");
+        assertThat(design.getStatus()).isEqualTo(OrderDesignStatus.PENDING_FINAL_APPROVAL);
+        assertThat(design.getApprovalLevel()).isEqualTo(1);
+    }
+
+    @Test
+    void aPersonOutsideThisOrdersCycleCannotBypassEvenWithThePermission() {
+        Cast c = amRmHo();
+
+        // Another division's HO and the ZM (who only watches) hold the key but have no place in this order's cycle.
+        assertThatThrownBy(() -> overrideAs(c.hoElsewhere(), null)).isInstanceOf(AccessDeniedException.class).hasMessageContaining("waiting for the MR's review");
+        assertThatThrownBy(() -> overrideAs(c.zm(), null)).isInstanceOf(AccessDeniedException.class);
+        assertThat(design.getStatus()).isEqualTo(OrderDesignStatus.PENDING_REVIEW);
+        assertThat(trail).isEmpty();
+    }
+
+    @Test
+    void withoutThePermissionNobodyCanBypass_whateverTheirPlace() {
+        Cast c = amRmHo();
+        when(keys.resolveEffectiveKeys(c.rm())).thenReturn(Set.of("artwork.review", "approval.decide"));
+
+        assertThatThrownBy(() -> overrideAs(c.rm(), null)).isInstanceOf(AccessDeniedException.class).hasMessageContaining("permission");
+        assertThat(trail).isEmpty();
+    }
+
+    @Test
+    void thePersonWhoPlacedTheOrderCannotBypassOnTheirOwnProof() {
+        Cast c = amRmHo();
+        when(keys.resolveEffectiveKeys(c.am())).thenReturn(Set.of("artwork.review", "approval.decide", "artwork.override"));
+
+        assertThatThrownBy(() -> overrideAs(c.am(), null)).isInstanceOf(AccessDeniedException.class).hasMessageContaining("You placed this order");
+    }
+
+    @Test
+    void nobodySignsTwice_aLevelThatHasApprovedCannotAlsoBypassAboveIt() {
+        Cast c = amRmHo();
+        approveAs(c.am());
+        approveAs(c.rm()); // now waiting on the HO
+        when(keys.resolveEffectiveKeys(c.rm())).thenReturn(Set.of("artwork.review", "approval.decide", "artwork.override"));
+
+        assertThatThrownBy(() -> overrideAs(c.rm(), null)).isInstanceOf(AccessDeniedException.class).hasMessageContaining("already approved");
+    }
+
+    @Test
+    void thereIsNothingToBypassWhenSeniorApprovalIsOff() {
+        Cast c = amRmHo();
+        when(flags.isEnabled(company.getId(), CompanyFeature.MARKETING_DESIGN_APPROVAL)).thenReturn(false);
+
+        assertThatThrownBy(() -> overrideAs(c.ho(), null)).isInstanceOf(AccessDeniedException.class).hasMessageContaining("not switched on");
+        as(c.ho());
+        assertThat(service.pageOverridable(ListQuery.firstPage(100)).data()).isEmpty();
+    }
+
+    @Test
+    void aFinishedProofCannotBeBypassed() {
+        Cast c = amRmHo();
+        overrideAs(c.ho(), null); // approved
+
+        assertThatThrownBy(() -> overrideAs(c.ho(), null)).isInstanceOf(com.wrapzzo.backend.exception.OrderDesignAlreadyReviewedException.class);
+    }
+
+    @Test
+    void theBelowYouListShowsWhatEachPersonCouldBypassAndNothingElse() {
+        Cast c = amRmHo();
+
+        // Waiting on the MR: the RM could cover the MR; the HO could cover the MR and the RM; others see nothing.
+        as(c.rm());
+        assertThat(service.pageOverridable(ListQuery.firstPage(100)).data()).singleElement().satisfies(item -> {
+            assertThat(item.waitingLevel()).isZero();
+            assertThat(item.yourLevel()).isEqualTo(1);
+            assertThat(item.skipping()).containsExactly("MR review (Aditi AM)");
+            assertThat(item.waitingOn()).contains("MR's review");
+        });
+        as(c.ho());
+        assertThat(service.pageOverridable(ListQuery.firstPage(100)).data()).singleElement().satisfies(item -> {
+            assertThat(item.yourLevel()).isEqualTo(2);
+            assertThat(item.skipping()).containsExactly("MR review (Aditi AM)", "Level 1 (Ravi RM)");
+        });
+        as(c.hoElsewhere());
+        assertThat(service.pageOverridable(ListQuery.firstPage(100)).data()).isEmpty();
+        as(c.zm());
+        assertThat(service.pageOverridable(ListQuery.firstPage(100)).data()).isEmpty();
+        as(c.am());
+        assertThat(service.pageOverridable(ListQuery.firstPage(100)).data()).isEmpty();
+
+        // Once the MR has approved and it waits on the RM's own level, the RM has nothing below them; the HO could cover the RM.
+        approveAs(c.am());
+        as(c.rm());
+        assertThat(service.pageOverridable(ListQuery.firstPage(100)).data()).isEmpty();
+        as(c.ho());
+        assertThat(service.pageOverridable(ListQuery.firstPage(100)).data()).singleElement().satisfies(item -> {
+            assertThat(item.waitingLevel()).isEqualTo(1);
+            assertThat(item.skipping()).containsExactly("Level 1 (Ravi RM)");
+        });
+    }
+
+    @Test
+    void aPersonWithoutThePermissionSeesNoBelowYouList() {
+        Cast c = amRmHo();
+        when(keys.resolveEffectiveKeys(c.ho())).thenReturn(Set.of("artwork.review", "approval.decide"));
+
+        as(c.ho());
+        assertThat(service.pageOverridable(ListQuery.firstPage(100)).data()).isEmpty();
+    }
+
     private static Role role(String name) {
         Role role = new Role();
         role.setId(UUID.randomUUID());

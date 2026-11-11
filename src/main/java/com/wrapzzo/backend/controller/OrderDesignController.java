@@ -1,6 +1,7 @@
 package com.wrapzzo.backend.controller;
 
 import com.wrapzzo.backend.dto.OrderDesignResponse;
+import com.wrapzzo.backend.dto.OverrideOrderDesignRequest;
 import com.wrapzzo.backend.dto.RejectOrderDesignRequest;
 import com.wrapzzo.backend.security.Permission.Keys;
 import com.wrapzzo.backend.security.RequiresPermission;
@@ -35,6 +36,14 @@ public class OrderDesignController {
     @PreAuthorize("hasAnyAuthority('" + Keys.ARTWORK_REVIEW + "', '" + Keys.APPROVAL_DECIDE + "', '" + Keys.ARTWORK_FINAL_APPROVE + "')")
     public OrderDesignResponse approve(@PathVariable UUID orderId, @PathVariable UUID designId) {
         return orderDesignService.approve(orderId, designId);
+    }
+
+    /** Approve in place of the MR or the levels below the caller; the proof moves on to the level above the caller's own. */
+    @PostMapping("/{designId}/override")
+    @RequiresPermission(Keys.ARTWORK_OVERRIDE)
+    public OrderDesignResponse override(
+            @PathVariable UUID orderId, @PathVariable UUID designId, @Valid @RequestBody OverrideOrderDesignRequest request) {
+        return orderDesignService.override(orderId, designId, request.comment());
     }
 
     @PostMapping("/{designId}/reject")

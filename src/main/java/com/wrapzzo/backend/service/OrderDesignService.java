@@ -3,6 +3,7 @@ package com.wrapzzo.backend.service;
 import com.wrapzzo.backend.security.Permission;
 import com.wrapzzo.backend.dto.ArtworkApprovalStep;
 import com.wrapzzo.backend.dto.OrderDesignResponse;
+import com.wrapzzo.backend.dto.OverridableArtworkResponse;
 import com.wrapzzo.backend.dto.PendingArtworkApprovalResponse;
 import com.wrapzzo.backend.dto.PresignOrderDesignResponse;
 import com.wrapzzo.backend.exception.ConflictException;
@@ -188,6 +189,157 @@ public class OrderDesignService {
         // Only the final approval tells the vendor; the levels on the way up are the customer's own business.
         eventPublisher.publishEvent(new VendorProofDecidedEvent(design.getId(), true));
         return toResponse(design);
+    }
+
+    /**
+     * Approves a proof in place of the people below the caller in the approval cycle. Level 1 may cover the MR's own review; level 2
+     * covers the MR's review and level 1, and so on up. The caller's one approval counts as theirs and as each step it skips (those are
+     * written to the trail as BYPASSED, by them), and the proof moves on to the level above theirs -- or, if theirs was the last, is approved
+     * and goes to the vendor. Needs artwork.override as well as a place in this order's cycle above where the proof is waiting.
+     */
+    @Transactional
+    public OrderDesignResponse override(UUID orderId, UUID designId, String comment) {
+        OrderDesign design = orderDesignRepository.findById(designId).orElseThrow(() -> new OrderDesignNotFoundException(designId));
+        if (!design.getOrder().getId().equals(orderId)) {
+            throw new OrderDesignNotFoundException(designId);
+        }
+        User reviewer = currentUser();
+        if (!holds(reviewer, Permission.ARTWORK_OVERRIDE.key())) {
+            throw new AccessDeniedException("Approving in place of a lower level needs the Approve in place of lower levels permission, which your role doesn't have");
+        }
+        if (design.getStatus() != OrderDesignStatus.PENDING_REVIEW && design.getStatus() != OrderDesignStatus.PENDING_FINAL_APPROVAL) {
+            throw new OrderDesignAlreadyReviewedException(designId);
+        }
+        if (reviewer.getCompany() == null || !design.getOrder().getCompany().getId().equals(reviewer.getCompany().getId())) {
+            throw new OrderNotFoundException(orderId);
+        }
+        if (!companyFeatureFlagService.isEnabled(reviewer.getCompany().getId(), CompanyFeature.MARKETING_DESIGN_APPROVAL)) {
+            throw new AccessDeniedException("Senior artwork approval is not switched on for your company, so there are no levels to approve in place of");
+        }
+        User requester = requesterOf(design.getOrder());
+        if (requester != null && requester.getId().equals(reviewer.getId())) {
+            throw new AccessDeniedException("You placed this order, so you can't approve its artwork in place of anyone");
+        }
+        if (orderDesignApprovalRepository.existsByDesign_IdAndDecidedBy_Id(design.getId(), reviewer.getId())) {
+            throw new AccessDeniedException("You have already approved this artwork; the next level needs someone else");
+        }
+        List<Stage> chain = approvalChain(design);
+        int waiting = design.getStatus() == OrderDesignStatus.PENDING_REVIEW ? 0 : currentLevel(design);
+        int level = highestLevelAbove(chain, waiting, reviewer);
+        if (level == 0) {
+            throw new AccessDeniedException("Only someone above the level this artwork is waiting on can approve it in place of the people there. It is waiting for "
+                    + waitingLabel(design, chain, waiting));
+        }
+
+        Instant now = Instant.now();
+        String note = comment == null || comment.isBlank() ? null : comment.trim();
+        List<UUID> skippedUsers = new ArrayList<>();
+        for (int skipped = waiting; skipped < level; skipped++) {
+            List<User> people = skipped == 0 ? (requester == null ? List.of() : List.of(requester)) : peopleAt(chain, skipped);
+            User named = people.size() == 1 ? people.get(0) : null;
+            record(design, skipped, OrderDesignDecision.BYPASSED, reviewer, named, note, now);
+            people.stream().filter(person -> !person.getId().equals(reviewer.getId())).forEach(person -> skippedUsers.add(person.getId()));
+        }
+        record(design, level, OrderDesignDecision.APPROVED, reviewer, null, note, now);
+        if (waiting == 0) {
+            design.setFirstApprovedBy(reviewer);
+            design.setFirstApprovedAt(now);
+        }
+        eventPublisher.publishEvent(new ArtworkBypassedEvent(design.getId(), reviewer.getId(), skippedUsers, note));
+        if (level < levelCount(chain)) {
+            design.setStatus(OrderDesignStatus.PENDING_FINAL_APPROVAL);
+            moveToLevel(design, level + 1, chain);
+            eventPublisher.publishEvent(new ArtworkAwaitingApprovalEvent(design.getId()));
+            return toResponse(design);
+        }
+        design.setStatus(OrderDesignStatus.APPROVED);
+        design.setReviewedBy(reviewer);
+        design.setReviewedAt(now);
+        eventPublisher.publishEvent(new VendorProofDecidedEvent(design.getId(), true));
+        return toResponse(design);
+    }
+
+    /**
+     * The caller's "Waiting below you" list: proofs still waiting on the MR's review or on a level beneath the caller's own place in
+     * the cycle. Needs artwork.override. Bounded by what is waiting in the caller's reach, as the other approval queues are.
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<OverridableArtworkResponse> pageOverridable(ListQuery query) {
+        return new ListInMemory<OverridableArtworkResponse>()
+                .column("orderDisplayId", OverridableArtworkResponse::orderDisplayId, true)
+                .column("giftName", OverridableArtworkResponse::giftName, true)
+                .column("recipientName", OverridableArtworkResponse::recipientName, true)
+                .column("requestedByName", OverridableArtworkResponse::requestedByName, true)
+                .column("quantity", OverridableArtworkResponse::quantity, false)
+                .column("versionNo", OverridableArtworkResponse::versionNo, false)
+                .column("waitingOn", OverridableArtworkResponse::waitingOn, true)
+                .column("waitingLevel", OverridableArtworkResponse::waitingLevel, false)
+                .column("waitingSince", OverridableArtworkResponse::waitingSince, false)
+                .page(listOverridable(), query, Comparator.comparing(OverridableArtworkResponse::waitingSince, Comparator.nullsLast(Comparator.naturalOrder())));
+    }
+
+    private List<OverridableArtworkResponse> listOverridable() {
+        User reviewer = currentUser();
+        if (reviewer.getCompany() == null || !holds(reviewer, Permission.ARTWORK_OVERRIDE.key())
+                || !companyFeatureFlagService.isEnabled(reviewer.getCompany().getId(), CompanyFeature.MARKETING_DESIGN_APPROVAL)) {
+            return List.of();
+        }
+        Visibility visibility = visibilityService.resolve(reviewer);
+        List<OrderDesign> waiting = new ArrayList<>();
+        for (OrderDesignStatus status : List.of(OrderDesignStatus.PENDING_REVIEW, OrderDesignStatus.PENDING_FINAL_APPROVAL)) {
+            waiting.addAll(orderDesignRepository.findByStatusVisible(status, reviewer.getCompany().getId(),
+                    visibility.companyWide(), visibility.peopleForQuery(), visibility.orgUnitsForQuery()));
+        }
+        Map<UUID, List<ArtworkApprovalStep>> trails = trailsOf(waiting);
+        List<OverridableArtworkResponse> list = new ArrayList<>();
+        for (OrderDesign design : waiting) {
+            User requester = requesterOf(design.getOrder());
+            if (requester != null && requester.getId().equals(reviewer.getId())) {
+                continue;
+            }
+            if (orderDesignApprovalRepository.existsByDesign_IdAndDecidedBy_Id(design.getId(), reviewer.getId())) {
+                continue;
+            }
+            List<Stage> chain = approvalChain(design);
+            int waitingLevel = design.getStatus() == OrderDesignStatus.PENDING_REVIEW ? 0 : currentLevel(design);
+            int level = highestLevelAbove(chain, waitingLevel, reviewer);
+            if (level == 0) {
+                continue;
+            }
+            List<String> skipping = new ArrayList<>();
+            for (int skipped = waitingLevel; skipped < level; skipped++) {
+                skipping.add(skipped == 0
+                        ? "MR review" + (requester != null ? " (" + requester.getName() + ")" : "")
+                        : "Level " + skipped + " (" + chain.get(skipped - 1).label() + ")");
+            }
+            list.add(OverridableArtworkResponse.from(design, fileStorageService.publicUrl(design.getFileKey()), requester != null ? requester.getName() : null,
+                    waitingLabel(design, chain, waitingLevel), waitingLevel, level, levelCount(chain), skipping, trails.getOrDefault(design.getId(), List.of())));
+        }
+        return list;
+    }
+
+    /** The highest level above {@code waiting} whose people include the reviewer, or 0 if there is none: the level their approval counts as. */
+    private static int highestLevelAbove(List<Stage> chain, int waiting, User reviewer) {
+        for (int level = chain.size(); level > waiting; level--) {
+            if (chain.get(level - 1).includes(reviewer)) {
+                return level;
+            }
+        }
+        return 0;
+    }
+
+    private static List<User> peopleAt(List<Stage> chain, int level) {
+        Stage stage = expectedApprover(chain, level);
+        return stage == null ? List.of() : stage.named() != null ? List.of(stage.named()) : stage.eligible();
+    }
+
+    private String waitingLabel(OrderDesign design, List<Stage> chain, int waiting) {
+        if (waiting == 0) {
+            User requester = requesterOf(design.getOrder());
+            return "the MR's review" + (requester != null ? " (" + requester.getName() + ")" : "");
+        }
+        Stage stage = expectedApprover(chain, waiting);
+        return "level " + waiting + (stage != null ? " (" + stage.label() + ")" : "");
     }
 
     /** Sends the proof back to the vendor -- from the MR's review or from any management level. */
