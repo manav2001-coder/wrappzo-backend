@@ -42,6 +42,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -306,17 +307,19 @@ public class OrderDesignService {
             waiting.addAll(orderDesignRepository.findByStatusVisible(status, reviewer.getCompany().getId(),
                     visibility.companyWide(), visibility.peopleForQuery(), visibility.orgUnitsForQuery()));
         }
-        Map<UUID, List<ArtworkApprovalStep>> trails = trailsOf(waiting);
-        List<OverridableArtworkResponse> list = new ArrayList<>();
+        QueueContext context = new QueueContext(reviewer, waiting);
+        List<OrderDesign> candidates = new ArrayList<>();
         for (OrderDesign design : waiting) {
             User requester = requesterOf(design.getOrder());
-            if (requester != null && requester.getId().equals(reviewer.getId())) {
-                continue;
+            if ((requester == null || !requester.getId().equals(reviewer.getId())) && !context.decided.contains(design.getId())) {
+                candidates.add(design);
             }
-            if (orderDesignApprovalRepository.existsByDesign_IdAndDecidedBy_Id(design.getId(), reviewer.getId())) {
-                continue;
-            }
-            List<Stage> chain = approvalChain(design);
+        }
+        Map<UUID, List<ArtworkApprovalStep>> trails = trailsOf(candidates);
+        List<OverridableArtworkResponse> list = new ArrayList<>();
+        for (OrderDesign design : candidates) {
+            User requester = requesterOf(design.getOrder());
+            List<Stage> chain = context.chain(design);
             int waitingLevel = design.getStatus() == OrderDesignStatus.PENDING_REVIEW ? 0 : currentLevel(design);
             int level = highestLevelAbove(chain, waitingLevel, reviewer);
             if (level == 0) {
@@ -393,13 +396,12 @@ public class OrderDesignService {
         Visibility visibility = visibilityService.resolve(reviewer);
         List<OrderDesign> pending = orderDesignRepository.findByStatusVisible(OrderDesignStatus.PENDING_FINAL_APPROVAL, reviewer.getCompany().getId(),
                 visibility.companyWide(), visibility.peopleForQuery(), visibility.orgUnitsForQuery());
-        Map<UUID, List<ArtworkApprovalStep>> trails = trailsOf(pending);
+        QueueContext context = new QueueContext(reviewer, pending);
+        List<OrderDesign> mine = pending.stream().filter(design -> canApproveCurrentLevel(design, reviewer, context)).toList();
+        Map<UUID, List<ArtworkApprovalStep>> trails = trailsOf(mine);
         List<PendingArtworkApprovalResponse> queue = new ArrayList<>();
-        for (OrderDesign design : pending) {
-            if (!canApproveCurrentLevel(design, reviewer)) {
-                continue;
-            }
-            Stage stage = expectedApprover(approvalChain(design), currentLevel(design));
+        for (OrderDesign design : mine) {
+            Stage stage = expectedApprover(context.chain(design), currentLevel(design));
             boolean covering = stage == null || !stage.includes(reviewer);
             queue.add(PendingArtworkApprovalResponse.from(design, fileStorageService.publicUrl(design.getFileKey()),
                     requesterOf(design.getOrder()), stage != null ? stage.label() : null, covering,
@@ -493,20 +495,54 @@ public class OrderDesignService {
      * approval included), and the MR who placed the order never signs their own artwork up the line.
      */
     private boolean canApproveCurrentLevel(OrderDesign design, User reviewer) {
+        return canApproveCurrentLevel(design, reviewer, null);
+    }
+
+    /**
+     * What a queue computes once for the whole list rather than once per proof: the reviewer's permission keys and visibility (each a cache
+     * or database read), which proofs they have already signed (one query), and the approval chain of each requester (it depends on who placed
+     * the order, not on the proof). A list of thousands of proofs was doing all of these thousands of times.
+     */
+    private final class QueueContext {
+        final User reviewer;
+        final Set<String> keys;
+        final Visibility visibility;
+        final Set<UUID> decided;
+        private final Map<UUID, List<Stage>> chains = new HashMap<>();
+
+        QueueContext(User reviewer, List<OrderDesign> designs) {
+            this.reviewer = reviewer;
+            this.keys = accessControlCacheService.resolveEffectiveKeys(reviewer);
+            this.visibility = visibilityService.resolve(reviewer);
+            this.decided = designs.isEmpty() ? Set.of()
+                    : orderDesignApprovalRepository.findDesignIdsDecidedBy(designs.stream().map(OrderDesign::getId).toList(), reviewer.getId());
+        }
+
+        List<Stage> chain(OrderDesign design) {
+            User requester = requesterOf(design.getOrder());
+            return chains.computeIfAbsent(requester == null ? new UUID(0, 0) : requester.getId(), id -> approvalChain(design));
+        }
+    }
+
+    private boolean canApproveCurrentLevel(OrderDesign design, User reviewer, QueueContext context) {
         User requester = requesterOf(design.getOrder());
         if (requester != null && requester.getId().equals(reviewer.getId())) {
             return false;
         }
-        if (orderDesignApprovalRepository.existsByDesign_IdAndDecidedBy_Id(design.getId(), reviewer.getId())) {
+        boolean alreadySigned = context != null ? context.decided.contains(design.getId())
+                : orderDesignApprovalRepository.existsByDesign_IdAndDecidedBy_Id(design.getId(), reviewer.getId());
+        if (alreadySigned) {
             return false;
         }
-        Stage stage = expectedApprover(approvalChain(design), currentLevel(design));
-        if (stage != null && stage.includes(reviewer) && holds(reviewer, Permission.APPROVAL_DECIDE.key())) {
+        Stage stage = expectedApprover(context != null ? context.chain(design) : approvalChain(design), currentLevel(design));
+        Set<String> keys = context != null ? context.keys : accessControlCacheService.resolveEffectiveKeys(reviewer);
+        if (stage != null && stage.includes(reviewer) && keys.contains(Permission.APPROVAL_DECIDE.key())) {
             return true;
         }
         Order order = design.getOrder();
-        return accessControlCacheService.resolveEffectiveKeys(reviewer).contains(FINAL_APPROVAL_KEY)
-                && visibilityService.resolve(reviewer).canSee(order.getOwner(), order.getOrgUnit());
+        Visibility visibility = context != null ? context.visibility : null;
+        return keys.contains(FINAL_APPROVAL_KEY)
+                && (visibility != null ? visibility : visibilityService.resolve(reviewer)).canSee(order.getOwner(), order.getOrgUnit());
     }
 
     private boolean holds(User user, String key) {
