@@ -97,8 +97,20 @@ public class UserService {
         this.frontendBaseUrl = frontendBaseUrl;
     }
 
-    @Transactional
-    public BulkImportUsersResponse bulkImport(UUID companyId, List<BulkImportUserRow> rows) {
+    /** Everything a sheet is checked against: the company, who already exists, and the roles it may name. */
+    private record BulkImportContext(Company company, Map<String, User> byEmail, Map<String, Role> rolesByName) {
+    }
+
+    /**
+     * Checks a whole sheet without saving anything, so a bad row is reported straight away even when the
+     * import itself is then done in the background. Throws {@link UserImportValidationException} naming each bad row.
+     */
+    @Transactional(readOnly = true)
+    public void validateBulkImport(UUID companyId, List<BulkImportUserRow> rows) {
+        loadAndValidate(companyId, rows);
+    }
+
+    private BulkImportContext loadAndValidate(UUID companyId, List<BulkImportUserRow> rows) {
         companyAccessGuard.requireOwnCompanyOrPlatformStaff(companyId);
         Company company = companyRepository.findById(companyId).orElseThrow(() -> new CompanyNotFoundException(companyId));
 
@@ -128,6 +140,15 @@ public class UserService {
         if (!errors.isEmpty()) {
             throw new UserImportValidationException(errors);
         }
+        return new BulkImportContext(company, byEmail, rolesByName);
+    }
+
+    @Transactional
+    public BulkImportUsersResponse bulkImport(UUID companyId, List<BulkImportUserRow> rows) {
+        BulkImportContext context = loadAndValidate(companyId, rows);
+        Company company = context.company();
+        Map<String, User> byEmail = context.byEmail();
+        Map<String, Role> rolesByName = context.rolesByName();
 
         Map<String, OrgUnit> orgUnitCache = loadOrgUnitCache(company);
 

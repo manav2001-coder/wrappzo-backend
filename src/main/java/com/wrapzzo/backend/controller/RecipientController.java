@@ -1,7 +1,7 @@
 package com.wrapzzo.backend.controller;
 
 import com.wrapzzo.backend.dto.BulkDoctorsRequest;
-import com.wrapzzo.backend.dto.BulkDoctorsResponse;
+import com.wrapzzo.backend.dto.ImportJobResponse;
 import com.wrapzzo.backend.dto.CreateRecipientRequest;
 import com.wrapzzo.backend.dto.RecipientResponse;
 import com.wrapzzo.backend.list.ListQueryParams;
@@ -10,6 +10,7 @@ import com.wrapzzo.backend.dto.UpcomingBirthdayResponse;
 import com.wrapzzo.backend.dto.UpdateRecipientRequest;
 import com.wrapzzo.backend.security.Permission.Keys;
 import com.wrapzzo.backend.security.RequiresPermission;
+import com.wrapzzo.backend.service.ImportJobService;
 import com.wrapzzo.backend.service.RecipientService;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -19,6 +20,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -35,6 +37,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class RecipientController {
 
     private final RecipientService recipientService;
+    private final ImportJobService importJobs;
 
     /** One page: ?page=0&size=25&search=&sort=name&dir=asc&filters=[{field,operator,value}]. */
     @GetMapping("/page")
@@ -67,8 +70,8 @@ public class RecipientController {
     /** A sheet of doctors onto the caller's own list, all or none. */
     @PostMapping("/mine/bulk")
     @RequiresPermission(Keys.DOCTOR_IMPORT)
-    public BulkDoctorsResponse bulkCreateMine(@Valid @RequestBody BulkDoctorsRequest request) {
-        return recipientService.bulkCreateMine(request.rows());
+    public ResponseEntity<ImportJobResponse> bulkCreateMine(@Valid @RequestBody BulkDoctorsRequest request) {
+        return importJobs.respond(importJobs.importDoctors(request.rows()));
     }
 
     /** Takes a doctor off the caller's list; they stay a company doctor. */

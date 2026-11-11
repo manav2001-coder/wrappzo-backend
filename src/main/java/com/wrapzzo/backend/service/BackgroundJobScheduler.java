@@ -15,6 +15,7 @@ public class BackgroundJobScheduler {
     private final ArtworkApprovalReminderJob artworkApprovalReminders;
     private final OrderApprovalReminderJob orderApprovalReminders;
     private final EmailOutboxCleanupJob emailOutboxCleanup;
+    private final ImportJobCleanupJob importJobCleanup;
 
     @Scheduled(cron = "0 0 3 * * *")
     public void refreshTokenCleanup() {
@@ -39,5 +40,10 @@ public class BackgroundJobScheduler {
     @Scheduled(cron = "0 10 3 * * *")
     public void emailOutboxCleanup() {
         runner.runScheduled(emailOutboxCleanup);
+    }
+
+    @Scheduled(cron = "0 15 3 * * *")
+    public void importJobCleanup() {
+        runner.runScheduled(importJobCleanup);
     }
 }

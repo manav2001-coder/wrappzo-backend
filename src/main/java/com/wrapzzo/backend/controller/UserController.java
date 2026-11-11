@@ -1,7 +1,7 @@
 package com.wrapzzo.backend.controller;
 
 import com.wrapzzo.backend.dto.BulkImportUsersRequest;
-import com.wrapzzo.backend.dto.BulkImportUsersResponse;
+import com.wrapzzo.backend.dto.ImportJobResponse;
 import com.wrapzzo.backend.dto.ChangeUserRoleRequest;
 import com.wrapzzo.backend.dto.SetExtraOrgUnitsRequest;
 import com.wrapzzo.backend.dto.SetCompanyWideRequest;
@@ -10,12 +10,14 @@ import com.wrapzzo.backend.list.ListQueryParams;
 import com.wrapzzo.backend.list.PageResponse;
 import com.wrapzzo.backend.security.Permission.Keys;
 import com.wrapzzo.backend.security.RequiresPermission;
+import com.wrapzzo.backend.service.ImportJobService;
 import com.wrapzzo.backend.service.UserService;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -31,11 +33,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class UserController {
 
     private final UserService userService;
+    private final ImportJobService importJobs;
 
     @PostMapping("/bulkImport")
     @RequiresPermission(Keys.USER_CREATE)
-    public BulkImportUsersResponse bulkImport(@PathVariable UUID companyId, @Valid @RequestBody BulkImportUsersRequest request) {
-        return userService.bulkImport(companyId, request.rows());
+    public ResponseEntity<ImportJobResponse> bulkImport(@PathVariable UUID companyId, @Valid @RequestBody BulkImportUsersRequest request) {
+        return importJobs.respond(importJobs.importUsers(companyId, request.rows()));
     }
 
     /** One page: ?page=0&size=25&search=&sort=name&dir=asc&filters=[{field,operator,value}]. */

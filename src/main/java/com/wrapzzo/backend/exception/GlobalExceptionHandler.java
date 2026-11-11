@@ -249,6 +249,11 @@ public class GlobalExceptionHandler {
                 .body(Map.of("error", "Import validation failed -- fix these rows and re-upload.", "details", e.getErrors()));
     }
 
+    @ExceptionHandler(ImportJobNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleImportJobNotFound(ImportJobNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
+    }
+
     @ExceptionHandler(CampaignNotFoundException.class)
     public ResponseEntity<Map<String, String>> handleCampaignNotFound(CampaignNotFoundException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
