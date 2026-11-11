@@ -518,9 +518,13 @@ public class OrderDesignService {
                     : orderDesignApprovalRepository.findDesignIdsDecidedBy(designs.stream().map(OrderDesign::getId).toList(), reviewer.getId());
         }
 
+        private final Map<UUID, List<CompanyArtworkApprovalStep>> stepsByCompany = new HashMap<>();
+
         List<Stage> chain(OrderDesign design) {
             User requester = requesterOf(design.getOrder());
-            return chains.computeIfAbsent(requester == null ? new UUID(0, 0) : requester.getId(), id -> approvalChain(design));
+            return chains.computeIfAbsent(requester == null ? new UUID(0, 0) : requester.getId(),
+                    id -> approvalChain(design, stepsByCompany.computeIfAbsent(design.getOrder().getCompany().getId(),
+                            company -> approvalStepRepository.findByCompany_IdOrderByStepNoAsc(company))));
         }
     }
 
@@ -563,12 +567,15 @@ public class OrderDesignService {
      * the older "the managers above the MR, nearest first, at most artwork_approval_levels of them".
      */
     private List<Stage> approvalChain(OrderDesign design) {
+        return approvalChain(design, approvalStepRepository.findByCompany_IdOrderByStepNoAsc(design.getOrder().getCompany().getId()));
+    }
+
+    private List<Stage> approvalChain(OrderDesign design, List<CompanyArtworkApprovalStep> steps) {
         Company company = design.getOrder().getCompany();
         User requester = requesterOf(design.getOrder());
         if (requester == null) {
             return List.of();
         }
-        List<CompanyArtworkApprovalStep> steps = approvalStepRepository.findByCompany_IdOrderByStepNoAsc(company.getId());
         if (steps.isEmpty()) {
             return managersUpTheLine(requester, company.getArtworkApprovalLevels());
         }
