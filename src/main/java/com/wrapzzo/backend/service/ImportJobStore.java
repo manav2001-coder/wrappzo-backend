@@ -87,6 +87,12 @@ public class ImportJobStore {
                 age.toSeconds());
     }
 
+    /** Bulk uploads waiting for a worker or running now. */
+    public int countOpen() {
+        Integer n = jdbc.queryForObject("SELECT count(*) FROM import_jobs WHERE status IN ('QUEUED', 'RUNNING')", Integer.class);
+        return n == null ? 0 : n;
+    }
+
     private static String truncate(String text) {
         if (text == null) return null;
         return text.length() <= 1000 ? text : text.substring(0, 1000);

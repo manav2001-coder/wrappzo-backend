@@ -87,6 +87,15 @@ public class EmailOutboxStore {
         return n == null ? 0 : n;
     }
 
+    /** How long the longest-waiting due email has been waiting, in seconds; 0 when nothing is overdue. A growing number means sending is stuck. */
+    public double oldestDueAgeSeconds() {
+        Double age = jdbc.queryForObject("""
+                SELECT COALESCE(EXTRACT(EPOCH FROM clock_timestamp() - MIN(next_attempt_at)), 0)::float8
+                FROM email_outbox WHERE status = 'PENDING' AND next_attempt_at <= clock_timestamp()
+                """, Double.class);
+        return age == null ? 0 : age;
+    }
+
     private static String truncate(String text) {
         if (text == null) return null;
         return text.length() <= 1000 ? text : text.substring(0, 1000);

@@ -4,6 +4,7 @@ import com.wrapzzo.backend.security.JwtAuthenticationFilter;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.security.autoconfigure.actuate.web.servlet.EndpointRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -47,6 +48,10 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth.requestMatchers("/api/auth/**", "/api/vendor/auth/**", "/api/public/**")
                         .permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")
+                        .permitAll()
+                        // Metrics and health are served on the management port (see application.properties), which
+                        // is not routed publicly; on the app's own port these paths do not exist.
+                        .requestMatchers(EndpointRequest.toAnyEndpoint())
                         .permitAll()
                         .requestMatchers("/api/vendor/**")
                         .hasRole("VENDOR")
