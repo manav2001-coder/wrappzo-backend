@@ -2,6 +2,8 @@ package com.wrapzzo.backend.service;
 
 import com.wrapzzo.backend.dto.AddFeaturesResponse;
 import com.wrapzzo.backend.dto.AddReferencesResponse;
+import com.wrapzzo.backend.dto.CloneTemplateResponse;
+import com.wrapzzo.backend.dto.MakeEditableResponse;
 import com.wrapzzo.backend.dto.BulkAssignUserTemplatesResponse;
 import com.wrapzzo.backend.dto.EffectiveFeaturesResponse;
 import com.wrapzzo.backend.dto.TbacTemplateResponse;
@@ -154,6 +156,91 @@ public class TemplateService {
             throw new ConflictException("\"" + template.getName() + "\" is used to set up new companies and can't be deactivated");
         }
         template.setActive(active);
+    }
+
+    /**
+     * A copy of a template with every feature it grants -- its own and what it inherits -- as the copy's own features, and no link back to the
+     * original: so it can be edited freely, which is the point of cloning to start a new template. A company user's copy always lands in their own
+     * company (cloning a system template is how a company starts from one); platform staff's lands where the original lives. Features the
+     * company hasn't switched on, or the cloner doesn't hold, are left out rather than granted -- the same rules as adding features by hand.
+     */
+    @Transactional
+    public CloneTemplateResponse cloneTemplate(UUID sourceId, String requestedName) {
+        Template source = visibleTemplate(sourceId);
+        User caller = caller();
+        Company company = caller.getCompany() != null ? caller.getCompany() : source.getCompany();
+        if (company == null) {
+            requirePlatformStaff();
+        }
+        String name = freeName(company, requestedName != null && !requestedName.isBlank() ? requestedName.trim() : "Copy of " + source.getName());
+        Template copy = new Template(company, name, source.getDescription());
+        copy.setIcon(source.getIcon());
+        copy.setPath(source.getPath());
+        copy.setActive(true);
+        copy.setCreatedByName(caller.getName());
+        copy.setUpdatedByName(caller.getName());
+
+        Set<String> granted = accessControlCacheService.loadGraph().resolve(List.of(source.getId()));
+        Set<UUID> enabled = company == null ? null : new HashSet<>(companyAccessControlRepository.findActiveAccessControlIdsByCompanyId(company.getId()));
+        Set<String> held = caller.getCompany() == null ? null : accessControlCacheService.resolveEffectiveKeys(caller);
+        int copied = 0;
+        int leftOut = 0;
+        for (AccessControl feature : accessControlRepository.findAll()) {
+            if (!granted.contains(feature.getKey())) {
+                continue;
+            }
+            boolean on = enabled == null || enabled.contains(feature.getId());
+            boolean mayGrant = held == null || held.contains(feature.getKey());
+            if (on && mayGrant) {
+                copy.getAccessControls().add(feature);
+                copied++;
+            } else {
+                leftOut++;
+            }
+        }
+        templateRepository.saveAndFlush(copy);
+        accessControlCacheService.invalidateAfterCommit(company);
+        return new CloneTemplateResponse(toResponses(List.of(copy)).get(0), copied, leftOut);
+    }
+
+    /** "Copy of X", then "Copy of X (2)", ... -- the first name the company hasn't used. */
+    private String freeName(Company company, String wanted) {
+        String base = wanted.length() > 100 ? wanted.substring(0, 100) : wanted;
+        String candidate = base;
+        for (int n = 2; nameTaken(company, candidate); n++) {
+            String suffix = " (" + n + ")";
+            candidate = (base.length() + suffix.length() > 100 ? base.substring(0, 100 - suffix.length()) : base) + suffix;
+        }
+        return candidate;
+    }
+
+    private boolean nameTaken(Company company, String name) {
+        return (company == null ? templateRepository.findSystemByName(name) : templateRepository.findByCompanyIdAndName(company.getId(), name)).isPresent();
+    }
+
+    /**
+     * Turns what a template inherits into its own features and lets go of the templates it included, so every feature can be edited here.
+     * Nothing changes in what the template grants -- the same keys, now held directly -- so no new access is handed out and none taken away;
+     * what changes is that it stops following the templates it included.
+     */
+    @Transactional
+    public MakeEditableResponse makeEditable(UUID id) {
+        Template template = requireWritable(id);
+        Set<String> all = accessControlCacheService.loadGraph().resolve(List.of(template.getId()));
+        Set<UUID> directIds = template.getAccessControls().stream().map(AccessControl::getId).collect(Collectors.toSet());
+        int copied = 0;
+        for (AccessControl feature : accessControlRepository.findAll()) {
+            if (all.contains(feature.getKey()) && !directIds.contains(feature.getId())) {
+                template.getAccessControls().add(feature);
+                copied++;
+            }
+        }
+        int removed = template.getReferences().size();
+        template.getReferences().clear();
+        template.setUpdatedByName(caller().getName());
+        templateRepository.saveAndFlush(template);
+        accessControlCacheService.invalidateAfterCommit(template.getCompany());
+        return new MakeEditableResponse(copied, removed);
     }
 
     // --- features of a template ---

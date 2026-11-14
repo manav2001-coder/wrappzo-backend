@@ -2,6 +2,9 @@ package com.wrapzzo.backend.controller;
 
 import com.wrapzzo.backend.dto.AddFeaturesResponse;
 import com.wrapzzo.backend.dto.AddReferencesResponse;
+import com.wrapzzo.backend.dto.CloneTemplateRequest;
+import com.wrapzzo.backend.dto.CloneTemplateResponse;
+import com.wrapzzo.backend.dto.MakeEditableResponse;
 import com.wrapzzo.backend.dto.EffectiveFeaturesResponse;
 import com.wrapzzo.backend.dto.FeatureIdsRequest;
 import com.wrapzzo.backend.dto.IdListResponse;
@@ -71,6 +74,21 @@ public class TbacTemplateController {
     @RequiresPermission(Keys.TEMPLATE_MASTER_EDIT)
     public TbacTemplateResponse deactivate(@PathVariable UUID templateId) {
         return templateService.deactivate(templateId);
+    }
+
+    /** A copy with all the original's features as its own, ready to edit. Needs both: it makes a template, and it grants features to it. */
+    @PostMapping("/{templateId}/clone")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAuthority('" + Keys.TEMPLATE_MASTER_ADD + "') and hasAuthority('" + Keys.FEATURES_TO_TEMPLATE_ASSIGN + "')")
+    public CloneTemplateResponse cloneTemplate(@PathVariable UUID templateId, @Valid @RequestBody(required = false) CloneTemplateRequest request) {
+        return templateService.cloneTemplate(templateId, request == null ? null : request.name());
+    }
+
+    /** Makes everything the template inherits its own, and lets go of the templates it included, so every feature can be edited. */
+    @PostMapping("/{templateId}/make-editable")
+    @PreAuthorize("hasAuthority('" + Keys.FEATURES_TO_TEMPLATE_ASSIGN + "') and hasAuthority('" + Keys.TEMPLATES_TO_TEMPLATE_ASSIGN + "')")
+    public MakeEditableResponse makeEditable(@PathVariable UUID templateId) {
+        return templateService.makeEditable(templateId);
     }
 
     @GetMapping("/{templateId}/effective-features")

@@ -231,6 +231,71 @@ class TbacIntegrationTest {
     }
 
     @Test
+    void aCloneCarriesEveryFeatureAsItsOwn_withNoLinkBack_soItCanBeEditedFreely() {
+        TbacTemplateResponse base = template(company, "Base");
+        templateService.addFeatures(base.id(), Set.of(orderView));
+        TbacTemplateResponse top = template(company, "Top");
+        templateService.addFeatures(top.id(), Set.of(userView));
+        templateService.addReferences(top.id(), Set.of(base.id()));
+
+        var cloned = templateService.cloneTemplate(top.id(), null);
+
+        assertThat(cloned.template().name()).isEqualTo("Copy of Top");
+        assertThat(cloned.copied()).isEqualTo(2);
+        assertThat(cloned.leftOut()).isZero();
+        EffectiveFeaturesResponse copy = templateService.effectiveFeatures(cloned.template().id());
+        // Everything the original grants, inherited included, is now the copy's own -- nothing is locked as inherited.
+        assertThat(copy.direct()).extracting(EffectiveFeaturesResponse.Entry::key).containsExactlyInAnyOrder("order.view", "user.view");
+        assertThat(copy.inherited()).isEmpty();
+        assertThat(templateService.references(cloned.template().id())).isEmpty();
+        // So a feature can be taken off the copy, which an inherited one could not be...
+        templateService.removeFeature(cloned.template().id(), orderView);
+        assertThat(templateService.effectiveFeatures(cloned.template().id()).direct()).extracting(EffectiveFeaturesResponse.Entry::key).containsExactly("user.view");
+        // ...and the original is untouched by any of it.
+        assertThat(templateService.effectiveFeatures(top.id()).inherited()).extracting(EffectiveFeaturesResponse.Entry::key).containsExactly("order.view");
+
+        // Names are kept free, or taken as given.
+        assertThat(templateService.cloneTemplate(top.id(), null).template().name()).isEqualTo("Copy of Top (2)");
+        assertThat(templateService.cloneTemplate(top.id(), "Orders desk").template().name()).isEqualTo("Orders desk");
+    }
+
+    @Test
+    void aCloneLeavesOutFeaturesTheCompanyHasSwitchedOff_andSaysHowMany() {
+        TbacTemplateResponse top = template(company, "Top");
+        templateService.addFeatures(top.id(), Set.of(orderView, userView));
+        featureService.setActive(company.getId(), userView, false);
+
+        var cloned = templateService.cloneTemplate(top.id(), null);
+
+        assertThat(cloned.copied()).isEqualTo(1);
+        assertThat(cloned.leftOut()).isEqualTo(1);
+        assertThat(templateService.effectiveFeatures(cloned.template().id()).direct()).extracting(EffectiveFeaturesResponse.Entry::key).containsExactly("order.view");
+    }
+
+    @Test
+    void makingATemplateEditableTurnsWhatItInheritsIntoItsOwnAndLetsGoOfTheIncludes() {
+        TbacTemplateResponse base = template(company, "Base");
+        templateService.addFeatures(base.id(), Set.of(orderView));
+        TbacTemplateResponse top = template(company, "Top");
+        templateService.addFeatures(top.id(), Set.of(userView));
+        templateService.addReferences(top.id(), Set.of(base.id()));
+
+        var result = templateService.makeEditable(top.id());
+
+        assertThat(result.copied()).isEqualTo(1);
+        assertThat(result.includesRemoved()).isEqualTo(1);
+        EffectiveFeaturesResponse after = templateService.effectiveFeatures(top.id());
+        // The same access as before, now all of it the template's own.
+        assertThat(after.direct()).extracting(EffectiveFeaturesResponse.Entry::key).containsExactlyInAnyOrder("order.view", "user.view");
+        assertThat(after.inherited()).isEmpty();
+        assertThat(templateService.references(top.id())).isEmpty();
+        templateService.removeFeature(top.id(), orderView);
+        assertThat(templateService.get(top.id()).effectiveFeatureCount()).isEqualTo(1);
+        // The included template is not touched.
+        assertThat(templateService.effectiveFeatures(base.id()).direct()).extracting(EffectiveFeaturesResponse.Entry::key).containsExactly("order.view");
+    }
+
+    @Test
     void addingIncludesJudgesEachCandidateAlone() {
         TbacTemplateResponse top = template(company, "Top");
         TbacTemplateResponse good = template(company, "Good");
