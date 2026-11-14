@@ -165,6 +165,7 @@ public class QuickGiftService {
         Order order = new Order(
                 request.getCompany(), request.getGift(), OrderSource.QUICK_GIFT, request.getRecipientName(),
                 request.getRecipientPhone(), actor);
+        order.setRecipientPcode(request.getRecipientPcode());
         order.orderQuantity(request.getQuantity());
         order.setOwner(request.getRequestedBy());
         order.setOrgUnit(request.getOrgUnit());

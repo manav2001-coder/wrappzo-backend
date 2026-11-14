@@ -182,7 +182,7 @@ class DashboardInsightsQueries {
     /** Doctors assigned to one person with no live PEL order in the period: (name, speciality / clinic, assigned at), longest-waiting first. */
     List<Object[]> uncoveredDoctors(UUID userId, Instant from, Instant to, int limit) {
         @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery("select r.name, concat_ws(' · ', nullif(r.speciality, ''), nullif(r.clinic_name, '')), a.assigned_at"
+        List<Object[]> rows = em.createNativeQuery("select r.name, concat_ws(' · ', nullif(r.speciality, ''), nullif(r.clinic_name, '')), a.assigned_at, r.pcode"
                         + " from recipient_assignments a join recipients r on r.id = a.recipient_id join users u on u.id = a.mr_user_id"
                         + " where a.mr_user_id = :userId and not " + COVERED + " order by a.assigned_at asc")
                 .setParameter("userId", userId).setParameter("from", from).setParameter("to", to).setMaxResults(limit).getResultList();

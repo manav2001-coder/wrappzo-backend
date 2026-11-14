@@ -15,6 +15,7 @@ public record WarehouseOrderResponse(
         String giftName,
         int quantity,
         String recipientName,
+        String recipientPcode,
         String recipientPhone,
         /** The final drop -- a Quick Gift order's own request; null for a campaign order. */
         String deliveryAddress,
@@ -32,6 +33,7 @@ public record WarehouseOrderResponse(
                 order.getGift() != null ? order.getGift().getName() : null,
                 order.getQuantity(),
                 order.getRecipientName(),
+                order.getRecipientPcode(),
                 order.getRecipientPhone(),
                 request != null ? request.getDeliveryAddress() : null,
                 order.getOrgUnit() != null ? order.getOrgUnit().getName() : null,

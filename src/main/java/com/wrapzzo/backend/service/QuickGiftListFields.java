@@ -16,7 +16,7 @@ final class QuickGiftListFields {
         return new ListFields<QuickGiftRequest>()
                 .text("displayId", (root, cb) -> cb.concat("QG-", root.get("requestNo").as(String.class)), "requestNo", true)
                 .text("giftName", (root, cb) -> ListFields.join(root, "gift").get("name"), "gift.name", true)
-                .text("recipientName", (root, cb) -> root.get("recipientName"), "recipientName", true)
+                .text("recipientName", (root, cb) -> ListFields.doctorLabel(root, cb), "recipientName", true)
                 .text("recipientPcode", (root, cb) -> root.get("recipientPcode"), "recipientPcode", true)
                 .text("orderDisplayId", (root, cb) -> cb.concat("ORD-", ListFields.join(root, "order").get("orderNo").as(String.class)), "order.orderNo", true)
                 .number("quantity", (root, cb) -> root.get("quantity"), "quantity")

@@ -25,6 +25,7 @@ public record OrderResponse(
         /** The gift's first catalogue image, if it has one -- same lookup as the Dashboard's order timeline chips. */
         String giftImageUrl,
         String recipientName,
+        String recipientPcode,
         String recipientPhone,
         /** Null until the recipient (or someone on their behalf) uploads one -- see OrderPhotoService. */
         String recipientPhotoUrl,
@@ -71,6 +72,7 @@ public record OrderResponse(
                 order.getGift() != null ? order.getGift().getName() : null,
                 giftImageUrl,
                 order.getRecipientName(),
+                order.getRecipientPcode(),
                 order.getRecipientPhone(),
                 recipientPhotos.isEmpty() ? null : recipientPhotos.get(0).url(),
                 recipientPhotos,

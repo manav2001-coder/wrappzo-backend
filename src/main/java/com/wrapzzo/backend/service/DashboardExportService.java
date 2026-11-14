@@ -48,7 +48,7 @@ public class DashboardExportService {
         boolean price = pricePolicy.canSee();
 
         @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery("select o.order_no, o.created_at, u.name, ou.name, o.recipient_name, g.name, o.quantity, o.status, o.approval_status,"
+        List<Object[]> rows = em.createNativeQuery("select o.order_no, o.created_at, u.name, ou.name, o.recipient_name, o.recipient_pcode, g.name, o.quantity, o.status, o.approval_status,"
                         + " (select max(h.changed_at) from order_status_history h where h.order_id = o.id and h.status = 'DELIVERED'), v.name, o.total_price"
                         + " from orders o left join users u on u.id = o.owner_id left join org_units ou on ou.id = o.org_unit_id left join gifts g on g.id = o.gift_id"
                         + " left join vendors v on v.id = o.assigned_vendor_id"
@@ -59,14 +59,14 @@ public class DashboardExportService {
                 .setParameter("from", w.from()).setParameter("to", w.to()).setMaxResults(MAX_ROWS).getResultList();
 
         StringBuilder csv = new StringBuilder("﻿"); // so Excel reads it as UTF-8
-        csv.append(line("Order", "Date", "Requested by", "Area", "Doctor", "PEL", "Quantity", "Status", "Approval", "Delivered on", "Days to deliver",
+        csv.append(line("Order", "Date", "Requested by", "Area", "Doctor", "Doctor pcode", "PEL", "Quantity", "Status", "Approval", "Delivered on", "Days to deliver",
                 vendor ? "Vendor" : null, price ? "Total price" : null));
         for (Object[] r : rows) {
             Instant created = instant(r[1]);
-            Instant delivered = instant(r[9]);
+            Instant delivered = instant(r[10]);
             String days = created != null && delivered != null ? String.valueOf(Math.round(java.time.Duration.between(created, delivered).toHours() / 2.4) / 10.0) : "";
-            csv.append(line("ORD-" + r[0], day(created), text(r[2]), text(r[3]), text(r[4]), text(r[5]), text(r[6]), text(r[7]), text(r[8]), day(delivered), days,
-                    vendor ? text(r[10]) : null, price ? text(r[11]) : null));
+            csv.append(line("ORD-" + r[0], day(created), text(r[2]), text(r[3]), text(r[4]), text(r[5]), text(r[6]), text(r[7]), text(r[8]), text(r[9]), day(delivered), days,
+                    vendor ? text(r[11]) : null, price ? text(r[12]) : null));
         }
         return new Csv("pel-orders-" + w.range() + ".csv", csv.toString().getBytes(StandardCharsets.UTF_8));
     }

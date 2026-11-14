@@ -157,6 +157,19 @@ class OrderListIntegrationTest {
     }
 
     @Test
+    void aDoctorCanBeFoundByPcodeFromTheSearchBoxAndTheDoctorColumnFilter() {
+        seed();
+        // The test helper gives "Dr South 3" the pcode "PC-DrSouth3".
+        assertThat(page(admin, 0, 50, "PC-DrSouth3", null, null, null).data()).extracting(OrderResponse::recipientName).containsExactly("Dr South 3");
+        assertThat(page(admin, 0, 50, null, null, null, "[{\"field\":\"recipientName\",\"operator\":\"contains\",\"value\":\"PC-DrSouth\"}]").total()).isEqualTo(5);
+        assertThat(page(admin, 0, 50, null, null, null, "[{\"field\":\"recipientPcode\",\"operator\":\"equals\",\"value\":\"PC-DrNorth1\"}]").data())
+                .extracting(OrderResponse::recipientPcode).containsExactly("PC-DrNorth1");
+        // The name still finds them, and the screen's own text -- "Dr South 3 (PC-DrSouth3)" -- finds them too.
+        assertThat(page(admin, 0, 50, "Dr South 3", null, null, null).total()).isEqualTo(1);
+        assertThat(page(admin, 0, 50, null, null, null, "[{\"field\":\"recipientName\",\"operator\":\"contains\",\"value\":\"Dr South 3 (PC-DrSouth3)\"}]").total()).isEqualTo(1);
+    }
+
+    @Test
     void aTeamMemberSeesOnlyTheirOwnAreasOrders() {
         seed();
 

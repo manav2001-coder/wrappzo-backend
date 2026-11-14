@@ -58,7 +58,7 @@ public class DashboardInsightsService {
         Window w = window(requestedRange);
         var rows = queries.uncoveredDoctors(CurrentUser.id(), w.from(), w.to(), limit).stream()
                 .map(r -> new com.wrapzzo.backend.dto.DashboardDrilldownResponse.Row(
-                        null, (String) r[0], r[1] == null ? "" : r[1].toString(), null, toInstant(r[2]), null, null))
+                        null, DoctorLabel.of((String) r[3], (String) r[0]), r[1] == null ? "" : r[1].toString(), null, toInstant(r[2]), null, null))
                 .toList();
         return new com.wrapzzo.backend.dto.DashboardDrilldownResponse("Doctors with no PEL yet", rows);
     }

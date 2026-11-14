@@ -150,7 +150,7 @@ class DashboardQueries {
     List<Object[]> pelsPerDoctor(Reach reach, boolean deliveredOnly, int limit) {
         String status = deliveredOnly ? " and o.status = 'DELIVERED'" : " and o.status <> 'CANCELLED'";
         Query query = em.createNativeQuery("select (array_agg(o.recipient_name order by o.created_at desc))[1], (array_agg(o.recipient_phone order by o.created_at desc))[1],"
-                + " count(*), sum(o.quantity), max(o.created_at)" + ORDERS_SQL + status + HAS_DOCTOR + " group by " + DOCTOR_KEY + " order by sum(o.quantity) desc, max(o.created_at) desc");
+                + " (array_agg(o.recipient_pcode order by o.created_at desc))[1], count(*), sum(o.quantity), max(o.created_at)" + ORDERS_SQL + status + HAS_DOCTOR + " group by " + DOCTOR_KEY + " order by sum(o.quantity) desc, max(o.created_at) desc");
         @SuppressWarnings("unchecked")
         List<Object[]> result = bind(query, reach).setMaxResults(limit).getResultList();
         return result;

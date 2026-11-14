@@ -99,6 +99,8 @@ public record DashboardResponse(
             /** Null if the gift has no image, or the order has no gift (a rare/legacy case). */
             String giftImageUrl,
             String recipientName,
+            /** The doctor's pcode, shown after the name; null where the order has none. */
+            String recipientPcode,
             String requesterName,
             OrderStatus status,
             String source,

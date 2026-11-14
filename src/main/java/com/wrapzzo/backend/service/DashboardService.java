@@ -263,7 +263,7 @@ public class DashboardService {
                 .map(o -> new Row(
                         "ORD-" + o.getOrderNo(),
                         o.getGift() != null ? o.getGift().getName() : "—",
-                        o.getRecipientName() != null ? o.getRecipientName() : (o.getCampaign() != null ? o.getCampaign().getName() : "—"),
+                        o.getRecipientName() != null ? DoctorLabel.of(o.getRecipientPcode(), o.getRecipientName()) : (o.getCampaign() != null ? o.getCampaign().getName() : "—"),
                         o.getStatus().name(),
                         o.getCreatedAt(),
                         o.getCampaign() != null ? o.getCampaign().getId() : null,
@@ -279,7 +279,7 @@ public class DashboardService {
                 .map(q -> new Row(
                         "QG-" + q.getRequestNo(),
                         q.getGift().getName(),
-                        q.getRecipientName(),
+                        DoctorLabel.of(q.getRecipientPcode(), q.getRecipientName()),
                         q.getStatus().name(),
                         q.getCreatedAt(),
                         null,
@@ -304,14 +304,15 @@ public class DashboardService {
         return new DashboardDrilldownResponse(title, rows);
     }
 
-    /** One row per doctor: how many PELs these orders carry for them, most first. Rows are (name, phone, orders, PELs, latest order). */
+    /** One row per doctor: how many PELs these orders carry for them, most first. Rows are (name, phone, pcode, orders, PELs, latest order). */
     private DashboardDrilldownResponse pelsPerDoctorDrilldown(List<Object[]> doctors, String title) {
         List<Row> rows = doctors.stream()
                 .map(doctor -> {
                     String name = doctor[0] != null && !doctor[0].toString().isBlank() ? doctor[0].toString() : (doctor[1] == null ? null : doctor[1].toString());
-                    long orders = ((Number) doctor[2]).longValue();
-                    long pels = ((Number) doctor[3]).longValue();
-                    return new Row(null, name, orders + (orders == 1 ? " order" : " orders"), null, instantOf(doctor[4]), null, pels);
+                    long orders = ((Number) doctor[3]).longValue();
+                    long pels = ((Number) doctor[4]).longValue();
+                    String label = DoctorLabel.of(doctor[2] == null ? null : doctor[2].toString(), name);
+                    return new Row(null, label, orders + (orders == 1 ? " order" : " orders"), null, instantOf(doctor[5]), null, pels);
                 })
                 .sorted(Comparator.comparing(Row::quantity).reversed())
                 .limit(DRILLDOWN_LIMIT)
@@ -367,6 +368,7 @@ public class DashboardService {
                         o.getGift() != null ? o.getGift().getName() : "—",
                         o.getGift() != null ? firstImageUrlByGiftId.get(o.getGift().getId()) : null,
                         o.getRecipientName(),
+                        o.getRecipientPcode(),
                         submitterName(o, quickGiftRequesterByOrderId),
                         o.getStatus(),
                         o.getSource().name(),

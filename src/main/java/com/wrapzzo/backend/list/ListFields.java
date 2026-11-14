@@ -118,4 +118,14 @@ public final class ListFields<E> {
         }
         return from.join(attribute, JoinType.LEFT);
     }
+
+    /**
+     * A doctor as people read them -- "Dr. Asha Shah (P-1001)" -- so that searching or filtering the doctor column also finds a pcode,
+     * the same text the screen shows. Works on any entity with recipientName and recipientPcode.
+     */
+    public static <T> jakarta.persistence.criteria.Expression<String> doctorLabel(jakarta.persistence.criteria.Root<T> root, jakarta.persistence.criteria.CriteriaBuilder cb) {
+        var name = cb.coalesce(root.<String>get("recipientName"), "");
+        var pcode = cb.coalesce(cb.concat(" (", cb.concat(root.<String>get("recipientPcode"), ")")), "");
+        return cb.concat(name, pcode);
+    }
 }

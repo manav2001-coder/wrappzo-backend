@@ -69,6 +69,10 @@ public class Order {
     @Column(name = "recipient_phone")
     private String recipientPhone;
 
+    /** The doctor's pcode, shown before their name everywhere; null for an order that has no doctor record behind it. */
+    @Column(name = "recipient_pcode")
+    private String recipientPcode;
+
     /** Snapshotted off the gift's total price (price + fee percentages) at approval time --
      * stable even if the gift is repriced afterward. Null for an order whose gift had no price set. */
     @Column(name = "total_price", precision = 10, scale = 2)
