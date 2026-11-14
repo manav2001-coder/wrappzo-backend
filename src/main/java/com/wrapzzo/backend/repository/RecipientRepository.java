@@ -43,8 +43,13 @@ public interface RecipientRepository extends JpaRepository<Recipient, UUID>, org
     Optional<Recipient> findMatchExcluding(@Param("companyId") UUID companyId, @Param("excludeId") UUID excludeId,
             @Param("name") String name, @Param("phone") String phone, @Param("email") String email);
 
-    /** The doctor's unique identifier within a company, ignoring case. */
-    Optional<Recipient> findFirstByCompany_IdAndPcodeIgnoreCase(UUID companyId, String pcode);
+    /**
+     * The doctor's unique identifier within a company, ignoring case. Written out with lower() on purpose: the derived "IgnoreCase" query
+     * uses upper(), which the unique index uq_recipients_company_pcode (company_id, lower(pcode)) cannot serve -- it scanned every doctor
+     * of the company on each call (a bulk upload makes one per row), 50 ms and growing with the company, against 0.2 ms with the index.
+     */
+    @Query("select r from Recipient r where r.company.id = :companyId and lower(r.pcode) = lower(:pcode)")
+    Optional<Recipient> findFirstByCompany_IdAndPcodeIgnoreCase(@Param("companyId") UUID companyId, @Param("pcode") String pcode);
 
     // Visibility (see service.Visibility): a recipient is visible through whoever added it or
     // whoever has it on their list -- if any of them is visible to the caller, so is the recipient.
