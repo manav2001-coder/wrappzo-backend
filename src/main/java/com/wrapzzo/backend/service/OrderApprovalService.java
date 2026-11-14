@@ -53,6 +53,7 @@ public class OrderApprovalService {
     private final OrderStatusHistoryService orderStatusHistoryService;
     private final AccessControlCacheService accessControlCacheService;
     private final VisibilityService visibilityService;
+    private final PricePolicy pricePolicy;
     private final ApplicationEventPublisher eventPublisher;
 
     /** Whether this order must wait: approval is on with an approver picked, and the requester is not that approver themselves. */
@@ -100,8 +101,9 @@ public class OrderApprovalService {
                 .column("orgUnitName", o -> o.getOrgUnit() != null ? o.getOrgUnit().getName() : null, true)
                 .column("quantity", Order::getQuantity, false)
                 .column("requestedAt", Order::getCreatedAt, false);
+        boolean showPrice = pricePolicy.canSee();
         return list.page(mine, query, Comparator.comparing(Order::getCreatedAt))
-                .map(page -> page.stream().map(order -> PendingOrderApprovalResponse.from(order, requests.get(order.getId()))).toList());
+                .map(page -> page.stream().map(order -> PendingOrderApprovalResponse.from(order, requests.get(order.getId()), showPrice)).toList());
     }
 
     @Transactional
@@ -112,7 +114,7 @@ public class OrderApprovalService {
         // The same hand-off as an order raised without approval: to the vendor of the gift that was picked.
         orderService.assignOnPlacement(order, order.getGift().getVendor());
         eventPublisher.publishEvent(new OrderApprovalDecidedEvent(order.getId()));
-        return PendingOrderApprovalResponse.from(order, quickGiftRequestRepository.findByOrderId(order.getId()).orElse(null));
+        return PendingOrderApprovalResponse.from(order, quickGiftRequestRepository.findByOrderId(order.getId()).orElse(null), pricePolicy.canSee());
     }
 
     @Transactional
@@ -126,7 +128,7 @@ public class OrderApprovalService {
         order.setStatus(OrderStatus.CANCELLED);
         orderStatusHistoryService.record(order, OrderStatus.CANCELLED, currentUser());
         eventPublisher.publishEvent(new OrderApprovalDecidedEvent(order.getId()));
-        return PendingOrderApprovalResponse.from(order, quickGiftRequestRepository.findByOrderId(order.getId()).orElse(null));
+        return PendingOrderApprovalResponse.from(order, quickGiftRequestRepository.findByOrderId(order.getId()).orElse(null), pricePolicy.canSee());
     }
 
     /** Who an order waits on and may be emailed: the people at its approver stage who are active and hold approval.decide. */

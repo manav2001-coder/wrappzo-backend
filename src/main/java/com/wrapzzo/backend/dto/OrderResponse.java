@@ -58,7 +58,7 @@ public record OrderResponse(
         String approvalDecidedByName) {
 
     public static OrderResponse from(
-            Order order, List<PhotoResponse> recipientPhotos, String giftImageUrl, List<StageEvent> history, boolean hasPendingDesignReview, boolean showVendor) {
+            Order order, List<PhotoResponse> recipientPhotos, String giftImageUrl, List<StageEvent> history, boolean hasPendingDesignReview, boolean showVendor, boolean showPrice) {
         return new OrderResponse(
                 order.getId(),
                 "ORD-" + order.getOrderNo(),
@@ -74,7 +74,7 @@ public record OrderResponse(
                 order.getRecipientPhone(),
                 recipientPhotos.isEmpty() ? null : recipientPhotos.get(0).url(),
                 recipientPhotos,
-                order.getTotalPrice(),
+                showPrice ? order.getTotalPrice() : null,
                 order.getQuantity(),
                 order.getOrgUnit() != null ? order.getOrgUnit().getName() : null,
                 order.getGift() != null && order.getGift().isArtworkRequired(),

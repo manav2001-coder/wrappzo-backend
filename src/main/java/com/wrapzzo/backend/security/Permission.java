@@ -77,6 +77,7 @@ public enum Permission {
     ROLE_TEMPLATE_VIEW(Keys.ROLE_TEMPLATE_VIEW, true),
     ROLE_TEMPLATE_ASSIGN(Keys.ROLE_TEMPLATE_ASSIGN, true),
 
+    PRICE_VIEW(Keys.PRICE_VIEW, true),
     VENDOR_IDENTITY_VIEW(Keys.VENDOR_IDENTITY_VIEW, true),
     COMPANY_VENDOR_VIEW(Keys.COMPANY_VENDOR_VIEW, true),
     COMPANY_VENDOR_ADD(Keys.COMPANY_VENDOR_ADD, true),
@@ -216,6 +217,8 @@ public enum Permission {
         public static final String ROLE_TEMPLATE_VIEW = "role_template.view";
         public static final String ROLE_TEMPLATE_ASSIGN = "role_template.assign";
 
+        /** May see what a gift costs -- the price on the Gift Store, orders and the order-approval queue. The company admin's alone by default. */
+        public static final String PRICE_VIEW = "price.view";
         /** May see which vendor makes an order -- the vendor's name and id on orders and gifts. Not the Vendors page (company_vendor.view). */
         public static final String VENDOR_IDENTITY_VIEW = "vendor_identity.view";
         public static final String COMPANY_VENDOR_VIEW = "company_vendor.view";

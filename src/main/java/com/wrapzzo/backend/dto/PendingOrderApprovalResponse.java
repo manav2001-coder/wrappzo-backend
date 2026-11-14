@@ -21,7 +21,7 @@ public record PendingOrderApprovalResponse(
         String internalNotes,
         Instant requestedAt) {
 
-    public static PendingOrderApprovalResponse from(Order order, QuickGiftRequest request) {
+    public static PendingOrderApprovalResponse from(Order order, QuickGiftRequest request, boolean showPrice) {
         return new PendingOrderApprovalResponse(
                 order.getId(),
                 "ORD-" + order.getOrderNo(),
@@ -29,7 +29,7 @@ public record PendingOrderApprovalResponse(
                 order.getRecipientName(),
                 request != null ? request.getRecipientPcode() : null,
                 order.getQuantity(),
-                order.getTotalPrice(),
+                showPrice ? order.getTotalPrice() : null,
                 order.getOwner().getName(),
                 order.getOrgUnit() != null ? order.getOrgUnit().getName() : null,
                 request != null ? request.getGiftMessage() : null,

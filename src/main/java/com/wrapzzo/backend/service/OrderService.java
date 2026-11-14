@@ -83,6 +83,7 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final OrgUnitRepository orgUnitRepository;
     private final VendorIdentityPolicy vendorIdentityPolicy;
+    private final PricePolicy pricePolicy;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
     private final QuickGiftRequestRepository quickGiftRequestRepository;
     private final VisibilityService visibilityService;
@@ -100,7 +101,7 @@ public class OrderService {
     public PageResponse<OrderResponse> page(ListQuery query) {
         User user = currentUser();
         return ListSpecs.page(orderRepository, OrderListFields.visibleIn(user.getCompany().getId(), visibilityService.resolve(user)), query,
-                OrderListFields.of(vendorIdentityPolicy.canSee(), false), Sort.by(Sort.Direction.DESC, "createdAt"), this::toResponseList);
+                OrderListFields.of(vendorIdentityPolicy.canSee(), pricePolicy.canSee(), false), Sort.by(Sort.Direction.DESC, "createdAt"), this::toResponseList);
     }
 
     /** The figures over the same orders: counted in the database, whatever page the list is on. */
@@ -125,7 +126,7 @@ public class OrderService {
     /** One page of every company's orders for Wrappzo staff -- narrow it to a company with the companyId filter. */
     @Transactional(readOnly = true)
     public PageResponse<OrderResponse> pageForPlatform(ListQuery query) {
-        return ListSpecs.page(orderRepository, (root, q, cb) -> cb.conjunction(), query, OrderListFields.of(true, true),
+        return ListSpecs.page(orderRepository, (root, q, cb) -> cb.conjunction(), query, OrderListFields.of(true, true, true),
                 Sort.by(Sort.Direction.DESC, "createdAt"), this::toResponseList);
     }
 
@@ -390,7 +391,7 @@ public class OrderService {
         String giftImageUrl = order.getGift() != null ? firstImageUrlByGiftId(List.of(order.getGift().getId())).get(order.getGift().getId()) : null;
         boolean pending = !orderDesignRepository.findByOrder_IdInAndStatus(List.of(order.getId()), OrderDesignStatus.PENDING_REVIEW).isEmpty();
         return OrderResponse.from(order, orderPhotoService.resolvePhotos(order), giftImageUrl, stageEventsFor(order.getId()), pending,
-                vendorIdentityPolicy.canSee());
+                vendorIdentityPolicy.canSee(), pricePolicy.canSee());
     }
 
     private List<OrderResponse> toResponseList(List<Order> orders) {
@@ -404,6 +405,7 @@ public class OrderService {
                 .map(d -> d.getOrder().getId())
                 .collect(Collectors.toSet());
         boolean showVendor = vendorIdentityPolicy.canSee();
+        boolean showPrice = pricePolicy.canSee();
         return orders.stream()
                 .map(o -> OrderResponse.from(
                         o,
@@ -411,7 +413,8 @@ public class OrderService {
                         o.getGift() != null ? firstImageUrlByGiftId.get(o.getGift().getId()) : null,
                         toStageEvents(historyByOrderId.getOrDefault(o.getId(), List.of())),
                         ordersPendingDesignReview.contains(o.getId()),
-                        showVendor))
+                        showVendor,
+                        showPrice))
                 .toList();
     }
 

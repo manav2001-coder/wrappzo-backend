@@ -54,7 +54,7 @@ class CompanyAdminAccessReconcilerIntegrationTest {
 
         assertThat(added).isPositive();
         assertThat(adminOnly.getAccessControls()).extracting(AccessControl::getKey)
-                .contains("approval.view", "approval.decide", "vendor_identity.view", "company_vendor.view", "warehouse.setup")
+                .contains("approval.view", "approval.decide", "vendor_identity.view", "price.view", "company_vendor.view", "warehouse.setup")
                 .doesNotContain("template_master.edit", "user_template.assign", "feature_master.add", "role_template.assign", "campaign.create");
         assertThat(shared.getAccessControls()).hasSize(1);
         assertThat(reconciler.reconcile()).isZero();

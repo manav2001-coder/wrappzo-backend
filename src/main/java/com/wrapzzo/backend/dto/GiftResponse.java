@@ -33,9 +33,9 @@ public record GiftResponse(
      * What a company's own users see in the Gift Store: the price they pay, not the vendor's base
      * price or the platform's markup and commission that make it up.
      */
-    public GiftResponse forCompany(boolean showVendor) {
+    public GiftResponse forCompany(boolean showVendor, boolean showPrice) {
         return new GiftResponse(id, displayId, name, category, description, moq, leadTimeDays, active, photoRequired, artworkRequired, modules,
-                null, null, null, totalPrice, showVendor ? vendorId : null, showVendor ? vendorName : null, images, createdAt);
+                null, null, null, showPrice ? totalPrice : null, showVendor ? vendorId : null, showVendor ? vendorName : null, images, createdAt);
     }
 
     public static GiftResponse from(Gift gift, List<GiftImageResponse> images) {

@@ -19,7 +19,7 @@ class GiftResponseTest {
                 new BigDecimal("100.00"), new BigDecimal("10.00"), new BigDecimal("5.00"), new BigDecimal("115.00"),
                 UUID.randomUUID(), "PrintHouse", List.of(), Instant.now());
 
-        GiftResponse seen = full.forCompany(true);
+        GiftResponse seen = full.forCompany(true, true);
 
         assertThat(seen.totalPrice()).isEqualByComparingTo("115.00");
         assertThat(seen.price()).isNull();
@@ -36,10 +36,24 @@ class GiftResponseTest {
                 new BigDecimal("100.00"), new BigDecimal("10.00"), new BigDecimal("5.00"), new BigDecimal("115.00"),
                 UUID.randomUUID(), "PrintHouse", List.of(), Instant.now());
 
-        GiftResponse seen = full.forCompany(false);
+        GiftResponse seen = full.forCompany(false, true);
 
         assertThat(seen.vendorName()).isNull();
         assertThat(seen.vendorId()).isNull();
+        assertThat(seen.name()).isEqualTo("Pad");
+    }
+
+    @Test
+    void thePriceIsLeftOutForAnyoneWhoMayNotSeePrices() {
+        GiftResponse full = new GiftResponse(
+                UUID.randomUUID(), "GFT-1", "Pad", "Stationery", null, 10, 5, true, false, false, Set.<GiftModule>of(),
+                new BigDecimal("100.00"), new BigDecimal("10.00"), new BigDecimal("5.00"), new BigDecimal("115.00"),
+                UUID.randomUUID(), "PrintHouse", List.of(), Instant.now());
+
+        GiftResponse seen = full.forCompany(true, false);
+
+        assertThat(seen.totalPrice()).isNull();
+        assertThat(seen.price()).isNull();
         assertThat(seen.name()).isEqualTo("Pad");
     }
 }
