@@ -1,6 +1,7 @@
 package com.wrapzzo.backend.service;
 
 import com.wrapzzo.backend.dto.PendingOrderApprovalResponse;
+import com.wrapzzo.backend.dto.PhotoResponse;
 import com.wrapzzo.backend.exception.ConflictException;
 import com.wrapzzo.backend.list.ListInMemory;
 import com.wrapzzo.backend.list.ListQuery;
@@ -54,6 +55,7 @@ public class OrderApprovalService {
     private final AccessControlCacheService accessControlCacheService;
     private final VisibilityService visibilityService;
     private final PricePolicy pricePolicy;
+    private final FileStorageService fileStorageService;
     private final ApplicationEventPublisher eventPublisher;
 
     /** Whether this order must wait: approval is on with an approver picked, and the requester is not that approver themselves. */
@@ -102,7 +104,7 @@ public class OrderApprovalService {
                 .column("requestedAt", Order::getCreatedAt, false);
         boolean showPrice = pricePolicy.canSee();
         return list.page(mine, query, Comparator.comparing(Order::getCreatedAt))
-                .map(page -> page.stream().map(order -> PendingOrderApprovalResponse.from(order, requests.get(order.getId()), showPrice)).toList());
+                .map(page -> page.stream().map(order -> PendingOrderApprovalResponse.from(order, requests.get(order.getId()), showPrice, photosOf(requests.get(order.getId())))).toList());
     }
 
     @Transactional
@@ -113,7 +115,7 @@ public class OrderApprovalService {
         // The same hand-off as an order raised without approval: to the vendor of the gift that was picked.
         orderService.assignOnPlacement(order, order.getGift().getVendor());
         eventPublisher.publishEvent(new OrderApprovalDecidedEvent(order.getId()));
-        return PendingOrderApprovalResponse.from(order, quickGiftRequestRepository.findByOrderId(order.getId()).orElse(null), pricePolicy.canSee());
+        return responseFor(order);
     }
 
     @Transactional
@@ -127,7 +129,7 @@ public class OrderApprovalService {
         order.setStatus(OrderStatus.CANCELLED);
         orderStatusHistoryService.record(order, OrderStatus.CANCELLED, currentUser());
         eventPublisher.publishEvent(new OrderApprovalDecidedEvent(order.getId()));
-        return PendingOrderApprovalResponse.from(order, quickGiftRequestRepository.findByOrderId(order.getId()).orElse(null), pricePolicy.canSee());
+        return responseFor(order);
     }
 
     /** Who an order waits on and may be emailed: the people at its approver stage who are active and hold approval.decide. */
@@ -226,5 +228,20 @@ public class OrderApprovalService {
     private User currentUser() {
         UUID userId = CurrentUser.id();
         return userRepository.findById(userId).orElseThrow(() -> new IllegalStateException("Authenticated user not found: " + userId));
+    }
+
+    private PendingOrderApprovalResponse responseFor(Order order) {
+        QuickGiftRequest request = quickGiftRequestRepository.findByOrderId(order.getId()).orElse(null);
+        return PendingOrderApprovalResponse.from(order, request, pricePolicy.canSee(), photosOf(request));
+    }
+
+    /** The photos attached to a request, as links the approver can open full size. */
+    private List<PhotoResponse> photosOf(QuickGiftRequest request) {
+        if (request == null) {
+            return List.of();
+        }
+        return request.getPhotos().stream()
+                .map(photo -> new PhotoResponse(fileStorageService.publicUrl(photo.getPhotoKey()), photo.getFileName()))
+                .toList();
     }
 }

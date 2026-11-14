@@ -69,6 +69,7 @@ class OrderApprovalIntegrationTest {
     @Autowired private CompanyVendorRepository companyVendorRepository;
     @Autowired private GiftRepository giftRepository;
     @Autowired private OrderRepository orderRepository;
+    @Autowired private com.wrapzzo.backend.repository.QuickGiftRequestRepository quickGiftRequestRepository;
 
     private Company company;
     private Role memberRole;
@@ -148,6 +149,30 @@ class OrderApprovalIntegrationTest {
                 pad.getId(), null, "Dr. Asha Shah", "9800000001", "PC-ASHA", null, "12 MG Road, Pune", null, null, null,
                 new DoctorDetails("MBBS, MD", "Cardiology", "Shah Heart Clinic"), 5)).orderId();
         return orderRepository.findById(orderId).orElseThrow();
+    }
+
+    @Test
+    void theApproverSeesThePhotosTheFieldPersonAttached_andAnOrderWithNoneShowsNone() {
+        switchOn(ArtworkApprovalScope.REPORTING_LINE);
+        Order withPhotos = place(mr);
+        var request = quickGiftRequestRepository.findByOrderId(withPhotos.getId()).orElseThrow();
+        request.addPhoto("quick-gifts/x/PC-ASHA_MR1_photo.jpg", "PC-ASHA_MR1_photo.jpg", "image/jpeg");
+        request.addPhoto("quick-gifts/x/PC-ASHA_MR1_photo_2.jpg", "PC-ASHA_MR1_photo_2.jpg", "image/jpeg");
+        quickGiftRequestRepository.saveAndFlush(request);
+        Order withoutPhotos = place(mr);
+
+        actAs(rm);
+        var pending = orderApprovalService.pagePending(ListQuery.firstPage(100)).data();
+        var seen = pending.stream().filter(p -> p.orderId().equals(withPhotos.getId())).findFirst().orElseThrow();
+        assertThat(seen.recipientPhotos()).extracting(com.wrapzzo.backend.dto.PhotoResponse::fileName)
+                .containsExactly("PC-ASHA_MR1_photo.jpg", "PC-ASHA_MR1_photo_2.jpg");
+        assertThat(seen.recipientPhotos()).allSatisfy(photo -> assertThat(photo.url()).isNotBlank());
+        assertThat(pending.stream().filter(p -> p.orderId().equals(withoutPhotos.getId())).findFirst().orElseThrow().recipientPhotos()).isEmpty();
+
+        // And declining on the strength of a poor photo takes a reason, which the requester sees.
+        assertThatThrownBy(() -> orderApprovalService.reject(withPhotos.getId(), " ")).isInstanceOf(ConflictException.class).hasMessageContaining("Say why");
+        orderApprovalService.reject(withPhotos.getId(), "The photo is too low resolution to print");
+        assertThat(orderRepository.findById(withPhotos.getId()).orElseThrow().getStatus()).isEqualTo(OrderStatus.CANCELLED);
     }
 
     @Test
