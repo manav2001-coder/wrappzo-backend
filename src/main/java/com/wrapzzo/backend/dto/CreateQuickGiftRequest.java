@@ -23,7 +23,8 @@ public record CreateQuickGiftRequest(
         /** A new doctor's pcode -- required when recipientId is null; ignored when an existing doctor is picked. */
         @Size(max = 50) String recipientPcode,
         String recipientEmail,
-        @NotBlank String deliveryAddress,
+        /** Optional -- the order form no longer asks for one. */
+        String deliveryAddress,
         LocalDate recipientDob,
         String giftMessage,
         String internalNotes,

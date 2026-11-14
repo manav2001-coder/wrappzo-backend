@@ -223,6 +223,17 @@ class PrescriptionPadOrderingIntegrationTest {
     }
 
     @Test
+    void anOrderCanBePlacedWithoutADeliveryAddress() {
+        actAs(mrNorth);
+        var request = padOrder(pad, 1);
+        var placed = quickGiftService.create(new CreateQuickGiftRequest(
+                request.giftId(), null, request.recipientName(), request.recipientPhone(), request.recipientPcode(), null, null, null, null, null,
+                List.of(), request.doctor(), 1));
+
+        assertThat(placed.deliveryAddress()).isNull();
+    }
+
+    @Test
     void anOrderCanCarryManyRecipientPhotosAndTheVendorSeesThemAllInOrder() {
         actAs(mrNorth);
         var first = quickGiftService.presignPhoto("image/png", "PC-ASHA", 1);

@@ -75,7 +75,7 @@ public class QuickGiftRequest {
     @Column(name = "recipient_email")
     private String recipientEmail;
 
-    @Column(name = "delivery_address", nullable = false)
+    @Column(name = "delivery_address")
     private String deliveryAddress;
 
     @Column(name = "recipient_dob")

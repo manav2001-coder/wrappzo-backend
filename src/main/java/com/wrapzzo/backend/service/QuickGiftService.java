@@ -102,7 +102,7 @@ public class QuickGiftService {
         String name = request.recipientName();
         String phone = request.recipientPhone();
         String email = request.recipientEmail();
-        String address = request.deliveryAddress();
+        String address = request.deliveryAddress() == null || request.deliveryAddress().isBlank() ? null : request.deliveryAddress().trim();
         LocalDate dob = request.recipientDob();
         DoctorDetails doctor = DoctorDetails.orEmpty(request.doctor());
         String pcode = request.recipientPcode();
@@ -114,7 +114,7 @@ public class QuickGiftService {
             name = recipient.name();
             phone = recipient.phone();
             email = recipient.email();
-            address = recipient.address() != null ? recipient.address() : request.deliveryAddress();
+            address = recipient.address() != null ? recipient.address() : address;
             dob = recipient.dateOfBirth();
             doctor = DoctorDetails.orEmpty(recipient.doctor());
             pcode = recipient.pcode();
