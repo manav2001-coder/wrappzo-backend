@@ -44,7 +44,7 @@ public class ArtworkApprovalReminderService {
     }
 
     /** A proof just started waiting: tell the people it waits on. */
-    @Transactional(readOnly = true)
+    @Transactional
     public void notifyAwaiting(UUID designId) {
         OrderDesign design = designs.findById(designId).orElse(null);
         if (design == null) {

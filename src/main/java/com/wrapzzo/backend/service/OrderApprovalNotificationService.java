@@ -39,7 +39,7 @@ public class OrderApprovalNotificationService {
     }
 
     /** An order just started waiting: tell the people who can decide it. */
-    @Transactional(readOnly = true)
+    @Transactional
     public void notifyAwaiting(UUID orderId) {
         Order order = orders.findById(orderId).orElse(null);
         if (order == null || order.getApprovalStatus() != OrderApprovalStatus.PENDING) {
@@ -126,7 +126,7 @@ public class OrderApprovalNotificationService {
     }
 
     /** The requester hears the outcome, with the approver's note when they left one. */
-    @Transactional(readOnly = true)
+    @Transactional
     public void notifyDecided(UUID orderId) {
         Order order = orders.findById(orderId).orElse(null);
         if (order == null || order.getOwner() == null

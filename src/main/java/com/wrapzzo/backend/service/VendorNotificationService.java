@@ -38,7 +38,8 @@ public class VendorNotificationService {
     }
 
     /** A new order for the vendor; and, if it was taken from another vendor, a note to that one. */
-    @Transactional(readOnly = true)
+    // Not readOnly: queueing the email is an INSERT into the outbox, which Postgres refuses inside a read-only transaction.
+    @Transactional
     public void orderAssigned(UUID orderId, UUID vendorId, UUID previousVendorId) {
         Order order = orders.findById(orderId).orElse(null);
         if (order == null) {
@@ -64,7 +65,7 @@ public class VendorNotificationService {
     }
 
     /** Sent back for changes (with the reviewer's comment), or approved so it may ship. */
-    @Transactional(readOnly = true)
+    @Transactional
     public void proofDecided(UUID designId, boolean approved) {
         OrderDesign design = designs.findById(designId).orElse(null);
         if (design == null) {
