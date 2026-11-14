@@ -187,8 +187,8 @@ class OrderListIntegrationTest {
         assertThat(page(admin, 0, 50, null, null, null, "[{\"field\":\"quantity\",\"operator\":\"gte\",\"value\":101}]").total()).isEqualTo(5);
         assertThat(page(admin, 0, 50, null, null, null, "[{\"field\":\"quantity\",\"operator\":\"between\",\"value\":[3,5]}]").total()).isEqualTo(3);
         assertThat(page(admin, 0, 50, null, null, null, "[{\"field\":\"recipientName\",\"operator\":\"contains\",\"value\":\"north 1\"}]").total()).isEqualTo(4); // 1, 10, 11, 12
-        assertThat(page(admin, 0, 50, null, null, null, "[{\"field\":\"status\",\"operator\":\"in\",\"value\":[\"PRODUCTION_QUEUE\",\"DELIVERED\"]}]").total()).isEqualTo(17);
-        assertThat(page(admin, 0, 50, null, null, null, "[{\"field\":\"status\",\"operator\":\"equals\",\"value\":\"DELIVERED\"}]").total()).isZero();
+        assertThat(page(admin, 0, 50, null, null, null, "[{\"field\":\"status\",\"operator\":\"in\",\"value\":[\"PRODUCTION_QUEUE\",\"DISPATCHED\"]}]").total()).isEqualTo(17);
+        assertThat(page(admin, 0, 50, null, null, null, "[{\"field\":\"status\",\"operator\":\"equals\",\"value\":\"DISPATCHED\"}]").total()).isZero();
 
         PageResponse<OrderResponse> biggestFirst = page(admin, 0, 3, null, "quantity", "desc", null);
         assertThat(biggestFirst.data()).extracting(OrderResponse::quantity).containsExactly(105, 104, 103);

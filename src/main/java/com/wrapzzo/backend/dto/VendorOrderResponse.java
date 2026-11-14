@@ -32,7 +32,7 @@ public record VendorOrderResponse(
         String amName,
         String amCode,
         String amMobile,
-        /** The AM's own org unit (zone / area) -- helps the warehouse route the parcel to them. Null if none. */
+        /** The AM's own org unit (zone / area) -- tells the vendor which area the parcel is for. Null if none. */
         String amArea,
         /** The top-level org unit (division) the order was raised in -- what the vendor portal's division filter narrows by. Null if the order is placed nowhere. */
         UUID divisionId,
@@ -46,9 +46,6 @@ public record VendorOrderResponse(
         int quantity,
         /** The final recipient's address -- a Quick Gift order's own request; null for a campaign order. */
         String deliveryAddress,
-        /** Set when the order goes through the company's warehouse: ship here, not to deliveryAddress, and the warehouse delivers it. */
-        String shipToWarehouseName,
-        String shipToWarehouseAddress,
         String giftMessage,
         DoctorDetails doctor,
         /** True when this order may not be dispatched until a proof is approved (Gift.artworkRequired). */
@@ -93,8 +90,6 @@ public record VendorOrderResponse(
                 order.getGift() != null ? order.getGift().getPrice() : null,
                 order.getQuantity(),
                 request != null ? request.getDeliveryAddress() : null,
-                order.getWarehouse() != null ? order.getWarehouse().getName() : null,
-                order.getWarehouse() != null ? order.getWarehouse().getAddress() : null,
                 request != null ? request.getGiftMessage() : null,
                 request != null
                         ? new DoctorDetails(request.getRecipientQualification(), request.getRecipientSpeciality(), request.getRecipientClinicName())

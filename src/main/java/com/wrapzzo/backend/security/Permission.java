@@ -85,10 +85,6 @@ public enum Permission {
     COMPANY_VENDOR_EDIT(Keys.COMPANY_VENDOR_EDIT, true),
     COMPANY_VENDOR_STATUS(Keys.COMPANY_VENDOR_STATUS, true),
 
-    WAREHOUSE_VIEW(Keys.WAREHOUSE_VIEW, true),
-    WAREHOUSE_SETUP(Keys.WAREHOUSE_SETUP, true),
-    WAREHOUSE_OPERATE(Keys.WAREHOUSE_OPERATE, true),
-
     PLATFORM_COMPANY_VIEW(Keys.PLATFORM_COMPANY_VIEW, false),
     PLATFORM_COMPANY_CREATE(Keys.PLATFORM_COMPANY_CREATE, false),
     PLATFORM_COMPANY_EDIT(Keys.PLATFORM_COMPANY_EDIT, false),
@@ -227,9 +223,6 @@ public enum Permission {
         public static final String COMPANY_VENDOR_EDIT = "company_vendor.edit";
         public static final String COMPANY_VENDOR_STATUS = "company_vendor.status";
 
-        public static final String WAREHOUSE_VIEW = "warehouse.view";
-        public static final String WAREHOUSE_SETUP = "warehouse.setup";
-        public static final String WAREHOUSE_OPERATE = "warehouse.operate";
 
         public static final String PLATFORM_COMPANY_VIEW = "platform_company.view";
         public static final String PLATFORM_COMPANY_CREATE = "platform_company.create";

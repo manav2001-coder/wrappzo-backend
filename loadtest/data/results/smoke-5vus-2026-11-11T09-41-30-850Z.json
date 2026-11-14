@@ -1,0 +1,134 @@
+{
+ "profile": "smoke",
+ "peakVus": 5,
+ "target": "wrappzo-backend-production.up.railway.app",
+ "startedAt": "2026-11-11T09:41:30.850Z",
+ "durationSeconds": 73,
+ "totalRequests": 113,
+ "requestsPerSecond": 1.55,
+ "failedRate": 0,
+ "passed": true,
+ "overall": {
+  "avg": 283.63423071681405,
+  "p50": 268.828625,
+  "p90": 347.0108,
+  "p95": 382.94531679999994,
+  "p99": 471.69907699999993,
+  "max": 642.620084
+ },
+ "kinds": {
+  "approvals": {
+   "avg": 0,
+   "p50": 0,
+   "p90": 0,
+   "p95": 0,
+   "p99": 0,
+   "max": 0
+  },
+  "search": {
+   "avg": 273.5211316923077,
+   "p50": 268.069959,
+   "p90": 315.866134,
+   "p95": 343.02061719999995,
+   "p99": 369.16955704,
+   "max": 375.706792
+  },
+  "summary": {
+   "avg": 255.37670047619054,
+   "p50": 250.92225,
+   "p90": 273.779458,
+   "p95": 288.2155,
+   "p99": 303.444,
+   "max": 307.251125
+  },
+  "list": {
+   "avg": 294.54209365853654,
+   "p50": 279.503458,
+   "p90": 348.567875,
+   "p95": 388.826167,
+   "p99": 558.8415172,
+   "max": 642.620084
+  },
+  "write": {
+   "avg": 277.6856642352941,
+   "p50": 265.589417,
+   "p90": 323.05426680000005,
+   "p95": 374.4850412,
+   "p99": 388.72784184,
+   "max": 392.288542
+  },
+  "auth": {
+   "avg": 282.328514,
+   "p50": 281.963042,
+   "p90": 290.5619084,
+   "p95": 292.64144719999996,
+   "p99": 294.30507824,
+   "max": 294.720986
+  },
+  "dashboard": {
+   "avg": 307.7161216875,
+   "p50": 274.77552149999997,
+   "p90": 394.2934375,
+   "p95": 426.40972924999994,
+   "p99": 466.84397945,
+   "max": 476.952542
+  }
+ },
+ "thresholds": [
+  {
+   "metric": "http_req_duration",
+   "expression": "p(95)<4000",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration",
+   "expression": "p(99)<3000",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:approvals}",
+   "expression": "p(95)<1500",
+   "ok": true
+  },
+  {
+   "metric": "http_req_failed",
+   "expression": "rate<0.02",
+   "ok": true
+  },
+  {
+   "metric": "checks",
+   "expression": "rate>0.98",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:search}",
+   "expression": "p(95)<1000",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:summary}",
+   "expression": "p(95)<500",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:list}",
+   "expression": "p(95)<800",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:write}",
+   "expression": "p(95)<2000",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:auth}",
+   "expression": "p(95)<2000",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:dashboard}",
+   "expression": "p(95)<1500",
+   "ok": true
+  }
+ ]
+}

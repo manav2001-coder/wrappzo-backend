@@ -20,7 +20,7 @@ public record DashboardInsightsResponse(
         Period previous,
         /** Doctors assigned to the people in view, and how many of them had a PEL requested in the period. */
         Coverage coverage,
-        /** In pipeline order: approval, artwork, production, on the way. */
+        /** In pipeline order: approval, artwork, production. */
         List<StageAging> stages,
         /** Requests turned down in the period -- the AM sees these as something to look at. */
         long rejectedRequests,
@@ -44,19 +44,18 @@ public record DashboardInsightsResponse(
             UUID vendorId,
             String name,
             long orders,
-            long delivered,
+            long dispatched,
             long open,
             /** Open orders more than 10 days old. */
             long slowOpen,
             Double avgDaysToDispatch,
-            Double avgDaysToDeliver,
             /** Artwork versions the vendor uploaded, and how many were sent back. */
             long designs,
             long designsRejected) {
     }
 
-    /** PELs asked for, delivered, and doctors asked for, plus the average days from request to delivery of what was delivered. */
-    public record Period(long requested, long served, long doctorsRequested, long doctorsServed, Double avgDaysToDeliver) {
+    /** PELs asked for, PELs dispatched, and doctors asked for and dispatched to, plus the average days from request to dispatch. */
+    public record Period(long requested, long dispatched, long doctorsRequested, long doctorsDispatched, Double avgDaysToDispatch) {
     }
 
     public record Coverage(long assigned, long covered) {
@@ -66,7 +65,7 @@ public record DashboardInsightsResponse(
     public record StageAging(String stage, long count, long stuck, long oldestDays, int thresholdDays) {
     }
 
-    public record WeekPoint(String weekLabel, String weekStart, long requested, long delivered) {
+    public record WeekPoint(String weekLabel, String weekStart, long requested, long dispatched) {
     }
 
     public record TeamMember(
@@ -74,7 +73,7 @@ public record DashboardInsightsResponse(
             String name,
             String unitName,
             long requested,
-            long served,
+            long dispatched,
             long doctorsAssigned,
             long doctorsCovered,
             long inPipeline,

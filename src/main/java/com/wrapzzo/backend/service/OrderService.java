@@ -72,13 +72,13 @@ public class OrderService {
 
     /** A vendor can freely move an order between these -- picked directly from a dropdown, not a forced sequence. */
     private static final Set<OrderStatus> VENDOR_SELECTABLE_STATUSES =
-            Set.of(OrderStatus.PRODUCTION_QUEUE, OrderStatus.DISPATCHED, OrderStatus.DELIVERED);
+            Set.of(OrderStatus.PRODUCTION_QUEUE, OrderStatus.DISPATCHED);
 
-    /** Once an order leaves these (delivered, cancelled, or still unassigned/PROCESSING), it's no longer the vendor's to edit. */
+    /** Once an order leaves these (cancelled, or still unassigned/PROCESSING), it's no longer the vendor's to edit. */
     private static final Set<OrderStatus> VENDOR_EDITABLE_SOURCE_STATUSES = Set.of(OrderStatus.PRODUCTION_QUEUE, OrderStatus.DISPATCHED);
 
     /** Statuses that mean "it has left the vendor" -- closed to an artwork-required order until a proof is approved. */
-    private static final Set<OrderStatus> ARTWORK_GATED_STATUSES = Set.of(OrderStatus.DISPATCHED, OrderStatus.DELIVERED);
+    private static final Set<OrderStatus> ARTWORK_GATED_STATUSES = Set.of(OrderStatus.DISPATCHED);
 
     private final OrderRepository orderRepository;
     private final OrgUnitRepository orgUnitRepository;
@@ -231,11 +231,7 @@ public class OrderService {
     @Transactional
     public VendorOrderResponse updateStatusForVendor(UUID id, UUID vendorId, OrderStatus newStatus) {
         Order order = getEntityForVendor(id, vendorId);
-        // A warehouse-routed order is delivered by the warehouse (WarehouseService), not the vendor.
-        boolean viaWarehouse = order.getWarehouse() != null;
-        if (!VENDOR_EDITABLE_SOURCE_STATUSES.contains(order.getStatus())
-                || !VENDOR_SELECTABLE_STATUSES.contains(newStatus)
-                || (viaWarehouse && newStatus == OrderStatus.DELIVERED)) {
+        if (!VENDOR_EDITABLE_SOURCE_STATUSES.contains(order.getStatus()) || !VENDOR_SELECTABLE_STATUSES.contains(newStatus)) {
             throw new InvalidOrderStatusTransitionException(id, order.getStatus(), newStatus);
         }
         if (ARTWORK_GATED_STATUSES.contains(newStatus) && requiresArtwork(order) && !hasApprovedArtwork(order)) {
@@ -496,7 +492,7 @@ public class OrderService {
             throw new ConflictException(vendor.getName() + " isn't mapped to " + (unit != null ? unit.getName() : "this order's unit")
                     + " or the division above it -- map it under Vendors first");
         }
-        if (order.getStatus() == OrderStatus.DISPATCHED || order.getStatus() == OrderStatus.DELIVERED || order.getStatus() == OrderStatus.CANCELLED) {
+        if (order.getStatus() == OrderStatus.DISPATCHED || order.getStatus() == OrderStatus.CANCELLED) {
             throw new ConflictException("This order is already " + order.getStatus().name().toLowerCase() + " and can't be reassigned");
         }
     }

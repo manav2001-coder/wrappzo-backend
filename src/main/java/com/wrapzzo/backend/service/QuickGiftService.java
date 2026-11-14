@@ -71,7 +71,6 @@ public class QuickGiftService {
     private final GiftService giftService;
     private final CompanyFeatureFlagService companyFeatureFlagService;
     private final VisibilityService visibilityService;
-    private final WarehouseService warehouseService;
 
     /** The photo is stored as quick-gifts/.../PCODE_AMCODE_photo.ext, the same convention as a proof, so a download tells whose it is. */
     public PresignQuickGiftPhotoResponse presignPhoto(String contentType, String pcode, int number) {
@@ -169,7 +168,6 @@ public class QuickGiftService {
         order.orderQuantity(request.getQuantity());
         order.setOwner(request.getRequestedBy());
         order.setOrgUnit(request.getOrgUnit());
-        warehouseService.routeOnPlacement(order);
         // saveAndFlush -- orderNo is DB-generated and only readable after the physical INSERT runs.
         order = orderRepository.saveAndFlush(order);
         orderStatusHistoryService.record(order, OrderStatus.PROCESSING, actor);

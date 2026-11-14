@@ -1,0 +1,134 @@
+{
+ "profile": "step",
+ "peakVus": 600,
+ "target": "wrappzo-backend-production.up.railway.app",
+ "startedAt": "2026-11-11T09:47:09.970Z",
+ "durationSeconds": 316,
+ "totalRequests": 14229,
+ "requestsPerSecond": 45.06,
+ "failedRate": 0,
+ "passed": false,
+ "overall": {
+  "avg": 306.39990364340645,
+  "p50": 272.707501,
+  "p90": 365.9327842,
+  "p95": 511.9261585999994,
+  "p99": 886.1175479999995,
+  "max": 3227.19471
+ },
+ "kinds": {
+  "dashboard": {
+   "avg": 321.735246913228,
+   "p50": 280.412833,
+   "p90": 380.8215209,
+   "p95": 564.20125815,
+   "p99": 932.0603741199996,
+   "max": 2481.829126
+  },
+  "write": {
+   "avg": 290.93045377617324,
+   "p50": 259.298126,
+   "p90": 335.89925,
+   "p95": 481.88085499999903,
+   "p99": 824.0229337999999,
+   "max": 1022.484875
+  },
+  "auth": {
+   "avg": 279.4833828750003,
+   "p50": 265.58664650000003,
+   "p90": 311.504608,
+   "p95": 337.7102940499999,
+   "p99": 497.7352081599999,
+   "max": 1012.398167
+  },
+  "approvals": {
+   "avg": 273.61397645935733,
+   "p50": 248.571417,
+   "p90": 312.556786,
+   "p95": 371.0120004,
+   "p99": 755.2992297599999,
+   "max": 943.19275
+  },
+  "search": {
+   "avg": 303.9058100706198,
+   "p50": 272.693333,
+   "p90": 374.385375,
+   "p95": 496.264001,
+   "p99": 854.170501,
+   "max": 1538.935042
+  },
+  "list": {
+   "avg": 321.92930390557143,
+   "p50": 287.300167,
+   "p90": 380.9265,
+   "p95": 532.263417,
+   "p99": 914.1434761999999,
+   "max": 3227.19471
+  },
+  "summary": {
+   "avg": 286.5148668192292,
+   "p50": 249.467625,
+   "p90": 343.30016980000005,
+   "p95": 511.4161753999999,
+   "p99": 855.4035013999998,
+   "max": 2780.848418
+  }
+ },
+ "thresholds": [
+  {
+   "metric": "http_req_failed",
+   "expression": "rate<0.02",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:dashboard}",
+   "expression": "p(95)<1500",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:write}",
+   "expression": "p(95)<2000",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:auth}",
+   "expression": "p(95)<2000",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:approvals}",
+   "expression": "p(95)<1500",
+   "ok": true
+  },
+  {
+   "metric": "checks",
+   "expression": "rate>0.98",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:search}",
+   "expression": "p(95)<1000",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:list}",
+   "expression": "p(95)<800",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration",
+   "expression": "p(95)<4000",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration",
+   "expression": "p(99)<3000",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:summary}",
+   "expression": "p(95)<500",
+   "ok": false
+  }
+ ]
+}

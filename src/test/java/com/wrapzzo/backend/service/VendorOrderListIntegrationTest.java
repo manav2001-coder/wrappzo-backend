@@ -137,8 +137,6 @@ class VendorOrderListIntegrationTest {
         proof(approvedThenRejected, 1, OrderDesignStatus.APPROVED);
         proof(approvedThenRejected, 2, OrderDesignStatus.REJECTED);
         setStatus(order(mrB, withoutArtwork), OrderStatus.DISPATCHED); // dispatched
-        setStatus(order(mrB, withoutArtwork), OrderStatus.RECEIVED_AT_WAREHOUSE); // warehouse
-        setStatus(order(mrB, withoutArtwork), OrderStatus.DELIVERED); // delivered
         setStatus(order(mrB, withoutArtwork), OrderStatus.CANCELLED); // cancelled
         // Another vendor's order is never in this vendor's list.
         Order elsewhere = order(mrA, withoutArtwork);
@@ -161,9 +159,9 @@ class VendorOrderListIntegrationTest {
 
         var summary = orderService.summaryForVendor(printer.getId(), null);
 
-        assertThat(summary.total()).isEqualTo(12); // the other vendor's order is not counted
+        assertThat(summary.total()).isEqualTo(10); // the other vendor's order is not counted
         assertThat(summary.byStage()).containsExactlyInAnyOrderEntriesOf(Map.of(
-                "artwork", 1L, "review", 3L, "rework", 1L, "ready", 3L, "dispatched", 1L, "warehouse", 1L, "delivered", 1L, "cancelled", 1L));
+                "artwork", 1L, "review", 3L, "rework", 1L, "ready", 3L, "dispatched", 1L, "cancelled", 1L));
         assertThat(summary.byStage().values().stream().mapToLong(Long::longValue).sum()).isEqualTo(summary.total());
     }
 
@@ -187,21 +185,21 @@ class VendorOrderListIntegrationTest {
         var inA = orderService.summaryForVendor(printer.getId(), divisionA.getId());
         assertThat(inA.total()).isEqualTo(8);
         var inB = orderService.summaryForVendor(printer.getId(), divisionB.getId());
-        assertThat(inB.total()).isEqualTo(4);
-        assertThat(inB.byStage()).containsEntry("dispatched", 1L).containsEntry("delivered", 1L).containsEntry("review", 0L);
+        assertThat(inB.total()).isEqualTo(2);
+        assertThat(inB.byStage()).containsEntry("dispatched", 1L).containsEntry("cancelled", 1L).containsEntry("review", 0L);
 
         var filtered = orderService.pageForVendor(printer.getId(), new ListQueryParams(0, 100, null, null, null,
                 "[{\"field\":\"divisionId\",\"operator\":\"equals\",\"value\":\"" + divisionB.getId() + "\"}]").toQuery());
-        assertThat(filtered.total()).isEqualTo(4);
+        assertThat(filtered.total()).isEqualTo(2);
         assertThat(filtered.data()).extracting(VendorOrderResponse::divisionName).containsOnly("Division B");
 
-        assertThat(orderService.orderDivisionsForVendor(printer.getId())).extracting(d -> d.name() + ":" + d.count()).containsExactly("Division A:8", "Division B:4");
+        assertThat(orderService.orderDivisionsForVendor(printer.getId())).extracting(d -> d.name() + ":" + d.count()).containsExactly("Division A:8", "Division B:2");
     }
 
     @Test
     void searchAndSortWork() {
         seed();
-        assertThat(orderService.pageForVendor(printer.getId(), new ListQueryParams(0, 100, "calendar", null, null, null).toQuery()).total()).isEqualTo(5); // 1 ready + 4 in B
+        assertThat(orderService.pageForVendor(printer.getId(), new ListQueryParams(0, 100, "calendar", null, null, null).toQuery()).total()).isEqualTo(3); // 1 ready + 2 in B
         assertThat(orderService.pageForVendor(printer.getId(), new ListQueryParams(0, 3, null, "giftName", "asc", null).toQuery()).data()).hasSize(3);
     }
 }

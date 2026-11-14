@@ -1,0 +1,173 @@
+{
+ "profile": "smoke",
+ "peakVus": 5,
+ "target": "wrappzo-backend-production.up.railway.app",
+ "startedAt": "2026-11-11T10:03:25.859Z",
+ "durationSeconds": 73,
+ "totalRequests": 144,
+ "requestsPerSecond": 1.97,
+ "failedRate": 0,
+ "passed": true,
+ "overall": {
+  "avg": 302.90374725000004,
+  "p50": 260.688125,
+  "p90": 353.1866251,
+  "p95": 537.36150445,
+  "p99": 1004.0044813699999,
+  "max": 1194.300695
+ },
+ "kinds": {
+  "vendor": {
+   "avg": 0,
+   "p50": 0,
+   "p90": 0,
+   "p95": 0,
+   "p99": 0,
+   "max": 0
+  },
+  "list": {
+   "avg": 319.5834113333333,
+   "p50": 306.97,
+   "p90": 371.5422338,
+   "p95": 399.7837918,
+   "p99": 411.40962476,
+   "max": 414.316083
+  },
+  "vendor-list": {
+   "avg": 0,
+   "p50": 0,
+   "p90": 0,
+   "p95": 0,
+   "p99": 0,
+   "max": 0
+  },
+  "auth": {
+   "avg": 395.84225039999995,
+   "p50": 265.882334,
+   "p90": 608.9164254,
+   "p95": 637.3316921999999,
+   "p99": 660.0639056399999,
+   "max": 665.746959
+  },
+  "approvals": {
+   "avg": 302.91420696610163,
+   "p50": 257.018375,
+   "p90": 279.9252834,
+   "p95": 548.5952899999988,
+   "p99": 1094.98330692,
+   "max": 1194.300695
+  },
+  "dashboard": {
+   "avg": 339.7414170769231,
+   "p50": 289.145501,
+   "p90": 342.1527004,
+   "p95": 572.5357837999998,
+   "p99": 839.26562396,
+   "max": 905.948084
+  },
+  "write": {
+   "avg": 269.3726250357143,
+   "p50": 253.572208,
+   "p90": 285.2696831,
+   "p95": 291.4898273,
+   "p99": 526.50781259,
+   "max": 613.428125
+  },
+  "search": {
+   "avg": 357.5950696666667,
+   "p50": 295.038459,
+   "p90": 490.82972540000003,
+   "p95": 515.3036337,
+   "p99": 534.88276034,
+   "max": 539.777542
+  },
+  "vendor-search": {
+   "avg": 0,
+   "p50": 0,
+   "p90": 0,
+   "p95": 0,
+   "p99": 0,
+   "max": 0
+  },
+  "summary": {
+   "avg": 282.92294471428573,
+   "p50": 247.037042,
+   "p90": 354.4405,
+   "p95": 378.051458,
+   "p99": 678.7156252,
+   "max": 753.881667
+  }
+ },
+ "thresholds": [
+  {
+   "metric": "http_req_duration{kind:vendor}",
+   "expression": "p(95)<1500",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:list}",
+   "expression": "p(95)<800",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:vendor-list}",
+   "expression": "p(95)<1500",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:auth}",
+   "expression": "p(95)<2000",
+   "ok": true
+  },
+  {
+   "metric": "http_req_failed",
+   "expression": "rate<0.02",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:approvals}",
+   "expression": "p(95)<1500",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration",
+   "expression": "p(95)<4000",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration",
+   "expression": "p(99)<3000",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:dashboard}",
+   "expression": "p(95)<1500",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:write}",
+   "expression": "p(95)<2000",
+   "ok": true
+  },
+  {
+   "metric": "checks",
+   "expression": "rate>0.98",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:search}",
+   "expression": "p(95)<1000",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:vendor-search}",
+   "expression": "p(95)<2000",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:summary}",
+   "expression": "p(95)<500",
+   "ok": true
+  }
+ ]
+}

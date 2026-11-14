@@ -69,9 +69,8 @@ public class DashboardService {
     private static final int TREND_WEEKS = 12;
     private static final int DRILLDOWN_LIMIT = 50;
     private static final Set<OrderStatus> IN_PROGRESS_STATUSES = Set.of(OrderStatus.PROCESSING, OrderStatus.PRODUCTION_QUEUE);
-    /** Left the vendor, not yet delivered -- a warehouse-routed order's two warehouse stages count as on the way too. */
-    private static final Set<OrderStatus> IN_TRANSIT_STATUSES =
-            Set.of(OrderStatus.DISPATCHED, OrderStatus.RECEIVED_AT_WAREHOUSE, OrderStatus.OUT_FOR_DELIVERY);
+    /** The vendor has dispatched it -- where an order's life on the platform ends. */
+    private static final Set<OrderStatus> DISPATCHED_STATUSES = Set.of(OrderStatus.DISPATCHED);
 
     private final CampaignRepository campaignRepository;
     private final CampaignFormRepository campaignFormRepository;
@@ -106,8 +105,7 @@ public class DashboardService {
         Map<OrderStatus, Long> byStatus = queries.ordersByStatus(reach);
         long campaignsRunning = campaigns.stream().filter(c -> c.getStatus() == CampaignStatus.ACTIVE).count();
         long giftsInProgress = countOf(byStatus, IN_PROGRESS_STATUSES);
-        long dispatched = countOf(byStatus, IN_TRANSIT_STATUSES);
-        long delivered = byStatus.getOrDefault(OrderStatus.DELIVERED, 0L);
+        long dispatched = countOf(byStatus, DISPATCHED_STATUSES);
 
         Map<SubmissionStatus, Long> submissionsByStatus = queries.submissionsByStatus(reach);
         Map<String, Long> submissionStatusBreakdown = new HashMap<>();
@@ -119,14 +117,13 @@ public class DashboardService {
         long quickGiftsPending = quickGiftStatusBreakdown.getOrDefault(QuickGiftStatus.SUBMITTED.name(), 0L);
 
         // An Order only exists once approved (automatic for a Campaign submission, manual for a Quick Gift),
-        // so every non-cancelled order is a PEL request; delivered ones are served.
+        // so every non-cancelled order is a PEL request; dispatched ones have gone out.
         return new DashboardResponse(
                 data.company().getName(),
                 data.companyWide(),
                 campaignsRunning,
                 giftsInProgress,
                 dispatched,
-                delivered,
                 submissionsPending,
                 quickGiftsThisMonth,
                 quickGiftsPending,
@@ -170,7 +167,7 @@ public class DashboardService {
             case "topDepartment" -> ordersDrilldown(queries.ordersOfDepartment(reach, value, DRILLDOWN_LIMIT), "Orders — " + value);
             case "week" -> weekDrilldown(value, reach);
             case "pelsRequested" -> pelsPerDoctorDrilldown(queries.pelsPerDoctor(reach, false, DRILLDOWN_LIMIT), "PELs created per doctor");
-            case "pelsServed" -> pelsPerDoctorDrilldown(queries.pelsPerDoctor(reach, true, DRILLDOWN_LIMIT), "PELs served per doctor");
+            case "pelsDispatched" -> pelsPerDoctorDrilldown(queries.pelsPerDoctor(reach, true, DRILLDOWN_LIMIT), "PELs dispatched per doctor");
             case "pipelineStage" -> ordersDrilldown(
                     queries.ordersWithStatus(reach, java.util.Arrays.stream(OrderStatus.values()).filter(s -> pipelineStageMatches(s, value)).toList(), DRILLDOWN_LIMIT),
                     "Orders — " + pipelineStageTitle(value));
@@ -220,8 +217,7 @@ public class DashboardService {
     private boolean pipelineStageMatches(OrderStatus status, String stage) {
         return switch (stage) {
             case "inProgress" -> IN_PROGRESS_STATUSES.contains(status);
-            case "dispatched" -> IN_TRANSIT_STATUSES.contains(status);
-            case "delivered" -> status == OrderStatus.DELIVERED;
+            case "dispatched" -> DISPATCHED_STATUSES.contains(status);
             default -> false;
         };
     }
@@ -231,7 +227,6 @@ public class DashboardService {
             case "APPROVAL" -> "Waiting for approval";
             case "ARTWORK" -> "Artwork and proof";
             case "PRODUCTION" -> "In production";
-            case "TRANSIT" -> "On the way";
             default -> stage;
         };
     }
@@ -240,7 +235,6 @@ public class DashboardService {
         return switch (stage) {
             case "inProgress" -> "In progress";
             case "dispatched" -> "Dispatched";
-            case "delivered" -> "Delivered";
             default -> stage;
         };
     }
@@ -475,7 +469,7 @@ public class DashboardService {
     /**
      * Every real operation the team can take that leaves a timestamp: creating a campaign,
      * submitting/resubmitting a recipient, approving/rejecting a submission or Quick Gift
-     * request, and an order moving to dispatched/delivered. Rebuilt fresh on every read, so it
+     * request, and an order being dispatched. Rebuilt fresh on every read, so it
      * always reflects whatever just happened -- there's no separate audit-log table to fall
      * behind or go stale. Each kind contributes only its newest few: the feed shows the newest
      * {@value #RECENT_ACTIVITY_LIMIT} overall, which can come from no deeper than that in any one kind.
@@ -505,9 +499,6 @@ public class DashboardService {
         for (Order o : queries.recentMovedOrders(reach, RECENT_ACTIVITY_LIMIT)) {
             String verb = switch (o.getStatus()) {
                 case DISPATCHED -> "dispatched order";
-                case RECEIVED_AT_WAREHOUSE -> "received at warehouse order";
-                case OUT_FOR_DELIVERY -> "sent out for delivery order";
-                case DELIVERED -> "delivered order";
                 default -> null;
             };
             if (verb != null) {

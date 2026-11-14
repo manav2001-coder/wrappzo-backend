@@ -37,16 +37,15 @@ class DashboardInsightsQueries {
     static final String APPROVAL = "APPROVAL";
     static final String ARTWORK = "ARTWORK";
     static final String PRODUCTION = "PRODUCTION";
-    static final String TRANSIT = "TRANSIT";
     /** Days an order may sit in a stage before it is called stuck. */
-    static final Map<String, Integer> STUCK_AFTER_DAYS = Map.of(APPROVAL, 2, ARTWORK, 4, PRODUCTION, 7, TRANSIT, 5);
+    static final Map<String, Integer> STUCK_AFTER_DAYS = Map.of(APPROVAL, 2, ARTWORK, 4, PRODUCTION, 7);
 
     private static final String ORDERS = " from orders o where o.company_id = :companyId and (:companyWide = true or o.owner_id in (:people) or o.org_unit_id in (:orgUnits))";
     private static final String DOCTOR_KEY =
             "coalesce('p:' || nullif(regexp_replace(coalesce(o.recipient_phone, ''), '\\D', '', 'g'), ''), 'n:' || lower(trim(coalesce(o.recipient_name, ''))))";
     private static final String HAS_DOCTOR = "((o.recipient_phone is not null and trim(o.recipient_phone) <> '') or (o.recipient_name is not null and trim(o.recipient_name) <> ''))";
-    /** When an order was delivered: the time of its DELIVERED history row (an older order without one: when it last changed). */
-    private static final String DELIVERED_AT = "coalesce((select max(h.changed_at) from order_status_history h where h.order_id = o.id and h.status = 'DELIVERED'), o.updated_at)";
+    /** When an order was dispatched: the time of its DISPATCHED history row (an older order without one: when it last changed). */
+    private static final String DISPATCHED_AT = "coalesce((select max(h.changed_at) from order_status_history h where h.order_id = o.id and h.status = 'DISPATCHED'), o.updated_at)";
 
     /** A doctor assigned to a person counts as covered when that person has a live order in the period for them (by phone digits, else name). */
     private static final String COVERED = "exists (select 1 from orders o where o.owner_id = u.id and o.status <> 'CANCELLED' and o.created_at >= :from and o.created_at < :to"
@@ -57,10 +56,10 @@ class DashboardInsightsQueries {
     /** One row per field person in view: anyone with doctors assigned or orders of their own. */
     private static final String PEOPLE = "select u.id as id, u.name as name, coalesce(ou.name, '') as unit,"
             + " (select coalesce(sum(o.quantity), 0) from orders o where o.owner_id = u.id and o.status <> 'CANCELLED' and o.created_at >= :from and o.created_at < :to) as requested,"
-            + " (select coalesce(sum(o.quantity), 0) from orders o where o.owner_id = u.id and o.status = 'DELIVERED' and " + DELIVERED_AT + " >= :from and " + DELIVERED_AT + " < :to) as served,"
+            + " (select coalesce(sum(o.quantity), 0) from orders o where o.owner_id = u.id and o.status = 'DISPATCHED' and " + DISPATCHED_AT + " >= :from and " + DISPATCHED_AT + " < :to) as dispatched,"
             + " (select count(*) from recipient_assignments a where a.mr_user_id = u.id) as assigned,"
             + " (select count(*) from recipient_assignments a join recipients r on r.id = a.recipient_id where a.mr_user_id = u.id and " + COVERED + ") as covered,"
-            + " (select count(*) from orders o where o.owner_id = u.id and o.status not in ('DELIVERED', 'CANCELLED') and o.approval_status <> 'REJECTED') as in_pipeline,"
+            + " (select count(*) from orders o where o.owner_id = u.id and o.status not in ('DISPATCHED', 'CANCELLED') and o.approval_status <> 'REJECTED') as in_pipeline,"
             + " (select max(o.created_at) from orders o where o.owner_id = u.id) as last_activity"
             + " from users u left join org_units ou on ou.id = u.org_unit_id"
             + " where u.company_id = :companyId and u.status = 'ACTIVE' and %s"
@@ -68,7 +67,7 @@ class DashboardInsightsQueries {
 
     private static final String STAGE_CASE = "case when o.approval_status = 'PENDING' then 'APPROVAL'"
                 + " when o.status in ('PROCESSING', 'PRODUCTION_QUEUE') and not exists (select 1 from order_designs d where d.order_id = o.id and d.status = 'APPROVED') then 'ARTWORK'"
-                + " when o.status in ('PROCESSING', 'PRODUCTION_QUEUE') then 'PRODUCTION' else 'TRANSIT' end";
+                + " else 'PRODUCTION' end";
     private static final String AGE_DAYS = "extract(epoch from (now() - coalesce((select max(h.changed_at) from order_status_history h where h.order_id = o.id and h.status = o.status), o.created_at))) / 86400.0";
 
     @PersistenceContext private EntityManager em;
@@ -76,22 +75,22 @@ class DashboardInsightsQueries {
     Period period(Reach reach, Instant from, Instant to) {
         Object[] made = (Object[]) bind(em.createNativeQuery("select coalesce(sum(o.quantity), 0), count(distinct " + DOCTOR_KEY + ") filter (where " + HAS_DOCTOR + ")"
                 + ORDERS + " and o.status <> 'CANCELLED' and o.created_at >= :from and o.created_at < :to"), reach, from, to).getSingleResult();
-        Object[] delivered = (Object[]) bind(em.createNativeQuery("select coalesce(sum(o.quantity), 0), count(distinct " + DOCTOR_KEY + ") filter (where " + HAS_DOCTOR + "),"
-                + " avg(extract(epoch from (" + DELIVERED_AT + " - o.created_at)) / 86400.0)"
-                + ORDERS + " and o.status = 'DELIVERED' and " + DELIVERED_AT + " >= :from and " + DELIVERED_AT + " < :to"), reach, from, to).getSingleResult();
-        Double avg = delivered[2] == null ? null : Math.round(((Number) delivered[2]).doubleValue() * 10.0) / 10.0;
-        return new Period(num(made[0]), num(delivered[0]), num(made[1]), num(delivered[1]), avg);
+        Object[] dispatched = (Object[]) bind(em.createNativeQuery("select coalesce(sum(o.quantity), 0), count(distinct " + DOCTOR_KEY + ") filter (where " + HAS_DOCTOR + "),"
+                + " avg(extract(epoch from (" + DISPATCHED_AT + " - o.created_at)) / 86400.0)"
+                + ORDERS + " and o.status = 'DISPATCHED' and " + DISPATCHED_AT + " >= :from and " + DISPATCHED_AT + " < :to"), reach, from, to).getSingleResult();
+        Double avg = dispatched[2] == null ? null : Math.round(((Number) dispatched[2]).doubleValue() * 10.0) / 10.0;
+        return new Period(num(made[0]), num(dispatched[0]), num(made[1]), num(dispatched[1]), avg);
     }
 
-    /** Orders still on their way, bucketed into the four stages, each with how many have waited too long and the longest wait. */
+    /** Orders not yet dispatched, bucketed into the three stages, each with how many have waited too long and the longest wait. */
     List<StageAging> stages(Reach reach) {
         Map<String, double[]> byStage = new LinkedHashMap<>();
-        for (String stage : List.of(APPROVAL, ARTWORK, PRODUCTION, TRANSIT)) {
+        for (String stage : List.of(APPROVAL, ARTWORK, PRODUCTION)) {
             byStage.put(stage, new double[] {0, 0, 0});
         }
         @SuppressWarnings("unchecked")
         List<Object[]> orders = bind(em.createNativeQuery("select " + STAGE_CASE + ", " + AGE_DAYS + ORDERS
-                + " and o.status not in ('DELIVERED', 'CANCELLED') and o.approval_status <> 'REJECTED'"), reach, null, null).getResultList();
+                + " and o.status not in ('DISPATCHED', 'CANCELLED') and o.approval_status <> 'REJECTED'"), reach, null, null).getResultList();
         for (Object[] row : orders) {
             tally(byStage.get((String) row[0]), ((Number) row[1]).doubleValue(), STUCK_AFTER_DAYS.get((String) row[0]));
         }
@@ -112,7 +111,7 @@ class DashboardInsightsQueries {
     List<UUID> orderIdsInStage(Reach reach, String stage, int limit) {
         @SuppressWarnings("unchecked")
         List<Object> ids = bind(em.createNativeQuery("select o.id from (select o.id as id, " + STAGE_CASE + " as stage, " + AGE_DAYS + " as age" + ORDERS
-                + " and o.status not in ('DELIVERED', 'CANCELLED') and o.approval_status <> 'REJECTED') o where o.stage = :stage order by o.age desc")
+                + " and o.status not in ('DISPATCHED', 'CANCELLED') and o.approval_status <> 'REJECTED') o where o.stage = :stage order by o.age desc")
                 .setParameter("stage", stage), reach, null, null).setMaxResults(limit).getResultList();
         return ids.stream().map(id -> (UUID) id).toList();
     }
@@ -131,18 +130,18 @@ class DashboardInsightsQueries {
                 .getSingleResult());
     }
 
-    /** PELs asked for and PELs delivered per week (Monday, UTC), for the last weeks, oldest first, empty weeks included. */
+    /** PELs asked for and PELs dispatched per week (Monday, UTC), for the last weeks, oldest first, empty weeks included. */
     List<WeekPoint> weekly(Reach reach, LocalDate firstMonday, int weeks) {
         Instant since = firstMonday.atStartOfDay(ZoneOffset.UTC).toInstant();
         Map<LocalDate, Long> requested = perWeek("select date_trunc('week', o.created_at at time zone 'UTC'), sum(o.quantity)" + ORDERS
                 + " and o.status <> 'CANCELLED' and o.created_at >= :from group by 1", reach, since);
-        Map<LocalDate, Long> delivered = perWeek("select date_trunc('week', " + DELIVERED_AT + " at time zone 'UTC'), sum(o.quantity)" + ORDERS
-                + " and o.status = 'DELIVERED' and " + DELIVERED_AT + " >= :from group by 1", reach, since);
+        Map<LocalDate, Long> dispatchedPerWeek = perWeek("select date_trunc('week', " + DISPATCHED_AT + " at time zone 'UTC'), sum(o.quantity)" + ORDERS
+                + " and o.status = 'DISPATCHED' and " + DISPATCHED_AT + " >= :from group by 1", reach, since);
         DateTimeFormatter label = DateTimeFormatter.ofPattern("d MMM");
         List<WeekPoint> points = new ArrayList<>();
         for (int i = 0; i < weeks; i++) {
             LocalDate monday = firstMonday.plusWeeks(i);
-            points.add(new WeekPoint(monday.format(label), monday.toString(), requested.getOrDefault(monday, 0L), delivered.getOrDefault(monday, 0L)));
+            points.add(new WeekPoint(monday.format(label), monday.toString(), requested.getOrDefault(monday, 0L), dispatchedPerWeek.getOrDefault(monday, 0L)));
         }
         return points;
     }
@@ -217,14 +216,13 @@ class DashboardInsightsQueries {
 
     /** Per vendor, for the orders placed in the period -- fewest problems last. Only call for someone who may see vendor identity. */
     List<VendorScore> vendors(Reach reach, Instant from, Instant to) {
-        String open = "(o.status not in ('DELIVERED', 'CANCELLED') and o.approval_status <> 'REJECTED')";
+        String open = "(o.status not in ('DISPATCHED', 'CANCELLED') and o.approval_status <> 'REJECTED')";
         @SuppressWarnings("unchecked")
         List<Object[]> rows = bind(em.createNativeQuery("select v.id, v.name, count(*),"
-                + " count(*) filter (where o.status = 'DELIVERED'),"
+                + " count(*) filter (where o.status = 'DISPATCHED'),"
                 + " count(*) filter (where " + open + "),"
                 + " count(*) filter (where " + open + " and o.created_at < now() - interval '10 days'),"
                 + " avg(extract(epoch from (disp.at - o.created_at)) / 86400.0) filter (where disp.at is not null),"
-                + " avg(extract(epoch from (" + DELIVERED_AT + " - o.created_at)) / 86400.0) filter (where o.status = 'DELIVERED'),"
                 + " coalesce(sum(dz.total), 0), coalesce(sum(dz.rejected), 0)"
                 + " from orders o join vendors v on v.id = o.assigned_vendor_id"
                 + " left join lateral (select min(h.changed_at) as at from order_status_history h where h.order_id = o.id and h.status = 'DISPATCHED') disp on true"
@@ -234,7 +232,7 @@ class DashboardInsightsQueries {
                 + " group by v.id, v.name order by count(*) desc"), reach, from, to).setMaxResults(20).getResultList();
         List<VendorScore> scores = new ArrayList<>();
         for (Object[] r : rows) {
-            scores.add(new VendorScore((UUID) r[0], (String) r[1], num(r[2]), num(r[3]), num(r[4]), num(r[5]), oneDecimal(r[6]), oneDecimal(r[7]), num(r[8]), num(r[9])));
+            scores.add(new VendorScore((UUID) r[0], (String) r[1], num(r[2]), num(r[3]), num(r[4]), num(r[5]), oneDecimal(r[6]), num(r[7]), num(r[8])));
         }
         return scores;
     }

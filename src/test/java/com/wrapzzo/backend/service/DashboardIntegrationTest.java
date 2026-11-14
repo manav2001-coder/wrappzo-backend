@@ -103,15 +103,15 @@ class DashboardIntegrationTest {
 
         order(mrNorth1, pad, "Dr A", "111", 5);
         order(mrNorth1, pad, "Dr A again", "(111)", 3); // the same doctor: same phone digits
-        Order delivered = order(mrNorth1, calendar, "Dr B", "222", 2);
-        Order deliveredNorth2 = order(mrNorth2, pad, "Dr C", "333", 10);
-        Order dispatched = order(mrSouth, pad, "Dr D", "444", 7);
+        Order dispatchedB = order(mrNorth1, calendar, "Dr B", "222", 2);
+        Order dispatchedNorth2 = order(mrNorth2, pad, "Dr C", "333", 10);
+        Order dispatchedSouth = order(mrSouth, pad, "Dr D", "444", 7);
         Order cancelled = order(mrSouth, calendar, "Dr E", "555", 1);
-        delivered.setStatus(OrderStatus.DELIVERED);
-        deliveredNorth2.setStatus(OrderStatus.DELIVERED);
-        dispatched.setStatus(OrderStatus.DISPATCHED);
+        dispatchedB.setStatus(OrderStatus.DISPATCHED);
+        dispatchedNorth2.setStatus(OrderStatus.DISPATCHED);
+        dispatchedSouth.setStatus(OrderStatus.DISPATCHED);
         cancelled.setStatus(OrderStatus.CANCELLED);
-        orderRepository.saveAllAndFlush(List.of(delivered, deliveredNorth2, dispatched, cancelled));
+        orderRepository.saveAllAndFlush(List.of(dispatchedB, dispatchedNorth2, dispatchedSouth, cancelled));
     }
 
     @AfterEach
@@ -155,12 +155,11 @@ class DashboardIntegrationTest {
 
         assertThat(summary.companyWide()).isTrue();
         assertThat(summary.giftsInProgress()).isEqualTo(2);
-        assertThat(summary.dispatched()).isEqualTo(1);
-        assertThat(summary.delivered()).isEqualTo(2);
+        assertThat(summary.dispatched()).isEqualTo(3);
         assertThat(summary.pelsRequested()).isEqualTo(27); // everything but the cancelled order
         assertThat(summary.doctorsRequested()).isEqualTo(4); // A (twice), B, C, D
-        assertThat(summary.pelsServed()).isEqualTo(12);
-        assertThat(summary.doctorsServed()).isEqualTo(2);
+        assertThat(summary.pelsDispatched()).isEqualTo(19); // B (2), C (10) and D (7)
+        assertThat(summary.doctorsDispatched()).isEqualTo(3);
         assertThat(summary.orderSourceBreakdown()).containsExactlyInAnyOrderEntriesOf(java.util.Map.of("QUICK_GIFT", 6L));
         assertThat(summary.quickGiftStatusBreakdown()).containsExactlyInAnyOrderEntriesOf(java.util.Map.of("APPROVED", 6L));
         assertThat(summary.quickGiftsThisMonth()).isEqualTo(6);
@@ -170,7 +169,7 @@ class DashboardIntegrationTest {
         assertThat(summary.topDepartments()).extracting(d -> d.departmentName() + ":" + d.orderCount()).containsExactly("North 1:3", "South 1:2", "North 2:1");
         assertThat(summary.recentOrders()).hasSize(6);
         assertThat(summary.recentActivity()).hasSize(12);
-        assertThat(summary.recentActivity()).extracting(a -> a.verb()).containsAnyOf("requested Quick PEL", "approved Quick PEL", "dispatched order", "delivered order");
+        assertThat(summary.recentActivity()).extracting(a -> a.verb()).containsAnyOf("requested Quick PEL", "approved Quick PEL", "dispatched order");
         // Twelve weeks of trend, oldest first; this week holds the six requests.
         assertThat(summary.activityTrend()).hasSize(12);
         assertThat(summary.activityTrend().get(11).weekStart()).isEqualTo(LocalDate.now().with(DayOfWeek.MONDAY).toString());
@@ -185,10 +184,10 @@ class DashboardIntegrationTest {
 
         assertThat(summary.companyWide()).isFalse();
         assertThat(summary.giftsInProgress()).isEqualTo(2);
-        assertThat(summary.delivered()).isEqualTo(1);
+        assertThat(summary.dispatched()).isEqualTo(1);
         assertThat(summary.pelsRequested()).isEqualTo(10);
         assertThat(summary.doctorsRequested()).isEqualTo(2);
-        assertThat(summary.pelsServed()).isEqualTo(2);
+        assertThat(summary.pelsDispatched()).isEqualTo(2);
         assertThat(summary.quickGiftsThisMonth()).isEqualTo(3);
         assertThat(summary.topDepartments()).extracting(d -> d.departmentName() + ":" + d.orderCount()).containsExactly("North 1:3");
         assertThat(summary.recentOrders()).hasSize(3);
@@ -202,7 +201,7 @@ class DashboardIntegrationTest {
         assertThat(summary.companyWide()).isTrue();
         assertThat(summary.orderSourceBreakdown()).containsEntry("QUICK_GIFT", 4L); // North 1 (3) and North 2 (1), not South
         assertThat(summary.pelsRequested()).isEqualTo(20);
-        assertThat(summary.delivered()).isEqualTo(2);
+        assertThat(summary.dispatched()).isEqualTo(2); // B and C, not South's D
     }
 
     @Test
@@ -212,9 +211,8 @@ class DashboardIntegrationTest {
         assertThat(dashboardService.drilldown("orderSource", "QUICK_GIFT").rows()).hasSize(6);
         assertThat(dashboardService.drilldown("topGift", pad.getName()).rows()).hasSize(4);
         assertThat(dashboardService.drilldown("topDepartment", "North 1").rows()).hasSize(3);
-        assertThat(dashboardService.drilldown("pipelineStage", "delivered").rows()).hasSize(2);
         assertThat(dashboardService.drilldown("pipelineStage", "inProgress").rows()).hasSize(2);
-        assertThat(dashboardService.drilldown("pipelineStage", "dispatched").rows()).hasSize(1);
+        assertThat(dashboardService.drilldown("pipelineStage", "dispatched").rows()).hasSize(3);
         assertThat(dashboardService.drilldown("quickGiftStatus", "APPROVED").rows()).hasSize(6);
         assertThat(dashboardService.drilldown("quickGiftsThisMonth", "").rows()).hasSize(6);
         assertThat(dashboardService.drilldown("week", LocalDate.now().with(DayOfWeek.MONDAY) + ":QUICK_GIFT").rows()).hasSize(6);
@@ -222,8 +220,8 @@ class DashboardIntegrationTest {
         DashboardDrilldownResponse requested = dashboardService.drilldown("pelsRequested", "");
         assertThat(requested.rows()).extracting(r -> r.quantity()).containsExactly(10L, 8L, 7L, 2L);
         assertThat(requested.rows().get(1).subtitle()).isEqualTo("2 orders");
-        DashboardDrilldownResponse served = dashboardService.drilldown("pelsServed", "");
-        assertThat(served.rows()).extracting(r -> r.quantity()).containsExactly(10L, 2L);
+        DashboardDrilldownResponse dispatched = dashboardService.drilldown("pelsDispatched", "");
+        assertThat(dispatched.rows()).extracting(r -> r.quantity()).containsExactly(10L, 7L, 2L);
     }
 
     private void submission(Company company, com.wrapzzo.backend.model.Campaign campaign, User by, com.wrapzzo.backend.model.SubmissionStatus status, User reviewer) {
@@ -271,7 +269,7 @@ class DashboardIntegrationTest {
         assertThat(insights.scope()).isEqualTo("PERSONAL");
         assertThat(insights.team()).isEmpty();
         assertThat(insights.current().requested()).isEqualTo(10);
-        assertThat(insights.current().served()).isEqualTo(2);
+        assertThat(insights.current().dispatched()).isEqualTo(2);
         assertThat(insights.current().doctorsRequested()).isEqualTo(2);
         assertThat(insights.previous().requested()).isZero();
         // Every doctor on their list got there by being ordered for, so none is left uncovered.
@@ -286,12 +284,12 @@ class DashboardIntegrationTest {
 
         assertThat(insights.scope()).isEqualTo("TEAM");
         assertThat(insights.teamSize()).isEqualTo(2);
-        assertThat(insights.team()).extracting(m -> m.name() + ":" + m.requested() + ":" + m.served())
+        assertThat(insights.team()).extracting(m -> m.name() + ":" + m.requested() + ":" + m.dispatched())
                 .containsExactlyInAnyOrder("MR North 1:10:2", "MR North 2:10:10");
         assertThat(insights.current().requested()).isEqualTo(20);
-        // Three orders with the vendor or in transit, nothing old enough to be called stuck.
+        // Two orders still with the vendor, nothing old enough to be called stuck.
         assertThat(insights.stages()).extracting(s -> s.stage() + ":" + s.count() + ":" + s.stuck())
-                .containsExactly("APPROVAL:0:0", "ARTWORK:2:0", "PRODUCTION:0:0", "TRANSIT:0:0");
+                .containsExactly("APPROVAL:0:0", "ARTWORK:2:0", "PRODUCTION:0:0");
         assertThat(insights.weekly()).hasSize(12);
         assertThat(insights.weekly().get(11).requested()).isEqualTo(20);
     }
@@ -303,10 +301,9 @@ class DashboardIntegrationTest {
 
         assertThat(insights.previous()).isNull();
         assertThat(insights.current().requested()).isEqualTo(27);
-        assertThat(insights.current().served()).isEqualTo(12);
-        assertThat(insights.stages()).extracting(s -> s.stage() + ":" + s.count()).containsExactly("APPROVAL:0", "ARTWORK:2", "PRODUCTION:0", "TRANSIT:1");
+        assertThat(insights.current().dispatched()).isEqualTo(19);
+        assertThat(insights.stages()).extracting(s -> s.stage() + ":" + s.count()).containsExactly("APPROVAL:0", "ARTWORK:2", "PRODUCTION:0");
         assertThat(dashboardService.drilldown("orderStage", "ARTWORK").rows()).hasSize(2);
-        assertThat(dashboardService.drilldown("orderStage", "TRANSIT").rows()).hasSize(1);
         assertThat(dashboardService.drilldown("orderStage", "APPROVAL").rows()).isEmpty();
         assertThat(insightsService.insights("nonsense").range()).isEqualTo("30d");
     }
@@ -336,8 +333,8 @@ class DashboardIntegrationTest {
         var printers = insights.vendors().get(0);
         assertThat(printers.name()).isEqualTo("Printers");
         assertThat(printers.orders()).isEqualTo(5);
-        assertThat(printers.delivered()).isEqualTo(2);
-        assertThat(printers.open()).isEqualTo(3);
+        assertThat(printers.dispatched()).isEqualTo(3);
+        assertThat(printers.open()).isEqualTo(2);
     }
 
     @Test
@@ -347,7 +344,7 @@ class DashboardIntegrationTest {
         String[] lines = csv.split("\r\n");
 
         assertThat(lines).hasSize(1 + 3); // the header, and mrNorth1's three orders
-        assertThat(lines[0]).contains("\"Order\"", "\"Days to deliver\"").doesNotContain("Vendor").doesNotContain("Total price");
+        assertThat(lines[0]).contains("\"Order\"", "\"Days to dispatch\"").doesNotContain("Vendor").doesNotContain("Total price");
     }
 
     @Test

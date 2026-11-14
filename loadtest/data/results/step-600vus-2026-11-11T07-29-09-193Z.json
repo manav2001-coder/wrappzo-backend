@@ -1,0 +1,121 @@
+{
+ "profile": "step",
+ "peakVus": 600,
+ "target": "wrappzo-backend-production.up.railway.app",
+ "startedAt": "2026-11-11T07:29:09.193Z",
+ "durationSeconds": 317,
+ "totalRequests": 13634,
+ "requestsPerSecond": 42.99,
+ "failedRate": 0,
+ "passed": true,
+ "overall": {
+  "avg": 286.72171616612854,
+  "p50": 274.414396,
+  "p90": 338.7382249,
+  "p95": 373.5882365,
+  "p99": 529.91376117,
+  "max": 1340.701292
+ },
+ "kinds": {
+  "search": {
+   "avg": 284.233008060476,
+   "p50": 267.191875,
+   "p90": 336.4470248,
+   "p95": 364.767509,
+   "p99": 475.7036448799999,
+   "max": 1340.701292
+  },
+  "auth": {
+   "avg": 281.57536631999966,
+   "p50": 270.135771,
+   "p90": 317.91127969999997,
+   "p95": 341.66614675,
+   "p99": 484.7114645,
+   "max": 694.478834
+  },
+  "summary": {
+   "avg": 262.3136577319492,
+   "p50": 248.575333,
+   "p90": 297.2986334,
+   "p95": 334.42616699999996,
+   "p99": 470.2278961199999,
+   "max": 1118.810042
+  },
+  "approvals": {
+   "avg": 262.0286759285712,
+   "p50": 250.1189165,
+   "p90": 296.711058,
+   "p95": 323.07524474999997,
+   "p99": 447.26130013999995,
+   "max": 715.459458
+  },
+  "dashboard": {
+   "avg": 295.92991715049567,
+   "p50": 280.394021,
+   "p90": 335.2694705,
+   "p95": 377.95980000000003,
+   "p99": 540.8105634799998,
+   "max": 1290.466125
+  },
+  "list": {
+   "avg": 303.80550433752796,
+   "p50": 294.7594375,
+   "p90": 356.9340962,
+   "p95": 392.56129649999997,
+   "p99": 553.8377869499999,
+   "max": 880.0075
+  }
+ },
+ "thresholds": [
+  {
+   "metric": "http_req_duration{kind:search}",
+   "expression": "p(95)<1000",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:auth}",
+   "expression": "p(95)<2000",
+   "ok": true
+  },
+  {
+   "metric": "checks",
+   "expression": "rate>0.98",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:summary}",
+   "expression": "p(95)<500",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:approvals}",
+   "expression": "p(95)<1500",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:dashboard}",
+   "expression": "p(95)<1500",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration",
+   "expression": "p(95)<4000",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration",
+   "expression": "p(99)<3000",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:list}",
+   "expression": "p(95)<800",
+   "ok": true
+  },
+  {
+   "metric": "http_req_failed",
+   "expression": "rate<0.02",
+   "ok": true
+  }
+ ]
+}

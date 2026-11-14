@@ -68,7 +68,7 @@ public class Gift {
     @Column(name = "photo_required", nullable = false)
     private boolean photoRequired = false;
 
-    /** Always true: the vendor may not dispatch or deliver an order until the company has approved one of its
+    /** Always true: the vendor may not dispatch an order until the company has approved one of its
      * artwork proofs. Nobody chooses this per gift any more; the column stays so existing code reads one place. */
     @Column(name = "artwork_required", nullable = false)
     private boolean artworkRequired = true;

@@ -270,7 +270,7 @@ class OrgScopeIntegrationTest {
         placeOrder(mrNorth);
         placeOrder(mrSouth);
         Order delivered = orderRepository.findById(first).orElseThrow();
-        delivered.setStatus(OrderStatus.DELIVERED);
+        delivered.setStatus(OrderStatus.DISPATCHED);
         orderRepository.saveAndFlush(delivered);
 
         actAs(manager);
@@ -278,12 +278,12 @@ class OrgScopeIntegrationTest {
         // The manager sees North only: two orders of 5 PELs each, for two doctors; one of them delivered.
         assertThat(dashboard.pelsRequested()).isEqualTo(10);
         assertThat(dashboard.doctorsRequested()).isEqualTo(2);
-        assertThat(dashboard.pelsServed()).isEqualTo(5);
-        assertThat(dashboard.doctorsServed()).isEqualTo(1);
+        assertThat(dashboard.pelsDispatched()).isEqualTo(5);
+        assertThat(dashboard.doctorsDispatched()).isEqualTo(1);
 
         DashboardDrilldownResponse perDoctor = dashboardService.drilldown("pelsRequested", "");
         assertThat(perDoctor.rows()).hasSize(2).allSatisfy(row -> assertThat(row.quantity()).isEqualTo(5L));
-        assertThat(dashboardService.drilldown("pelsServed", "").rows()).hasSize(1);
+        assertThat(dashboardService.drilldown("pelsDispatched", "").rows()).hasSize(1);
     }
 
     @Test

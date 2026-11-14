@@ -16,12 +16,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * A company's own org-unit tree, self-service -- for picking which org unit a self-onboarded vendor
- * or a warehouse serves. Always scoped to the caller's own company.
+ * serves. Always scoped to the caller's own company.
  */
 @RestController
 @RequestMapping("/api/company/org-units")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyAuthority('" + Keys.COMPANY_VENDOR_VIEW + "', '" + Keys.WAREHOUSE_VIEW + "', '" + Keys.USER_VIEW + "')")
+@PreAuthorize("hasAnyAuthority('" + Keys.COMPANY_VENDOR_VIEW + "', '" + Keys.USER_VIEW + "')")
 public class CompanyOrgUnitController {
 
     private final OrgUnitService orgUnitService;

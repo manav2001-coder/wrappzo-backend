@@ -30,7 +30,7 @@ public class RecipientPhotoRequestEmailListener {
                   <p style="font-size:15px;color:#111827;">Hi %s,</p>
                   <p style="font-size:15px;color:#111827;line-height:1.6;">
                     <strong>%s</strong> has arranged a PEL for you: <strong>%s</strong>.
-                    We just need a quick photo from you to complete the delivery.
+                    We just need a quick photo from you to get your order ready.
                   </p>
                   <p style="text-align:center;margin:28px 0;">
                     <a href="%s" style="display:inline-block;padding:12px 28px;background:#4f46e5;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600;font-size:15px;">

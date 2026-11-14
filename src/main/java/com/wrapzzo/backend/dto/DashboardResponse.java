@@ -17,7 +17,6 @@ public record DashboardResponse(
         long campaignsRunning,
         long giftsInProgress,
         long dispatched,
-        long delivered,
         long submissionsPending,
         long quickGiftsThisMonth,
         long quickGiftsPending,
@@ -25,10 +24,10 @@ public record DashboardResponse(
         long pelsRequested,
         /** Distinct doctors those PELs were requested for -- PELs created per doctor is the first over this. */
         long doctorsRequested,
-        /** PELs on orders that have been delivered. */
-        long pelsServed,
-        /** Distinct doctors those delivered PELs reached. */
-        long doctorsServed,
+        /** PELs on orders the vendor has dispatched. */
+        long pelsDispatched,
+        /** Distinct doctors those dispatched PELs were sent for. */
+        long doctorsDispatched,
         /** Order counts by source -- "CAMPAIGN" / "QUICK_GIFT" / "BULK_GIFT". */
         Map<String, Long> orderSourceBreakdown,
         /** Quick Gift request counts by status -- "SUBMITTED" / "APPROVED" / "REJECTED". */
@@ -72,7 +71,7 @@ public record DashboardResponse(
      * A synthesized activity feed -- e.g. "Sharad created campaign Product Launch" -- derived
      * live from campaigns/submissions/orders/Quick Gift requests, not a persisted audit log.
      * Exactly one of campaignId/quickGiftId is set (and the item clickable) depending on
-     * which kind of activity this is; both are null for order-dispatch/delivery events with
+     * which kind of activity this is; both are null for order-dispatch events with
      * no campaign link.
      */
     public record ActivityItem(String actorName, String verb, String subject, Instant at, UUID campaignId, UUID quickGiftId) {
@@ -87,7 +86,7 @@ public record DashboardResponse(
     }
 
     /**
-     * One order's place in the Processing -> Production Queue -> Dispatched -> Delivered
+     * One order's place in the Processing -> Production Queue -> Dispatched
      * pipeline, for the Dashboard's order timeline. status is the current stage; history is
      * every stage it has actually passed through with a real timestamp (see
      * OrderStatusHistory), oldest first.

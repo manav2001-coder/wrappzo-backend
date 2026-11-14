@@ -120,24 +120,6 @@ class OrderServiceIntegrationTest {
     }
 
     @Test
-    void updateStatusForVendorMarksDeliveredFromProductionQueue() {
-        Order order = newOrder(vendor, OrderStatus.PRODUCTION_QUEUE);
-
-        actAsVendor(vendor);
-        VendorOrderResponse delivered = orderService.updateStatusForVendor(order.getId(), vendor.getId(), OrderStatus.DELIVERED);
-        assertThat(delivered.status()).isEqualTo(OrderStatus.DELIVERED);
-    }
-
-    @Test
-    void updateStatusForVendorMarksDeliveredFromDispatched() {
-        Order order = newOrder(vendor, OrderStatus.DISPATCHED);
-
-        actAsVendor(vendor);
-        VendorOrderResponse delivered = orderService.updateStatusForVendor(order.getId(), vendor.getId(), OrderStatus.DELIVERED);
-        assertThat(delivered.status()).isEqualTo(OrderStatus.DELIVERED);
-    }
-
-    @Test
     void updateStatusForVendorCanSetDispatchedDirectlyFromProductionQueue() {
         Order order = newOrder(vendor, OrderStatus.PRODUCTION_QUEUE);
 
@@ -157,8 +139,8 @@ class OrderServiceIntegrationTest {
     }
 
     @Test
-    void updateStatusForVendorRejectsOnceAlreadyDelivered() {
-        Order order = newOrder(vendor, OrderStatus.DELIVERED);
+    void updateStatusForVendorRejectsOnceCancelled() {
+        Order order = newOrder(vendor, OrderStatus.CANCELLED);
 
         actAsVendor(vendor);
         assertThatThrownBy(() -> orderService.updateStatusForVendor(order.getId(), vendor.getId(), OrderStatus.DISPATCHED))
@@ -179,7 +161,7 @@ class OrderServiceIntegrationTest {
         Order theirs = newOrder(otherVendor, OrderStatus.PRODUCTION_QUEUE);
 
         actAsVendor(vendor);
-        assertThatThrownBy(() -> orderService.updateStatusForVendor(theirs.getId(), vendor.getId(), OrderStatus.DELIVERED))
+        assertThatThrownBy(() -> orderService.updateStatusForVendor(theirs.getId(), vendor.getId(), OrderStatus.DISPATCHED))
                 .isInstanceOf(OrderNotFoundException.class);
     }
 

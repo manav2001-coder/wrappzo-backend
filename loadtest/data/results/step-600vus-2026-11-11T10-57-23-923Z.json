@@ -1,0 +1,186 @@
+{
+ "profile": "step",
+ "peakVus": 600,
+ "target": "wrappzo-backend-production.up.railway.app",
+ "startedAt": "2026-11-11T10:57:23.923Z",
+ "durationSeconds": 121,
+ "totalRequests": 5157,
+ "requestsPerSecond": 42.73,
+ "failedRate": 0.003296490207484972,
+ "passed": false,
+ "overall": {
+  "avg": 1022.0856359309685,
+  "p50": 325.177292,
+  "p90": 2016.5701756000028,
+  "p95": 5154.512210599998,
+  "p99": 12845.711867999999,
+  "max": 21322.677329
+ },
+ "kinds": {
+  "vendor-list": {
+   "avg": 1082.7968363,
+   "p50": 356.05427099999997,
+   "p90": 2891.9173931,
+   "p95": 5378.585985999999,
+   "p99": 7845.627402849999,
+   "max": 9404.929921
+  },
+  "list": {
+   "avg": 1170.2959433300284,
+   "p50": 344.639667,
+   "p90": 2236.9833846000006,
+   "p95": 6744.154219999983,
+   "p99": 13923.378719739998,
+   "max": 20448.417663
+  },
+  "approvals": {
+   "avg": 999.3583237248674,
+   "p50": 315.764917,
+   "p90": 1756.980409,
+   "p95": 4923.7098778,
+   "p99": 13129.097493279998,
+   "max": 21322.677329
+  },
+  "summary": {
+   "avg": 970.4712053657252,
+   "p50": 278.37425,
+   "p90": 2224.1054510000013,
+   "p95": 4128.553568799996,
+   "p99": 11255.216551919995,
+   "max": 18697.982842
+  },
+  "vendor-search": {
+   "avg": 1682.3186244615385,
+   "p50": 410.716833,
+   "p90": 3879.2004602,
+   "p95": 6478.083594599997,
+   "p99": 9385.27555572,
+   "max": 10112.073546
+  },
+  "search": {
+   "avg": 1215.890199754673,
+   "p50": 349.1288335,
+   "p90": 2962.1879294000014,
+   "p95": 7498.026494899989,
+   "p99": 12515.455311499998,
+   "max": 14737.674549
+  },
+  "write": {
+   "avg": 709.9749184119496,
+   "p50": 312.6657295,
+   "p90": 1480.4492135,
+   "p95": 3134.3795723999997,
+   "p99": 5928.226204999999,
+   "max": 14987.840591
+  },
+  "dashboard": {
+   "avg": 1402.7299216578479,
+   "p50": 372.341959,
+   "p90": 4088.6331268000085,
+   "p95": 7907.801216499992,
+   "p99": 12089.216623999997,
+   "max": 17336.983592
+  },
+  "vendor": {
+   "avg": 857.1662899210526,
+   "p50": 321.13908349999997,
+   "p90": 1984.3828093000006,
+   "p95": 3373.9205354499986,
+   "p99": 10554.629125689993,
+   "max": 18151.9733
+  },
+  "auth": {
+   "avg": 365.135612865,
+   "p50": 288.932854,
+   "p90": 407.77150090000004,
+   "p95": 599.5897173499993,
+   "p99": 2244.220844999998,
+   "max": 5725.337836
+  },
+  "bulk-done": {
+   "avg": 9245.133333333333,
+   "p50": 7866,
+   "p90": 17063.7,
+   "p95": 20701.199999999997,
+   "p99": 24668.179999999997,
+   "max": 28797
+  }
+ },
+ "thresholds": [
+  {
+   "metric": "http_req_duration{kind:vendor-list}",
+   "expression": "p(95)<1500",
+   "ok": false
+  },
+  {
+   "metric": "http_req_duration{kind:list}",
+   "expression": "p(95)<800",
+   "ok": false
+  },
+  {
+   "metric": "http_req_duration",
+   "expression": "p(99)<3000",
+   "ok": false
+  },
+  {
+   "metric": "http_req_duration",
+   "expression": "p(95)<4000",
+   "ok": false
+  },
+  {
+   "metric": "checks",
+   "expression": "rate>0.98",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:approvals}",
+   "expression": "p(95)<1500",
+   "ok": false
+  },
+  {
+   "metric": "http_req_duration{kind:summary}",
+   "expression": "p(95)<500",
+   "ok": false
+  },
+  {
+   "metric": "http_req_duration{kind:vendor-search}",
+   "expression": "p(95)<2000",
+   "ok": false
+  },
+  {
+   "metric": "http_req_duration{kind:search}",
+   "expression": "p(95)<1000",
+   "ok": false
+  },
+  {
+   "metric": "import_seconds",
+   "expression": "p(95)<60000",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:write}",
+   "expression": "p(95)<2000",
+   "ok": false
+  },
+  {
+   "metric": "http_req_duration{kind:dashboard}",
+   "expression": "p(95)<1500",
+   "ok": false
+  },
+  {
+   "metric": "http_req_duration{kind:vendor}",
+   "expression": "p(95)<1500",
+   "ok": false
+  },
+  {
+   "metric": "http_req_failed",
+   "expression": "rate<0.02",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:auth}",
+   "expression": "p(95)<2000",
+   "ok": true
+  }
+ ]
+}

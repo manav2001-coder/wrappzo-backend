@@ -1,0 +1,186 @@
+{
+ "profile": "step",
+ "peakVus": 600,
+ "target": "wrappzo-backend-production.up.railway.app",
+ "startedAt": "2026-11-11T10:13:56.942Z",
+ "durationSeconds": 330,
+ "totalRequests": 22503,
+ "requestsPerSecond": 68.2,
+ "failedRate": 0,
+ "passed": false,
+ "overall": {
+  "avg": 310.7598580139971,
+  "p50": 277.569667,
+  "p90": 402.705459,
+  "p95": 486.08695929999993,
+  "p99": 723.6225333399998,
+  "max": 2916.93871
+ },
+ "kinds": {
+  "vendor-list": {
+   "avg": 328.5375485581397,
+   "p50": 312.223916,
+   "p90": 395.9081338,
+   "p95": 435.36395,
+   "p99": 549.68511176,
+   "max": 832.225333
+  },
+  "vendor": {
+   "avg": 325.73655265902573,
+   "p50": 318.182833,
+   "p90": 420.5266082,
+   "p95": 477.5168084,
+   "p99": 697.8553571599999,
+   "max": 1021.883084
+  },
+  "approvals": {
+   "avg": 579.3383153921558,
+   "p50": 319.578375,
+   "p90": 2000.154459,
+   "p95": 2285.003042,
+   "p99": 2607.9480034,
+   "max": 2916.93871
+  },
+  "summary": {
+   "avg": 286.3035600519051,
+   "p50": 260.174625,
+   "p90": 355.81631680000004,
+   "p95": 429.09951709999996,
+   "p99": 623.9108728599998,
+   "max": 1397.634167
+  },
+  "vendor-search": {
+   "avg": 376.5673928,
+   "p50": 338.34375,
+   "p90": 518.510184,
+   "p95": 572.5663169999999,
+   "p99": 805.0721434799999,
+   "max": 831.780125
+  },
+  "dashboard": {
+   "avg": 362.8745108100065,
+   "p50": 337.224,
+   "p90": 447.5312922000001,
+   "p95": 527.9221714999996,
+   "p99": 758.7069560399999,
+   "max": 1751.812375
+  },
+  "auth": {
+   "avg": 278.5234511816665,
+   "p50": 270.60327099999995,
+   "p90": 306.784167,
+   "p95": 327.63693885,
+   "p99": 405.60364541999996,
+   "max": 646.425208
+  },
+  "list": {
+   "avg": 314.327860513619,
+   "p50": 295.1463125,
+   "p90": 390.3072295,
+   "p95": 453.9599795,
+   "p99": 627.8640710499999,
+   "max": 1387.049084
+  },
+  "write": {
+   "avg": 327.0509293022184,
+   "p50": 285.29825000000005,
+   "p90": 440.2123840000001,
+   "p95": 536.9672919999999,
+   "p99": 959.17441477,
+   "max": 1701.283626
+  },
+  "search": {
+   "avg": 312.0961314418781,
+   "p50": 290.6227915,
+   "p90": 388.396721,
+   "p95": 452.64746695,
+   "p99": 675.7151182499998,
+   "max": 1376.231417
+  },
+  "bulk-done": {
+   "avg": 78761.14736842105,
+   "p50": 75182,
+   "p90": 158559.4,
+   "p95": 164594.6,
+   "p99": 172344.56,
+   "max": 173873
+  }
+ },
+ "thresholds": [
+  {
+   "metric": "http_req_duration{kind:vendor-list}",
+   "expression": "p(95)<1500",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:vendor}",
+   "expression": "p(95)<1500",
+   "ok": true
+  },
+  {
+   "metric": "checks",
+   "expression": "rate>0.98",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration",
+   "expression": "p(95)<4000",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration",
+   "expression": "p(99)<3000",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:approvals}",
+   "expression": "p(95)<1500",
+   "ok": false
+  },
+  {
+   "metric": "http_req_duration{kind:summary}",
+   "expression": "p(95)<500",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:vendor-search}",
+   "expression": "p(95)<2000",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:dashboard}",
+   "expression": "p(95)<1500",
+   "ok": true
+  },
+  {
+   "metric": "import_seconds",
+   "expression": "p(95)<60000",
+   "ok": false
+  },
+  {
+   "metric": "http_req_duration{kind:auth}",
+   "expression": "p(95)<2000",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:list}",
+   "expression": "p(95)<800",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:write}",
+   "expression": "p(95)<2000",
+   "ok": true
+  },
+  {
+   "metric": "http_req_duration{kind:search}",
+   "expression": "p(95)<1000",
+   "ok": true
+  },
+  {
+   "metric": "http_req_failed",
+   "expression": "rate<0.02",
+   "ok": true
+  }
+ ]
+}

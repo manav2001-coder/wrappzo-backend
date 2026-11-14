@@ -22,7 +22,7 @@ import org.springframework.data.jpa.domain.Specification;
 final class VendorOrderListFields {
 
     /** The stages, in the vendor's queue order. Their names are what the portal sends and shows. */
-    static final List<String> STAGES = List.of("rework", "artwork", "review", "ready", "dispatched", "warehouse", "delivered", "cancelled");
+    static final List<String> STAGES = List.of("rework", "artwork", "review", "ready", "dispatched", "cancelled");
 
     private static final List<OrderStatus> OPEN = List.of(OrderStatus.PROCESSING, OrderStatus.PRODUCTION_QUEUE);
 
@@ -61,15 +61,10 @@ final class VendorOrderListFields {
     /** The predicate for one stage, or null if there is no such stage. Mirrors vendorStageOf(): status first, then the artwork loop for an order still with the vendor. */
     static Predicate stage(String stage, Root<Order> root, CriteriaQuery<?> query, CriteriaBuilder cb) {
         var status = root.<OrderStatus>get("status");
-        Predicate withWarehouse = cb.isNotNull(root.get("warehouse"));
         Predicate open = status.in(OPEN);
         return switch (stage) {
             case "cancelled" -> cb.equal(status, OrderStatus.CANCELLED);
-            case "delivered" -> cb.equal(status, OrderStatus.DELIVERED);
-            case "warehouse" -> cb.or(
-                    status.in(List.of(OrderStatus.RECEIVED_AT_WAREHOUSE, OrderStatus.OUT_FOR_DELIVERY)),
-                    cb.and(cb.equal(status, OrderStatus.DISPATCHED), withWarehouse));
-            case "dispatched" -> cb.and(cb.equal(status, OrderStatus.DISPATCHED), cb.not(withWarehouse));
+            case "dispatched" -> cb.equal(status, OrderStatus.DISPATCHED);
             case "review" -> cb.and(open, needsArtwork(root, query, cb),
                     latestProofIs(List.of(OrderDesignStatus.PENDING_REVIEW, OrderDesignStatus.PENDING_FINAL_APPROVAL), root, query, cb));
             case "rework" -> cb.and(open, needsArtwork(root, query, cb), latestProofIs(List.of(OrderDesignStatus.REJECTED), root, query, cb));

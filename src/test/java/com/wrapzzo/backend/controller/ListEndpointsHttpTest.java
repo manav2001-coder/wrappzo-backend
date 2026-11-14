@@ -76,7 +76,7 @@ class ListEndpointsHttpTest {
     void ordersPageBindsTheQueryStringAndAnswersInThePageShape() throws Exception {
         mvc.perform(get("/api/orders/page")
                         .param("page", "0").param("size", "5").param("search", "asha").param("sort", "createdAt").param("dir", "desc")
-                        .param("filters", "[{\"field\":\"status\",\"operator\":\"equals\",\"value\":\"DELIVERED\"}]")
+                        .param("filters", "[{\"field\":\"status\",\"operator\":\"equals\",\"value\":\"DISPATCHED\"}]")
                         .with(as("order.view")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").isArray())

@@ -78,15 +78,15 @@ class DashboardQueries {
         return counts;
     }
 
-    /** PELs (units) on live orders, or on delivered ones. */
-    long pels(Reach reach, boolean deliveredOnly) {
-        String where = deliveredOnly ? " and o.status = com.wrapzzo.backend.model.OrderStatus.DELIVERED" : " and o.status <> com.wrapzzo.backend.model.OrderStatus.CANCELLED";
+    /** PELs (units) on live orders, or on dispatched ones. */
+    long pels(Reach reach, boolean dispatchedOnly) {
+        String where = dispatchedOnly ? " and o.status = com.wrapzzo.backend.model.OrderStatus.DISPATCHED" : " and o.status <> com.wrapzzo.backend.model.OrderStatus.CANCELLED";
         Number sum = (Number) bind(em.createQuery("select coalesce(sum(o.quantity), 0)" + ORDERS + where), reach).getSingleResult();
         return sum.longValue();
     }
 
-    long doctors(Reach reach, boolean deliveredOnly) {
-        String status = deliveredOnly ? " and o.status = 'DELIVERED'" : " and o.status <> 'CANCELLED'";
+    long doctors(Reach reach, boolean dispatchedOnly) {
+        String status = dispatchedOnly ? " and o.status = 'DISPATCHED'" : " and o.status <> 'CANCELLED'";
         Number count = (Number) bind(em.createNativeQuery("select count(distinct " + DOCTOR_KEY + ")" + ORDERS_SQL + status + HAS_DOCTOR), reach).getSingleResult();
         return count.longValue();
     }
@@ -140,15 +140,15 @@ class DashboardQueries {
                 "department", department);
     }
 
-    /** Orders that moved on (dispatched, at the warehouse, out for delivery, delivered), newest first -- the feed's order events. */
+    /** Orders the vendor has dispatched, newest first -- the feed's order events. */
     List<Order> recentMovedOrders(Reach reach, int limit) {
-        return ordersWithStatus(reach, List.of(OrderStatus.DISPATCHED, OrderStatus.RECEIVED_AT_WAREHOUSE, OrderStatus.OUT_FOR_DELIVERY, OrderStatus.DELIVERED), limit)
+        return ordersWithStatus(reach, List.of(OrderStatus.DISPATCHED), limit)
                 .stream().sorted((a, b) -> b.getUpdatedAt().compareTo(a.getUpdatedAt())).toList();
     }
 
     /** (a doctor's name, phone, orders, PELs, latest order) per doctor, most PELs first. */
-    List<Object[]> pelsPerDoctor(Reach reach, boolean deliveredOnly, int limit) {
-        String status = deliveredOnly ? " and o.status = 'DELIVERED'" : " and o.status <> 'CANCELLED'";
+    List<Object[]> pelsPerDoctor(Reach reach, boolean dispatchedOnly, int limit) {
+        String status = dispatchedOnly ? " and o.status = 'DISPATCHED'" : " and o.status <> 'CANCELLED'";
         Query query = em.createNativeQuery("select (array_agg(o.recipient_name order by o.created_at desc))[1], (array_agg(o.recipient_phone order by o.created_at desc))[1],"
                 + " (array_agg(o.recipient_pcode order by o.created_at desc))[1], count(*), sum(o.quantity), max(o.created_at)" + ORDERS_SQL + status + HAS_DOCTOR + " group by " + DOCTOR_KEY + " order by sum(o.quantity) desc, max(o.created_at) desc");
         @SuppressWarnings("unchecked")

@@ -279,7 +279,7 @@ class PrescriptionPadOrderingIntegrationTest {
         OrderDesign rejected = new OrderDesign(order, 1, "designs/v1.pdf", "v1.pdf", printer);
         rejected.setStatus(OrderDesignStatus.REJECTED);
         orderDesignRepository.save(rejected);
-        assertThatThrownBy(() -> orderService.updateStatusForVendor(orderId, printer.getId(), OrderStatus.DELIVERED))
+        assertThatThrownBy(() -> orderService.updateStatusForVendor(orderId, printer.getId(), OrderStatus.DISPATCHED))
                 .isInstanceOf(ArtworkNotApprovedException.class);
 
         OrderDesign approved = new OrderDesign(order, 2, "designs/v2.pdf", "v2.pdf", printer);
