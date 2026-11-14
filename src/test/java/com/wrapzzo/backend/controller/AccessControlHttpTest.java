@@ -141,6 +141,21 @@ class AccessControlHttpTest {
     }
 
     @Test
+    void uploadingASheetOfDoctorsNeedsTheSameKeyAsAddingOne() throws Exception {
+        String sheet = "{\"rows\":[{\"name\":\"Dr. X\",\"phone\":\"9800000001\",\"pcode\":\"P-1\"}]}";
+        // No separate bulk key exists any more.
+        org.assertj.core.api.Assertions.assertThat(accessControlRepository.findByKey("doctor.import")).isEmpty();
+        // Seeing the doctors, or editing them, is not adding them -- so it is not uploading them either.
+        mvc.perform(post("/api/recipients/mine/bulk").with(holding("doctor.view")).contentType(MediaType.APPLICATION_JSON).content(sheet)).andExpect(status().isForbidden());
+        mvc.perform(post("/api/recipients/mine/bulk").with(holding("doctor.edit")).contentType(MediaType.APPLICATION_JSON).content(sheet)).andExpect(status().isForbidden());
+        mvc.perform(post("/api/recipients/mine").with(holding("doctor.view")).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"Dr. X\",\"phone\":\"9800000001\",\"pcode\":\"P-1\"}")).andExpect(status().isForbidden());
+        // The key that adds one doctor is the key that uploads a sheet: the request gets past the access check (whatever the sheet itself then says).
+        mvc.perform(post("/api/recipients/mine/bulk").with(holding("doctor.create")).contentType(MediaType.APPLICATION_JSON).content(sheet))
+                .andExpect(result -> org.assertj.core.api.Assertions.assertThat(result.getResponse().getStatus()).isNotEqualTo(403).isNotEqualTo(401));
+    }
+
+    @Test
     void theCompanySideAndTheVendorPortalCannotReachEachOther() throws Exception {
         mvc.perform(get("/api/vendor/orders/page").with(holding("order.view"))).andExpect(status().isForbidden());
         mvc.perform(get("/api/orders/page").with(asVendor())).andExpect(status().isForbidden());

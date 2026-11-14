@@ -51,7 +51,6 @@ public enum Permission {
     DOCTOR_EDIT(Keys.DOCTOR_EDIT, true),
 
     DOCTOR_REMOVE(Keys.DOCTOR_REMOVE, true),
-    DOCTOR_IMPORT(Keys.DOCTOR_IMPORT, true),
 
     USER_VIEW(Keys.USER_VIEW, true),
     USER_CREATE(Keys.USER_CREATE, true),
@@ -187,7 +186,6 @@ public enum Permission {
         public static final String DOCTOR_EDIT = "doctor.edit";
 
         public static final String DOCTOR_REMOVE = "doctor.remove";
-        public static final String DOCTOR_IMPORT = "doctor.import";
 
         public static final String USER_VIEW = "user.view";
         public static final String USER_CREATE = "user.create";

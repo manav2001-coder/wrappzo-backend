@@ -66,9 +66,9 @@ public class RecipientController {
         return recipientService.createMine(request);
     }
 
-    /** A sheet of doctors onto the caller's own list, all or none. */
+    /** A sheet of doctors onto the caller's own list, all or none. Uploading a sheet is adding doctors, so it needs the key that adds one. */
     @PostMapping("/mine/bulk")
-    @RequiresPermission(Keys.DOCTOR_IMPORT)
+    @RequiresPermission(Keys.DOCTOR_CREATE)
     public ResponseEntity<ImportJobResponse> bulkCreateMine(@Valid @RequestBody BulkDoctorsRequest request) {
         return importJobs.respond(importJobs.importDoctors(request.rows()));
     }
