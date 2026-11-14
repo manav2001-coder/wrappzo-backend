@@ -85,6 +85,8 @@ public class DashboardService {
     private final FileStorageService fileStorageService;
     private final VisibilityService visibilityService;
     private final DashboardQueries queries;
+    private final DashboardInsightsService insightsService;
+    private final DashboardInsightsQueries insightsQueries;
 
     /** Who the dashboard is for and which campaigns they see. The records themselves are never loaded: the figures come from {@link DashboardQueries}. */
     private record Scope(Company company, boolean companyWide, Reach reach, List<Campaign> campaigns) {
@@ -153,6 +155,8 @@ public class DashboardService {
     public DashboardDrilldownResponse drilldown(String dimension, String value) {
         Reach reach = resolveScope().reach();
         return switch (dimension) {
+            case "orderStage" -> ordersDrilldown(orderRepository.findAllById(insightsQueries.orderIdsInStage(reach, value, DRILLDOWN_LIMIT)), "Orders — " + stageTitle(value));
+            case "uncoveredDoctors" -> insightsService.uncoveredDoctors(value, DRILLDOWN_LIMIT);
             case "orderSource" -> ordersDrilldown(sourceOrders(reach, value), "Orders — " + titleCase(value));
             case "quickGiftStatus" -> quickGiftsDrilldown(quickGiftsOfStatus(reach, value), "Quick PEL requests — " + titleCase(value));
             case "submissionStatus" -> submissionsDrilldown(
@@ -214,6 +218,16 @@ public class DashboardService {
             case "dispatched" -> IN_TRANSIT_STATUSES.contains(status);
             case "delivered" -> status == OrderStatus.DELIVERED;
             default -> false;
+        };
+    }
+
+    private String stageTitle(String stage) {
+        return switch (stage) {
+            case "APPROVAL" -> "Waiting for approval";
+            case "ARTWORK" -> "Artwork and proof";
+            case "PRODUCTION" -> "In production";
+            case "TRANSIT" -> "On the way";
+            default -> stage;
         };
     }
 

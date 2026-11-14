@@ -50,6 +50,7 @@ import org.springframework.transaction.annotation.Transactional;
 class DashboardIntegrationTest {
 
     @Autowired private DashboardService dashboardService;
+    @Autowired private DashboardInsightsService insightsService;
     @Autowired private QuickGiftService quickGiftService;
     @Autowired private FeatureService featureService;
     @Autowired private CompanyRepository companyRepository;
@@ -250,5 +251,53 @@ class DashboardIntegrationTest {
         actAs(mrNorth1);
         DashboardResponse north = dashboardService.summary();
         assertThat(north.submissionStatusBreakdown()).containsExactlyInAnyOrderEntriesOf(java.util.Map.of("PENDING", 2L, "APPROVED", 1L));
+    }
+
+    @Test
+    void insightsGiveAFieldUserAPersonalViewOfTheirOwnPeriodFigures() {
+        actAs(mrNorth1);
+        var insights = insightsService.insights("30d");
+
+        assertThat(insights.scope()).isEqualTo("PERSONAL");
+        assertThat(insights.team()).isEmpty();
+        assertThat(insights.current().requested()).isEqualTo(10);
+        assertThat(insights.current().served()).isEqualTo(2);
+        assertThat(insights.current().doctorsRequested()).isEqualTo(2);
+        assertThat(insights.previous().requested()).isZero();
+        // Every doctor on their list got there by being ordered for, so none is left uncovered.
+        assertThat(insights.coverage().covered()).isEqualTo(insights.coverage().assigned());
+        assertThat(insightsService.uncoveredDoctors("30d", 50).rows()).isEmpty();
+    }
+
+    @Test
+    void insightsGiveAManagerOneRowPerPersonAndWhereOrdersAreWaiting() {
+        actAs(zonalNorth);
+        var insights = insightsService.insights("30d");
+
+        assertThat(insights.scope()).isEqualTo("TEAM");
+        assertThat(insights.teamSize()).isEqualTo(2);
+        assertThat(insights.team()).extracting(m -> m.name() + ":" + m.requested() + ":" + m.served())
+                .containsExactlyInAnyOrder("MR North 1:10:2", "MR North 2:10:10");
+        assertThat(insights.current().requested()).isEqualTo(20);
+        // Three orders with the vendor or in transit, nothing old enough to be called stuck.
+        assertThat(insights.stages()).extracting(s -> s.stage() + ":" + s.count() + ":" + s.stuck())
+                .containsExactly("APPROVAL:0:0", "ARTWORK:2:0", "PRODUCTION:0:0", "TRANSIT:0:0");
+        assertThat(insights.weekly()).hasSize(12);
+        assertThat(insights.weekly().get(11).requested()).isEqualTo(20);
+    }
+
+    @Test
+    void insightsForAllTimeHaveNothingToCompareWith() {
+        actAs(admin);
+        var insights = insightsService.insights("all");
+
+        assertThat(insights.previous()).isNull();
+        assertThat(insights.current().requested()).isEqualTo(27);
+        assertThat(insights.current().served()).isEqualTo(12);
+        assertThat(insights.stages()).extracting(s -> s.stage() + ":" + s.count()).containsExactly("APPROVAL:0", "ARTWORK:2", "PRODUCTION:0", "TRANSIT:1");
+        assertThat(dashboardService.drilldown("orderStage", "ARTWORK").rows()).hasSize(2);
+        assertThat(dashboardService.drilldown("orderStage", "TRANSIT").rows()).hasSize(1);
+        assertThat(dashboardService.drilldown("orderStage", "APPROVAL").rows()).isEmpty();
+        assertThat(insightsService.insights("nonsense").range()).isEqualTo("30d");
     }
 }

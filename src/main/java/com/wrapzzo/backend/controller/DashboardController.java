@@ -1,9 +1,11 @@
 package com.wrapzzo.backend.controller;
 
 import com.wrapzzo.backend.dto.DashboardDrilldownResponse;
+import com.wrapzzo.backend.dto.DashboardInsightsResponse;
 import com.wrapzzo.backend.dto.DashboardResponse;
 import com.wrapzzo.backend.security.Permission.Keys;
 import com.wrapzzo.backend.security.RequiresPermission;
+import com.wrapzzo.backend.service.DashboardInsightsService;
 import com.wrapzzo.backend.service.DashboardService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,10 +21,17 @@ import org.springframework.web.bind.annotation.RestController;
 public class DashboardController {
 
     private final DashboardService dashboardService;
+    private final DashboardInsightsService dashboardInsightsService;
 
     @GetMapping
     public DashboardResponse get() {
         return dashboardService.summary();
+    }
+
+    /** Period figures, order aging, doctor coverage and (for managers) per-person rows. range = 7d | 30d | 90d | year | all. */
+    @GetMapping("/insights")
+    public DashboardInsightsResponse insights(@RequestParam(defaultValue = "30d") String range) {
+        return dashboardInsightsService.insights(range);
     }
 
     /** The records behind one clicked chart datapoint, e.g. dimension=quickGiftStatus&value=SUBMITTED. */
