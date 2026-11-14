@@ -6,6 +6,6 @@ import java.util.UUID;
 public class VendorGiftEditNotAllowedException extends RuntimeException {
 
     public VendorGiftEditNotAllowedException(UUID giftId) {
-        super("Gift " + giftId + " was submitted by a vendor -- its content can't be edited by an admin.");
+        super("PEL " + giftId + " was submitted by a vendor -- its content can't be edited by an admin.");
     }
 }

@@ -141,7 +141,7 @@ public class RecipientUploadService {
                 recipientEmail,
                 recipientName != null ? recipientName : "there",
                 submission.getCompany().getName(),
-                gift != null ? gift.getName() : "your gift",
+                gift != null ? gift.getName() : "your PEL",
                 uploadUrl,
                 UPLOAD_TOKEN_EXPIRY.toDays() * 24)));
         return uploadUrl;

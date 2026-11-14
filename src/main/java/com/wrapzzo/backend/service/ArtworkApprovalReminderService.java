@@ -106,7 +106,7 @@ public class ArtworkApprovalReminderService {
     private String body(User approver, List<OrderDesign> items, boolean reminder) {
         StringBuilder rows = new StringBuilder();
         for (OrderDesign design : items) {
-            String gift = design.getOrder().getGift() != null ? design.getOrder().getGift().getName() : "Gift";
+            String gift = design.getOrder().getGift() != null ? design.getOrder().getGift().getName() : "PEL";
             rows.append("<li style=\"margin:6px 0;\"><strong>ORD-%d</strong> &middot; %s &middot; for %s &middot; proof v%d</li>".formatted(
                     design.getOrder().getOrderNo(), HtmlUtils.htmlEscape(gift),
                     HtmlUtils.htmlEscape(String.valueOf(design.getOrder().getRecipientName())), design.getVersionNo()));

@@ -39,7 +39,7 @@ public class ArtworkBypassNotificationService {
             return;
         }
         String order = "ORD-" + design.get().getOrder().getOrderNo();
-        String gift = design.get().getOrder().getGift() != null ? design.get().getOrder().getGift().getName() : "a gift";
+        String gift = design.get().getOrder().getGift() != null ? design.get().getOrder().getGift().getName() : "a PEL";
         for (User skipped : users.findAllById(event.skippedUserIds())) {
             if (skipped.getStatus() != UserStatus.ACTIVE || skipped.getEmail() == null || skipped.getEmail().isBlank()) {
                 continue;

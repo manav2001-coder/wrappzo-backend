@@ -98,7 +98,7 @@ public class QuickGiftUploadService {
                 recipientEmail,
                 request.getRecipientName() != null ? request.getRecipientName() : "there",
                 request.getCompany().getName(),
-                gift != null ? gift.getName() : "your gift",
+                gift != null ? gift.getName() : "your PEL",
                 uploadUrl,
                 UPLOAD_TOKEN_EXPIRY.toDays() * 24)));
         return uploadUrl;

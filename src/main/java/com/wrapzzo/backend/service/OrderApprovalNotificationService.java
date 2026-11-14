@@ -157,6 +157,6 @@ public class OrderApprovalNotificationService {
     }
 
     private static String giftOf(Order order) {
-        return order.getGift() != null ? order.getGift().getName() : "Gift";
+        return order.getGift() != null ? order.getGift().getName() : "PEL";
     }
 }

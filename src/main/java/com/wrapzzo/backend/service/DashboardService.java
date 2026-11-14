@@ -154,7 +154,7 @@ public class DashboardService {
         Reach reach = resolveScope().reach();
         return switch (dimension) {
             case "orderSource" -> ordersDrilldown(sourceOrders(reach, value), "Orders — " + titleCase(value));
-            case "quickGiftStatus" -> quickGiftsDrilldown(quickGiftsOfStatus(reach, value), "Quick Gift requests — " + titleCase(value));
+            case "quickGiftStatus" -> quickGiftsDrilldown(quickGiftsOfStatus(reach, value), "Quick PEL requests — " + titleCase(value));
             case "submissionStatus" -> submissionsDrilldown(
                     queries.submissionsWithStatus(reach, submissionStatusesOf(value), DRILLDOWN_LIMIT), "Campaign submissions — " + titleCase(value));
             case "topGift" -> ordersDrilldown(queries.ordersOfGift(reach, value, DRILLDOWN_LIMIT), "Orders — " + value);
@@ -165,7 +165,7 @@ public class DashboardService {
             case "pipelineStage" -> ordersDrilldown(
                     queries.ordersWithStatus(reach, java.util.Arrays.stream(OrderStatus.values()).filter(s -> pipelineStageMatches(s, value)).toList(), DRILLDOWN_LIMIT),
                     "Orders — " + pipelineStageTitle(value));
-            case "quickGiftsThisMonth" -> quickGiftsDrilldown(queries.quickGiftsCreatedSince(reach, monthStart(), DRILLDOWN_LIMIT), "Quick Gifts this month");
+            case "quickGiftsThisMonth" -> quickGiftsDrilldown(queries.quickGiftsCreatedSince(reach, monthStart(), DRILLDOWN_LIMIT), "Quick PELs this month");
             default -> new DashboardDrilldownResponse(value, List.of());
         };
     }
@@ -226,7 +226,7 @@ public class DashboardService {
         };
     }
 
-    /** "QUICK_GIFT" -> "Quick Gift". */
+    /** "QUICK_GIFT" -> "Quick PEL". */
     private static String titleCase(String value) {
         StringBuilder sb = new StringBuilder();
         for (String part : value.toLowerCase().split("_")) {
@@ -234,7 +234,7 @@ public class DashboardService {
                 sb.append(Character.toUpperCase(part.charAt(0))).append(part.substring(1)).append(' ');
             }
         }
-        return sb.toString().trim();
+        return sb.toString().trim().replace("Gift", "PEL");
     }
 
     private DashboardDrilldownResponse ordersDrilldown(List<Order> orders, String title) {
@@ -383,7 +383,7 @@ public class DashboardService {
         Instant end = weekStart.plusWeeks(1).atStartOfDay(ZoneOffset.UTC).toInstant();
         String weekLabel = weekStart.format(DateTimeFormatter.ofPattern("dd MMM yyyy"));
         if ("QUICK_GIFT".equals(seriesKey)) {
-            return quickGiftsDrilldown(queries.quickGiftsBetween(reach, start, end, DRILLDOWN_LIMIT), "Quick Gift requests — week of " + weekLabel);
+            return quickGiftsDrilldown(queries.quickGiftsBetween(reach, start, end, DRILLDOWN_LIMIT), "Quick PEL requests — week of " + weekLabel);
         }
         return submissionsDrilldown(queries.submissionsSubmittedBetween(reach, start, end, DRILLDOWN_LIMIT), "Campaign submissions — week of " + weekLabel);
     }
@@ -499,10 +499,10 @@ public class DashboardService {
         queries.newestQuickGifts(reach, RECENT_ACTIVITY_LIMIT).forEach(q -> quickGifts.putIfAbsent(q.getId(), q));
         queries.newestDecidedQuickGifts(reach, RECENT_ACTIVITY_LIMIT).forEach(q -> quickGifts.putIfAbsent(q.getId(), q));
         for (QuickGiftRequest q : quickGifts.values()) {
-            activity.add(new ActivityItem(q.getRequestedBy().getName(), "requested Quick Gift", q.getGift().getName(), q.getCreatedAt(), null, q.getId()));
+            activity.add(new ActivityItem(q.getRequestedBy().getName(), "requested Quick PEL", q.getGift().getName(), q.getCreatedAt(), null, q.getId()));
             if (q.getReviewedAt() != null && q.getReviewedBy() != null) {
-                String verb = q.getStatus() == QuickGiftStatus.APPROVED ? "approved Quick Gift"
-                        : q.getStatus() == QuickGiftStatus.REJECTED ? "rejected Quick Gift"
+                String verb = q.getStatus() == QuickGiftStatus.APPROVED ? "approved Quick PEL"
+                        : q.getStatus() == QuickGiftStatus.REJECTED ? "rejected Quick PEL"
                         : null;
                 if (verb != null) {
                     activity.add(new ActivityItem(q.getReviewedBy().getName(), verb, q.getGift().getName(), q.getReviewedAt(), null, q.getId()));

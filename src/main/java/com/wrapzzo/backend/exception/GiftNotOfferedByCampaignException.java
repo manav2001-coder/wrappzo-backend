@@ -5,6 +5,6 @@ import java.util.UUID;
 public class GiftNotOfferedByCampaignException extends RuntimeException {
 
     public GiftNotOfferedByCampaignException(UUID giftId) {
-        super("This gift is not offered by the campaign: " + giftId);
+        super("This PEL is not offered by the campaign: " + giftId);
     }
 }

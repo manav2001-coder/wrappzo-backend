@@ -257,7 +257,7 @@ public class SubmissionService {
         }
 
         if (gift.isPhotoRequired() && hasPhotoField && hasEmailField && !photoProvided && !emailProvided) {
-            errors.add("This gift needs a recipient photo -- upload one, or provide the recipient's email so we can send them an upload link.");
+            errors.add("This PEL needs a recipient photo -- upload one, or provide the recipient's email so we can send them an upload link.");
         }
 
         if (!errors.isEmpty()) {

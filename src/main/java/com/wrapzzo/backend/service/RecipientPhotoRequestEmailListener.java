@@ -24,12 +24,12 @@ public class RecipientPhotoRequestEmailListener {
         PendingRecipientPhotoRequest r = event.request();
         emailSender.send(
                 r.recipientEmail(),
-                r.companyName() + " has a gift for you!",
+                r.companyName() + " has a PEL for you!",
                 """
                 <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;">
                   <p style="font-size:15px;color:#111827;">Hi %s,</p>
                   <p style="font-size:15px;color:#111827;line-height:1.6;">
-                    <strong>%s</strong> has arranged a gift for you: <strong>%s</strong>.
+                    <strong>%s</strong> has arranged a PEL for you: <strong>%s</strong>.
                     We just need a quick photo from you to complete the delivery.
                   </p>
                   <p style="text-align:center;margin:28px 0;">

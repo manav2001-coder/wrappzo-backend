@@ -159,7 +159,7 @@ class DashboardIntegrationTest {
         assertThat(summary.topDepartments()).extracting(d -> d.departmentName() + ":" + d.orderCount()).containsExactly("North 1:3", "South 1:2", "North 2:1");
         assertThat(summary.recentOrders()).hasSize(6);
         assertThat(summary.recentActivity()).hasSize(12);
-        assertThat(summary.recentActivity()).extracting(a -> a.verb()).containsAnyOf("requested Quick Gift", "approved Quick Gift", "dispatched order", "delivered order");
+        assertThat(summary.recentActivity()).extracting(a -> a.verb()).containsAnyOf("requested Quick PEL", "approved Quick PEL", "dispatched order", "delivered order");
         // Twelve weeks of trend, oldest first; this week holds the six requests.
         assertThat(summary.activityTrend()).hasSize(12);
         assertThat(summary.activityTrend().get(11).weekStart()).isEqualTo(LocalDate.now().with(DayOfWeek.MONDAY).toString());

@@ -17,7 +17,7 @@ public class OpenApiConfig {
     public OpenAPI wrapzzoOpenApi() {
         return new OpenAPI()
                 .info(new Info().title("Wrappzo Backend API").version("v1")
-                        .description("Platform, vendor, and auth endpoints for the Wrappzo gifting commerce app."))
+                        .description("Platform, vendor, and auth endpoints for the Wrappzo PEL commerce app."))
                 .addSecurityItem(new SecurityRequirement().addList(BEARER_SCHEME))
                 .components(new Components()
                         .addSecuritySchemes(BEARER_SCHEME, new SecurityScheme()

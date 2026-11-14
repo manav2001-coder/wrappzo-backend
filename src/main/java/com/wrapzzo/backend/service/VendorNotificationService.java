@@ -98,7 +98,7 @@ public class VendorNotificationService {
     }
 
     private static String gift(Order order) {
-        return order.getGift() != null ? order.getGift().getName() : "Gift";
+        return order.getGift() != null ? order.getGift().getName() : "PEL";
     }
 
     private String body(Vendor vendor, String headline, Order order, String next, String button, Order linked) {

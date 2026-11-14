@@ -5,6 +5,6 @@ import java.util.UUID;
 public class GiftNotAvailableForQuickGiftException extends RuntimeException {
 
     public GiftNotAvailableForQuickGiftException(UUID giftId) {
-        super("This gift isn't available for Quick Gift: " + giftId);
+        super("This PEL isn't available for Quick PEL: " + giftId);
     }
 }
