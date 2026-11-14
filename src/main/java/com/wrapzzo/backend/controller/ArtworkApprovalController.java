@@ -1,6 +1,5 @@
 package com.wrapzzo.backend.controller;
 
-import com.wrapzzo.backend.dto.OverridableArtworkResponse;
 import com.wrapzzo.backend.dto.PendingArtworkApprovalResponse;
 import com.wrapzzo.backend.list.ListQueryParams;
 import com.wrapzzo.backend.list.PageResponse;
@@ -31,12 +30,5 @@ public class ArtworkApprovalController {
     @PreAuthorize("hasAuthority('" + Keys.APPROVAL_VIEW + "')")
     public PageResponse<PendingArtworkApprovalResponse> pendingPage(ListQueryParams params) {
         return orderDesignService.pagePendingFinalApproval(params.toQuery());
-    }
-
-    /** Proofs still waiting on the MR or a level below the caller, which the caller may approve in place of the people there. */
-    @GetMapping("/overridable/page")
-    @RequiresPermission(Keys.ARTWORK_OVERRIDE)
-    public PageResponse<OverridableArtworkResponse> overridablePage(ListQueryParams params) {
-        return orderDesignService.pageOverridable(params.toQuery());
     }
 }
