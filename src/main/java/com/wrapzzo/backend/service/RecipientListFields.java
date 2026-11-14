@@ -23,7 +23,6 @@ final class RecipientListFields {
                 .text("speciality", (root, cb) -> root.get("speciality"), "speciality", true)
                 .text("clinicName", (root, cb) -> root.get("clinicName"), "clinicName", true)
                 .text("createdByName", (root, cb) -> ListFields.join(root, "createdBy").get("name"), "createdBy.name", false)
-                .day("dateOfBirth", (root, cb) -> root.get("dateOfBirth"), "dateOfBirth")
                 .date("createdAt", (root, cb) -> root.get("createdAt"), "createdAt");
     }
 

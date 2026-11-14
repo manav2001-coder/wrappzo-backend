@@ -163,7 +163,7 @@ class OrgScopeIntegrationTest {
     private UUID placeOrder(User mr) {
         actAs(mr);
         return quickGiftService.create(new CreateQuickGiftRequest(
-                pad.getId(), null, "Dr. " + mr.getName(), "98000" + (int) (Math.random() * 100000), "PC" + (int) (Math.random() * 1000000), null, "Somewhere", null, null, null, null,
+                pad.getId(), null, "Dr. " + mr.getName(), "98000" + (int) (Math.random() * 100000), "PC" + (int) (Math.random() * 1000000), null, "Somewhere", null, null, null,
                 null, 1)).orderId();
     }
 
@@ -191,7 +191,7 @@ class OrgScopeIntegrationTest {
     void aDoctorIsFoundByTheirPcode_andThePcodeIdentifiesThem() {
         actAs(mrNorth);
         RecipientResponse added = recipientService.createMine(new CreateRecipientRequest(
-                "Dr. Meera Iyer", "9800000077", "P-48213", null, "Clinic Road", null, null));
+                "Dr. Meera Iyer", "9800000077", "P-48213", null, "Clinic Road", null));
         assertThat(added.pcode()).isEqualTo("P-48213");
 
         // Searching by the pcode alone finds them -- in any case, and by part of it.
@@ -201,16 +201,16 @@ class OrgScopeIntegrationTest {
         // The same pcode is the same doctor: a colleague who adds it gets the one entry, not a duplicate.
         actAs(manager);
         RecipientResponse again = recipientService.createMine(new CreateRecipientRequest(
-                "Meera Iyer (typed differently)", "9111111111", "p-48213", null, null, null, null));
+                "Meera Iyer (typed differently)", "9111111111", "p-48213", null, null, null));
         assertThat(again.id()).isEqualTo(added.id());
         assertThat(again.inMyList()).isTrue();
 
         // And no other doctor may take it.
         actAs(mrNorth);
         RecipientResponse other = recipientService.createMine(new CreateRecipientRequest(
-                "Dr. Other", "9800000088", "P-99999", null, null, null, null));
+                "Dr. Other", "9800000088", "P-99999", null, null, null));
         assertThatThrownBy(() -> recipientService.update(other.id(),
-                new UpdateRecipientRequest("Dr. Other", "9800000088", "P-48213", null, null, null, null)))
+                new UpdateRecipientRequest("Dr. Other", "9800000088", "P-48213", null, null, null)))
                 .isInstanceOf(RecipientAlreadyExistsException.class);
     }
 
@@ -218,7 +218,7 @@ class OrgScopeIntegrationTest {
     void aNewDoctorNeedsAPcode_whenAddedThroughAQuickGift() {
         actAs(mrNorth);
         assertThatThrownBy(() -> quickGiftService.create(new CreateQuickGiftRequest(
-                pad.getId(), null, "Dr. No Code", "9800000012", null, null, "Somewhere", null, null, null, null, null, 50)))
+                pad.getId(), null, "Dr. No Code", "9800000012", null, null, "Somewhere", null, null, null, null, 50)))
                 .isInstanceOf(PcodeRequiredException.class);
     }
 
@@ -236,7 +236,7 @@ class OrgScopeIntegrationTest {
     void aFieldUserSeesTheirOwnListAndTheirManagerSeesTheirTeamsDoctors() {
         actAs(mrNorth);
         RecipientResponse added = recipientService.createMine(new CreateRecipientRequest(
-                "Dr. Meera Iyer", "9800000077", "PC-777", null, "Clinic Road", null, new DoctorDetails(null, null, null)));
+                "Dr. Meera Iyer", "9800000077", "PC-777", null, "Clinic Road", new DoctorDetails(null, null, null)));
         assertThat(added.inMyList()).isTrue();
         assertThat(recipientService.page(ListQuery.firstPage(100)).data()).extracting(RecipientResponse::id).contains(added.id());
 
@@ -289,7 +289,7 @@ class OrgScopeIntegrationTest {
     void aDoctorAddedDirectlyCarriesThePrintDetails() {
         actAs(mrNorth);
         RecipientResponse added = recipientService.createMine(new CreateRecipientRequest(
-                "Dr. Meera Iyer", "9800000003", "PC-555", null, "Clinic Road", null,
+                "Dr. Meera Iyer", "9800000003", "PC-555", null, "Clinic Road",
                 new DoctorDetails("MBBS, DNB", "Paediatrics", "Iyer Child Care")));
 
         Recipient doctor = recipientRepository.findById(added.id()).orElseThrow();
@@ -300,13 +300,13 @@ class OrgScopeIntegrationTest {
 
     @Test
     void addingADoctorWhosePcodeIsKnownAssignsTheExistingOne() {
-        Recipient existing = new Recipient(company, "Dr. A. Shah", "9800000001", null, null, null, mrSouth);
+        Recipient existing = new Recipient(company, "Dr. A. Shah", "9800000001", null, null, mrSouth);
         existing.setPcode("MH-12345");
         existing = recipientRepository.save(existing);
 
         actAs(mrNorth);
         RecipientResponse joined = recipientService.createMine(new CreateRecipientRequest(
-                "Asha Shah", "9800000099", "mh-12345", null, null, null, null));
+                "Asha Shah", "9800000099", "mh-12345", null, null, null));
 
         assertThat(joined.id()).isEqualTo(existing.getId());
         assertThat(recipientRepository.findByCompanyIdOrderByNameAsc(company.getId())).hasSize(1);
@@ -320,10 +320,10 @@ class OrgScopeIntegrationTest {
 
         actAs(mrNorth);
         assertThatThrownBy(() -> quickGiftService.create(new CreateQuickGiftRequest(
-                pad.getId(), null, "Dr. Few", "9800000055", "PC-55", null, "Somewhere", null, null, null, null, null, 5)))
+                pad.getId(), null, "Dr. Few", "9800000055", "PC-55", null, "Somewhere", null, null, null, null, 5)))
                 .isInstanceOf(QuantityBelowMinimumException.class);
         assertThat(quickGiftService.create(new CreateQuickGiftRequest(
-                pad.getId(), null, "Dr. Enough", "9800000056", "PC-56", null, "Somewhere", null, null, null, null, null, 50)).orderId())
+                pad.getId(), null, "Dr. Enough", "9800000056", "PC-56", null, "Somewhere", null, null, null, null, 50)).orderId())
                 .isNotNull();
     }
 

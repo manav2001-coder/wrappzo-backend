@@ -2,7 +2,6 @@ package com.wrapzzo.backend.dto;
 
 import com.wrapzzo.backend.model.Recipient;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.UUID;
 
 public record RecipientResponse(
@@ -13,7 +12,6 @@ public record RecipientResponse(
         String pcode,
         String email,
         String address,
-        LocalDate dateOfBirth,
         DoctorDetails doctor,
         String createdByName,
         Instant createdAt,
@@ -32,7 +30,6 @@ public record RecipientResponse(
                 r.getPcode(),
                 r.getEmail(),
                 r.getAddress(),
-                r.getDateOfBirth(),
                 new DoctorDetails(r.getQualification(), r.getSpeciality(), r.getClinicName()),
                 r.getCreatedBy() != null ? r.getCreatedBy().getName() : null,
                 r.getCreatedAt(),

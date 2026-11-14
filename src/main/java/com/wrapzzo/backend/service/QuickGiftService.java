@@ -35,7 +35,6 @@ import com.wrapzzo.backend.repository.UserRepository;
 import com.wrapzzo.backend.security.CurrentUser;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -103,7 +102,6 @@ public class QuickGiftService {
         String phone = request.recipientPhone();
         String email = request.recipientEmail();
         String address = request.deliveryAddress() == null || request.deliveryAddress().isBlank() ? null : request.deliveryAddress().trim();
-        LocalDate dob = request.recipientDob();
         DoctorDetails doctor = DoctorDetails.orEmpty(request.doctor());
         String pcode = request.recipientPcode();
         if (request.recipientId() == null && (pcode == null || pcode.isBlank())) {
@@ -115,7 +113,6 @@ public class QuickGiftService {
             phone = recipient.phone();
             email = recipient.email();
             address = recipient.address() != null ? recipient.address() : address;
-            dob = recipient.dateOfBirth();
             doctor = DoctorDetails.orEmpty(recipient.doctor());
             pcode = recipient.pcode();
         }
@@ -127,7 +124,6 @@ public class QuickGiftService {
 
         QuickGiftRequest quickGift =
                 new QuickGiftRequest(company, gift, requester, name, phone, email, address, request.giftMessage(), request.internalNotes());
-        quickGift.setRecipientDob(dob);
         quickGift.setRecipientQualification(doctor.qualification());
         quickGift.setRecipientPcode(pcode == null ? null : pcode.trim());
         quickGift.setRecipientSpeciality(doctor.speciality());
@@ -141,7 +137,7 @@ public class QuickGiftService {
             }
         }
         quickGift = quickGiftRequestRepository.saveAndFlush(quickGift);
-        recipientService.upsertFromSubmission(company, name, phone, email, address, dob, pcode, doctor, requester);
+        recipientService.upsertFromSubmission(company, name, phone, email, address, pcode, doctor, requester);
 
         // Choosing the gift is choosing the vendor. With order approval on, the order first waits for the requester's approver
         // (an RM, say) and goes to that vendor only on their yes; otherwise it goes straight there.

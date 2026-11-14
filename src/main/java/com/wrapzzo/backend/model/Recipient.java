@@ -12,7 +12,6 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.UUID;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -50,9 +49,6 @@ public class Recipient {
     @Column
     private String address;
 
-    @Column(name = "date_of_birth")
-    private LocalDate dateOfBirth;
-
     // Doctor details a prescription pad is printed with -- null for any non-doctor recipient.
     @Column
     private String qualification;
@@ -77,13 +73,12 @@ public class Recipient {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    public Recipient(Company company, String name, String phone, String email, String address, LocalDate dateOfBirth, User createdBy) {
+    public Recipient(Company company, String name, String phone, String email, String address, User createdBy) {
         this.company = company;
         this.name = name;
         this.phone = phone;
         this.email = email;
         this.address = address;
-        this.dateOfBirth = dateOfBirth;
         this.createdBy = createdBy;
     }
 

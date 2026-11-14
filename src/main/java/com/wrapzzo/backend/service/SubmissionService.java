@@ -173,14 +173,8 @@ public class SubmissionService {
                 .orElse(null);
     }
 
-    private LocalDate valueDate(UUID submissionId, String fieldKey) {
-        return submissionValueRepository.findBySubmissionIdAndCampaignFieldFieldKey(submissionId, fieldKey)
-                .map(SubmissionValue::getValueDate)
-                .orElse(null);
-    }
-
     /**
-     * Best-effort: matches the default field keys (recipientName/Phone/Email/Address/Dob)
+     * Best-effort: matches the default field keys (recipientName/Phone/Email/Address)
      * seen by DefaultCampaignFields -- a campaign creator who renamed or removed those
      * fields just means this quietly finds nothing to add, never blocks the submission.
      */
@@ -192,8 +186,7 @@ public class SubmissionService {
         }
         String email = valueText(submission.getId(), "recipientEmail");
         String address = valueText(submission.getId(), "recipientAddress");
-        LocalDate dob = valueDate(submission.getId(), "recipientDob");
-        recipientService.upsertFromSubmission(submission.getCompany(), name, phone, email, address, dob, submission.getSubmittedBy());
+        recipientService.upsertFromSubmission(submission.getCompany(), name, phone, email, address, submission.getSubmittedBy());
     }
 
     @SuppressWarnings("unchecked")

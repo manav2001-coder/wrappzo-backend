@@ -82,7 +82,7 @@ class DoctorAndUserListIntegrationTest {
 
     private void addDoctor(User by, String name, String pcode) {
         actAs(by);
-        recipientService.createMine(new CreateRecipientRequest(name, "9" + Math.abs(name.hashCode()), pcode, null, "Road", null, new DoctorDetails("MBBS", "Cardiology", "Clinic")));
+        recipientService.createMine(new CreateRecipientRequest(name, "9" + Math.abs(name.hashCode()), pcode, null, "Road", new DoctorDetails("MBBS", "Cardiology", "Clinic")));
     }
 
     private PageResponse<RecipientResponse> doctors(User as, Integer page, Integer size, String search, String sort, String dir, String filters) {

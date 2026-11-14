@@ -145,7 +145,7 @@ class OrderApprovalIntegrationTest {
     private Order place(User requester) {
         actAs(requester);
         UUID orderId = quickGiftService.create(new CreateQuickGiftRequest(
-                pad.getId(), null, "Dr. Asha Shah", "9800000001", "PC-ASHA", null, "12 MG Road, Pune", null, null, null, null,
+                pad.getId(), null, "Dr. Asha Shah", "9800000001", "PC-ASHA", null, "12 MG Road, Pune", null, null, null,
                 new DoctorDetails("MBBS, MD", "Cardiology", "Shah Heart Clinic"), 5)).orderId();
         return orderRepository.findById(orderId).orElseThrow();
     }

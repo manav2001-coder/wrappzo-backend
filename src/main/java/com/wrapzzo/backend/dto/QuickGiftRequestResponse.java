@@ -5,7 +5,6 @@ import com.wrapzzo.backend.model.OrderApprovalStatus;
 import com.wrapzzo.backend.model.QuickGiftRequest;
 import com.wrapzzo.backend.model.QuickGiftStatus;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -25,7 +24,6 @@ public record QuickGiftRequestResponse(
         String recipientPcode,
         String recipientEmail,
         String deliveryAddress,
-        LocalDate recipientDob,
         DoctorDetails doctor,
         int quantity,
         String orgUnitName,
@@ -65,7 +63,6 @@ public record QuickGiftRequestResponse(
                 request.getRecipientPcode(),
                 request.getRecipientEmail(),
                 request.getDeliveryAddress(),
-                request.getRecipientDob(),
                 new DoctorDetails(request.getRecipientQualification(), request.getRecipientSpeciality(), request.getRecipientClinicName()),
                 request.getQuantity(),
                 request.getOrgUnit() != null ? request.getOrgUnit().getName() : null,

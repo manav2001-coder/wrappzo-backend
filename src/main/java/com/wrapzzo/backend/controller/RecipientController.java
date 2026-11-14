@@ -6,7 +6,6 @@ import com.wrapzzo.backend.dto.CreateRecipientRequest;
 import com.wrapzzo.backend.dto.RecipientResponse;
 import com.wrapzzo.backend.list.ListQueryParams;
 import com.wrapzzo.backend.list.PageResponse;
-import com.wrapzzo.backend.dto.UpcomingBirthdayResponse;
 import com.wrapzzo.backend.dto.UpdateRecipientRequest;
 import com.wrapzzo.backend.security.Permission.Keys;
 import com.wrapzzo.backend.security.RequiresPermission;
@@ -89,9 +88,4 @@ public class RecipientController {
         return recipientService.update(id, request);
     }
 
-    @GetMapping("/upcoming-birthdays")
-    @RequiresPermission(Keys.DOCTOR_VIEW)
-    public List<UpcomingBirthdayResponse> upcomingBirthdays(@RequestParam(defaultValue = "30") int days) {
-        return recipientService.upcomingBirthdays(days);
-    }
 }

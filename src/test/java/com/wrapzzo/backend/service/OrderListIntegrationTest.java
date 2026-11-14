@@ -116,7 +116,7 @@ class OrderListIntegrationTest {
 
     private void order(User by, String doctor, int quantity) {
         actAs(by);
-        quickGiftService.create(new CreateQuickGiftRequest(pad.getId(), null, doctor, "98000" + doctor.hashCode(), "PC-" + doctor.replace(" ", ""), null, "Road 1", null, null, null,
+        quickGiftService.create(new CreateQuickGiftRequest(pad.getId(), null, doctor, "98000" + doctor.hashCode(), "PC-" + doctor.replace(" ", ""), null, "Road 1", null, null,
                 null, new DoctorDetails("MBBS", "Cardiology", "Clinic"), quantity));
     }
 

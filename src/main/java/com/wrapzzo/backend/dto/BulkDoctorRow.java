@@ -3,7 +3,6 @@ package com.wrapzzo.backend.dto;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import java.time.LocalDate;
 
 /** One row of the doctors sheet a user uploads to the Doctors screen: the same fields as adding one doctor by hand. */
 public record BulkDoctorRow(
@@ -13,6 +12,5 @@ public record BulkDoctorRow(
         @NotBlank @Size(max = 50) String pcode,
         String email,
         String address,
-        LocalDate dateOfBirth,
         @Valid DoctorDetails doctor) {
 }

@@ -63,28 +63,6 @@ public interface RecipientRepository extends JpaRepository<Recipient, UUID>, org
     List<Recipient> searchVisible(@Param("companyId") UUID companyId, @Param("query") String query, @Param("companyWide") boolean companyWide,
             @Param("people") Collection<UUID> people, @Param("orgUnits") Collection<UUID> orgUnits, org.springframework.data.domain.Pageable limit);
 
-    /** Doctors in reach whose birthday (month*100+day) is one of {@code codes} -- the upcoming-birthdays window, read from the database rather than every doctor. */
-    @Query("""
-            select r from Recipient r left join r.createdBy creator
-            where r.company.id = :companyId and r.dateOfBirth is not null
-              and (extract(month from r.dateOfBirth) * 100 + extract(day from r.dateOfBirth)) in :codes
-              and (:companyWide = true
-                   or creator.id in :people or creator.orgUnit.id in :orgUnits
-                   or exists (select 1 from RecipientAssignment a where a.recipient = r
-                              and (a.mrUser.id in :people or a.mrUser.orgUnit.id in :orgUnits)))
-            """)
-    List<Recipient> findVisibleWithBirthdayIn(@Param("companyId") UUID companyId, @Param("companyWide") boolean companyWide,
-            @Param("people") Collection<UUID> people, @Param("orgUnits") Collection<UUID> orgUnits, @Param("codes") Collection<Integer> codes);
-
-    /** The same window, over only the doctors on one user's own list. */
-    @Query("""
-            select r from Recipient r
-            where r.dateOfBirth is not null
-              and (extract(month from r.dateOfBirth) * 100 + extract(day from r.dateOfBirth)) in :codes
-              and exists (select 1 from RecipientAssignment a where a.recipient = r and a.mrUser.id = :userId)
-            """)
-    List<Recipient> findOnListWithBirthdayIn(@Param("userId") UUID userId, @Param("codes") Collection<Integer> codes);
-
     @Query("""
             select count(r) > 0 from Recipient r left join r.createdBy creator
             where r.id = :recipientId

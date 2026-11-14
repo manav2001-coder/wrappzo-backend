@@ -81,7 +81,7 @@ class ImportJobIntegrationTest {
 
     private List<BulkDoctorRow> doctorRows(int count) {
         return IntStream.range(0, count)
-                .mapToObj(i -> new BulkDoctorRow("Dr " + i, "98" + String.format("%08d", i), "PC-" + tag + "-" + i, null, null, null, null))
+                .mapToObj(i -> new BulkDoctorRow("Dr " + i, "98" + String.format("%08d", i), "PC-" + tag + "-" + i, null, null, null))
                 .toList();
     }
 

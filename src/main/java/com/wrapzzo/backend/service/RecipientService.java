@@ -8,7 +8,6 @@ import com.wrapzzo.backend.dto.RecipientResponse;
 import com.wrapzzo.backend.list.ListQuery;
 import com.wrapzzo.backend.list.ListSpecs;
 import com.wrapzzo.backend.list.PageResponse;
-import com.wrapzzo.backend.dto.UpcomingBirthdayResponse;
 import com.wrapzzo.backend.dto.UpdateRecipientRequest;
 import com.wrapzzo.backend.exception.RecipientAlreadyExistsException;
 import com.wrapzzo.backend.exception.RecipientNotFoundException;
@@ -20,12 +19,8 @@ import com.wrapzzo.backend.repository.RecipientAssignmentRepository;
 import com.wrapzzo.backend.repository.RecipientRepository;
 import com.wrapzzo.backend.repository.UserRepository;
 import com.wrapzzo.backend.security.CurrentUser;
-import java.time.LocalDate;
-import java.time.MonthDay;
-import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -111,7 +106,7 @@ public class RecipientService {
         String pcode = request.pcode().trim();
         rejectDuplicatePcode(company.getId(), pcode, null);
         Recipient recipient = new Recipient(
-                company, request.name().trim(), request.phone().trim(), email, blankToNull(request.address()), request.dateOfBirth(), user);
+                company, request.name().trim(), request.phone().trim(), email, blankToNull(request.address()), user);
         recipient.setPcode(pcode);
         applyDoctorDetails(recipient, doctor);
         return recipientRepository.save(recipient);
@@ -161,7 +156,7 @@ public class RecipientService {
             boolean isNew = recipient == null;
             if (isNew) {
                 recipient = new Recipient(
-                        user.getCompany(), row.name().trim(), row.phone().trim(), email, blankToNull(row.address()), row.dateOfBirth(), user);
+                        user.getCompany(), row.name().trim(), row.phone().trim(), email, blankToNull(row.address()), user);
                 recipient.setPcode(pcode);
                 applyDoctorDetails(recipient, doctor);
                 recipient = recipientRepository.save(recipient);
@@ -214,7 +209,6 @@ public class RecipientService {
         recipient.setPhone(request.phone().trim());
         recipient.setEmail(email);
         recipient.setAddress(blankToNull(request.address()));
-        recipient.setDateOfBirth(request.dateOfBirth());
         // Omitted means "leave the doctor details alone" -- a form that doesn't show them must not wipe them.
         if (request.doctor() != null) {
             DoctorDetails doctor = request.doctor().normalized();
@@ -258,9 +252,9 @@ public class RecipientService {
      * are missing (a campaign creator may have removed those fields from their form).
      */
     @Transactional
-    public void upsertFromSubmission(Company company, String name, String phone, String email, String address, LocalDate dateOfBirth,
+    public void upsertFromSubmission(Company company, String name, String phone, String email, String address,
             User createdBy) {
-        upsertFromSubmission(company, name, phone, email, address, dateOfBirth, null, DoctorDetails.EMPTY, createdBy);
+        upsertFromSubmission(company, name, phone, email, address, null, DoctorDetails.EMPTY, createdBy);
     }
 
     /**
@@ -268,7 +262,7 @@ public class RecipientService {
      * A doctor needs a pcode, so without one nothing is added to the directory (the caller's own record is unaffected).
      */
     @Transactional
-    public void upsertFromSubmission(Company company, String name, String phone, String email, String address, LocalDate dateOfBirth,
+    public void upsertFromSubmission(Company company, String name, String phone, String email, String address,
             String pcode, DoctorDetails doctor, User createdBy) {
         if (name == null || name.isBlank() || phone == null || phone.isBlank() || pcode == null || pcode.isBlank()) {
             return;
@@ -280,7 +274,7 @@ public class RecipientService {
         if (recipientRepository.findMatch(company.getId(), normalizedName(name), phone.trim(), normalizedEmail(cleanEmail)).isPresent()) {
             return;
         }
-        Recipient recipient = new Recipient(company, name.trim(), phone.trim(), cleanEmail, blankToNull(address), dateOfBirth, createdBy);
+        Recipient recipient = new Recipient(company, name.trim(), phone.trim(), cleanEmail, blankToNull(address), createdBy);
         recipient.setPcode(pcode.trim());
         applyDoctorDetails(recipient, doctor);
         recipientRepository.save(recipient);
@@ -288,49 +282,6 @@ public class RecipientService {
         if (createdBy != null) {
             recipientAssignmentRepository.save(new RecipientAssignment(recipient, createdBy));
         }
-    }
-
-    /** Upcoming birthdays of the recipients the caller can see (see Visibility). */
-    @Transactional(readOnly = true)
-    public List<UpcomingBirthdayResponse> upcomingBirthdays(int daysAhead) {
-        User user = currentUser();
-        LocalDate today = LocalDate.now();
-        Visibility visibility = visibilityService.resolve(user);
-        // Only the doctors whose birthday falls in the window are read from the database -- not every doctor in reach.
-        Set<Integer> codes = birthdayCodes(today, daysAhead);
-        List<Recipient> recipients = visibility.ownRecordsOnly()
-                ? recipientRepository.findOnListWithBirthdayIn(user.getId(), codes)
-                : recipientRepository.findVisibleWithBirthdayIn(user.getCompany().getId(), visibility.companyWide(), visibility.peopleForQuery(),
-                        visibility.orgUnitsForQuery(), codes);
-        return recipients.stream()
-                .map(r -> Map.entry(r, daysUntilNextBirthday(r.getDateOfBirth(), today)))
-                .filter(e -> e.getValue() <= daysAhead)
-                .sorted(Comparator.comparingInt(e -> e.getValue()))
-                .map(e -> UpcomingBirthdayResponse.from(e.getKey(), e.getValue()))
-                .toList();
-    }
-
-    /** Every month*100+day that falls from today through {@code daysAhead} days on -- a Feb 29 birthday counts on Feb 28 in a year without one. */
-    static Set<Integer> birthdayCodes(LocalDate today, int daysAhead) {
-        Set<Integer> codes = new java.util.HashSet<>();
-        for (int i = 0; i <= Math.max(daysAhead, 0); i++) {
-            LocalDate day = today.plusDays(i);
-            codes.add(day.getMonthValue() * 100 + day.getDayOfMonth());
-            if (day.getMonthValue() == 2 && day.getDayOfMonth() == 28 && !day.isLeapYear()) {
-                codes.add(229);
-            }
-        }
-        return codes;
-    }
-
-    /** Handles Feb 29 birthdays in a non-leap year via MonthDay.atYear's built-in clamp to Feb 28. */
-    private int daysUntilNextBirthday(LocalDate dateOfBirth, LocalDate today) {
-        MonthDay monthDay = MonthDay.from(dateOfBirth);
-        LocalDate nextBirthday = monthDay.atYear(today.getYear());
-        if (nextBirthday.isBefore(today)) {
-            nextBirthday = monthDay.atYear(today.getYear() + 1);
-        }
-        return (int) ChronoUnit.DAYS.between(today, nextBirthday);
     }
 
     private String blankToNull(String s) {

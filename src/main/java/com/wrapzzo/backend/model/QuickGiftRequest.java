@@ -20,7 +20,6 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.time.LocalDate;
 import java.util.UUID;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -77,9 +76,6 @@ public class QuickGiftRequest {
 
     @Column(name = "delivery_address")
     private String deliveryAddress;
-
-    @Column(name = "recipient_dob")
-    private LocalDate recipientDob;
 
     // The doctor details the gift (a prescription pad) is printed with, as sent -- see Recipient for the directory copy.
     @Column(name = "recipient_qualification")

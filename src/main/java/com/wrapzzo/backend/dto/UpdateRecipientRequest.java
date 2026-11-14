@@ -3,7 +3,6 @@ package com.wrapzzo.backend.dto;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import java.time.LocalDate;
 
 public record UpdateRecipientRequest(
         @NotBlank String name,
@@ -12,6 +11,5 @@ public record UpdateRecipientRequest(
         @NotBlank @Size(max = 50) String pcode,
         String email,
         String address,
-        LocalDate dateOfBirth,
         @Valid DoctorDetails doctor) {
 }

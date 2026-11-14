@@ -136,7 +136,7 @@ class DashboardIntegrationTest {
 
     private Order order(User by, Gift gift, String doctor, String phone, int quantity) {
         actAs(by);
-        UUID id = quickGiftService.create(new CreateQuickGiftRequest(gift.getId(), null, doctor, phone, "PC-" + UUID.randomUUID(), null, "Road", null, null, null,
+        UUID id = quickGiftService.create(new CreateQuickGiftRequest(gift.getId(), null, doctor, phone, "PC-" + UUID.randomUUID(), null, "Road", null, null,
                 null, new DoctorDetails("MBBS", "Cardiology", "Clinic"), quantity)).orderId();
         return orderRepository.findById(id).orElseThrow();
     }

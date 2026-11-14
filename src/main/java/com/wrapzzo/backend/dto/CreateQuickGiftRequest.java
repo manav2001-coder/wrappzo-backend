@@ -6,7 +6,6 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -25,7 +24,6 @@ public record CreateQuickGiftRequest(
         String recipientEmail,
         /** Optional -- the order form no longer asks for one. */
         String deliveryAddress,
-        LocalDate recipientDob,
         String giftMessage,
         String internalNotes,
         /** The recipient's photos (up to 10), each already presigned and uploaded -- optional; with none, a self-upload link goes to the recipient. */

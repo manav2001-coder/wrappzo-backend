@@ -167,7 +167,7 @@ class PrescriptionPadOrderingIntegrationTest {
 
     private CreateQuickGiftRequest padOrder(Gift gift, int quantity) {
         return new CreateQuickGiftRequest(
-                gift.getId(), null, "Dr. Asha Shah", "9800000001", "PC-ASHA", null, "12 MG Road, Pune", null, null, null, null,
+                gift.getId(), null, "Dr. Asha Shah", "9800000001", "PC-ASHA", null, "12 MG Road, Pune", null, null, null,
                 new DoctorDetails("MBBS, MD", "Cardiology", "Shah Heart Clinic"), quantity);
     }
 
@@ -227,7 +227,7 @@ class PrescriptionPadOrderingIntegrationTest {
         actAs(mrNorth);
         var request = padOrder(pad, 1);
         var placed = quickGiftService.create(new CreateQuickGiftRequest(
-                request.giftId(), null, request.recipientName(), request.recipientPhone(), request.recipientPcode(), null, null, null, null, null,
+                request.giftId(), null, request.recipientName(), request.recipientPhone(), request.recipientPcode(), null, null, null, null,
                 List.of(), request.doctor(), 1));
 
         assertThat(placed.deliveryAddress()).isNull();
@@ -240,7 +240,7 @@ class PrescriptionPadOrderingIntegrationTest {
         var second = quickGiftService.presignPhoto("image/jpeg", "PC-ASHA", 2);
         var request = padOrder(pad, 1);
         var placed = quickGiftService.create(new CreateQuickGiftRequest(
-                request.giftId(), null, request.recipientName(), request.recipientPhone(), request.recipientPcode(), null, request.deliveryAddress(), null, null, null,
+                request.giftId(), null, request.recipientName(), request.recipientPhone(), request.recipientPcode(), null, request.deliveryAddress(), null, null,
                 List.of(new CreateQuickGiftRequest.QuickGiftPhotoInput(first.key(), "a.png", "image/png"),
                         new CreateQuickGiftRequest.QuickGiftPhotoInput(second.key(), "b.jpg", "image/jpeg")),
                 request.doctor(), 1));
@@ -350,10 +350,10 @@ class PrescriptionPadOrderingIntegrationTest {
     @Test
     void aPcodeIdentifiesTheSameDoctor() {
         actAs(mrNorth);
-        recipientService.create(new CreateRecipientRequest("Dr. A. Shah", "9800000001", "MH-777", null, null, null,
+        recipientService.create(new CreateRecipientRequest("Dr. A. Shah", "9800000001", "MH-777", null, null,
                 new DoctorDetails("MBBS", null, null)));
 
-        assertThatThrownBy(() -> recipientService.create(new CreateRecipientRequest("Asha Shah", "9800000002", "mh-777", null, null, null, null)))
+        assertThatThrownBy(() -> recipientService.create(new CreateRecipientRequest("Asha Shah", "9800000002", "mh-777", null, null, null)))
                 .isInstanceOf(RecipientAlreadyExistsException.class);
     }
 
