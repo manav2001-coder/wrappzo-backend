@@ -9,7 +9,10 @@ import org.springframework.stereotype.Service;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadBucketRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.NoSuchBucketException;
 import software.amazon.awssdk.services.s3.model.PutBucketPolicyRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
@@ -57,6 +60,28 @@ public class FileStorageService {
     /** Bucket is public-read (see {@link #ensureBucketReady()}), so this is just a direct URL. */
     public String publicUrl(String key) {
         return publicBaseUrl + "/" + key;
+    }
+
+    /** What is stored under a key: its size and first bytes (to tell a real PDF from a renamed file). */
+    public record StoredObject(long size, byte[] head) {
+    }
+
+    /** Looks at an uploaded object without downloading it; null when nothing is stored under the key. */
+    public StoredObject inspect(String key, int headBytes) {
+        long size;
+        try {
+            size = s3Client.headObject(HeadObjectRequest.builder().bucket(bucket).key(key).build()).contentLength();
+        } catch (NoSuchKeyException e) {
+            return null;
+        } catch (S3Exception e) {
+            if (e.statusCode() == 404) {
+                return null;
+            }
+            throw e;
+        }
+        byte[] head = size == 0 ? new byte[0]
+                : s3Client.getObjectAsBytes(GetObjectRequest.builder().bucket(bucket).key(key).range("bytes=0-" + (headBytes - 1)).build()).asByteArray();
+        return new StoredObject(size, head);
     }
 
     public void delete(String key) {

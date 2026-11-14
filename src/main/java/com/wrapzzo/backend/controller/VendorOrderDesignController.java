@@ -29,7 +29,7 @@ public class VendorOrderDesignController {
 
     @PostMapping("/presign")
     public PresignOrderDesignResponse presign(@PathVariable UUID orderId, @Valid @RequestBody PresignOrderDesignRequest request) {
-        return orderDesignService.presignForVendor(orderId, CurrentVendor.id(), request.contentType(), request.fileName());
+        return orderDesignService.presignForVendor(orderId, CurrentVendor.id(), request.contentType(), request.fileName(), request.sizeBytes());
     }
 
     @PostMapping

@@ -86,6 +86,9 @@ public class OrderDesignService {
     private final ApplicationEventPublisher eventPublisher;
 
     private static final String PDF_CONTENT_TYPE = "application/pdf";
+    /** A proof is at most this big: it is emailed to reviewers and opened on phones. */
+    public static final long MAX_ARTWORK_BYTES = 5L * 1024 * 1024;
+    private static final byte[] PDF_MAGIC = "%PDF-".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
 
     // --- Vendor side: only orders assigned to them. ---
 
@@ -95,10 +98,16 @@ public class OrderDesignService {
      * same name plus its version -- PCODE_Doctor_AM_vN.pdf. Transactional because the name reads the order's lazily-loaded owner (open-in-view is off).
      */
     @Transactional(readOnly = true)
-    public PresignOrderDesignResponse presignForVendor(UUID orderId, UUID vendorId, String contentType, String uploadedFileName) {
+    public PresignOrderDesignResponse presignForVendor(UUID orderId, UUID vendorId, String contentType, String uploadedFileName, Long sizeBytes) {
         String type = contentType == null ? "" : contentType.split(";")[0].trim();
         if (!PDF_CONTENT_TYPE.equalsIgnoreCase(type)) {
             throw new InvalidArtworkFileException("Artwork must be a PDF.");
+        }
+        if (sizeBytes != null && sizeBytes <= 0) {
+            throw new InvalidArtworkFileException("\"%s\" is empty. Choose the PDF proof again.".formatted(uploadedFileName));
+        }
+        if (sizeBytes != null && sizeBytes > MAX_ARTWORK_BYTES) {
+            throw new InvalidArtworkFileException(tooBig(uploadedFileName, sizeBytes));
         }
         Order order = getEntityForVendor(orderId, vendorId);
         NameParts name = nameParts(order);
@@ -126,9 +135,34 @@ public class OrderDesignService {
         if (!fileName.equals(artworkFileName(order, nextVersion))) {
             throw new ConflictException("Another version was uploaded in the meantime -- upload this one again.");
         }
+        checkStoredProof(fileKey);
         OrderDesign design = orderDesignRepository.save(new OrderDesign(order, nextVersion, fileKey, fileName, vendor));
         eventPublisher.publishEvent(new ArtworkAwaitingApprovalEvent(design.getId()));
         return toVendorResponse(design);
+    }
+
+    /**
+     * What was actually stored is what counts, not what the browser said it would send: it must be there, at most 5 MB, and start like a
+     * PDF. A file that fails is removed from storage so it cannot be reached.
+     */
+    private void checkStoredProof(String fileKey) {
+        FileStorageService.StoredObject stored = fileStorageService.inspect(fileKey, PDF_MAGIC.length);
+        if (stored == null) {
+            throw new InvalidArtworkFileException("The proof did not reach file storage. Upload it again.");
+        }
+        if (stored.size() > MAX_ARTWORK_BYTES) {
+            fileStorageService.delete(fileKey);
+            throw new InvalidArtworkFileException(tooBig(fileKey.substring(fileKey.lastIndexOf('/') + 1), stored.size()));
+        }
+        if (stored.size() == 0 || !java.util.Arrays.equals(java.util.Arrays.copyOf(stored.head(), PDF_MAGIC.length), PDF_MAGIC)) {
+            fileStorageService.delete(fileKey);
+            throw new InvalidArtworkFileException("That file is not a real PDF. Export the proof as a PDF and upload it again.");
+        }
+    }
+
+    private static String tooBig(String fileName, long bytes) {
+        return "\"%s\" is %.1f MB. A proof can be at most %d MB -- compress the PDF or export it at a lower quality, then upload it again."
+                .formatted(fileName, bytes / (1024.0 * 1024.0), MAX_ARTWORK_BYTES / (1024 * 1024));
     }
 
     private static String keyPrefix(Order order) {

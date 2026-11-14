@@ -4,5 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 /** {@code fileName} is the name of the file the vendor picked: it must follow PCode_DoctorName_AMName.pdf, or the upload is refused. */
-public record PresignOrderDesignRequest(@NotBlank String contentType, @NotBlank @Size(max = 255) String fileName) {
+public record PresignOrderDesignRequest(@NotBlank String contentType, @NotBlank @Size(max = 255) String fileName,
+        /** The file's size in bytes, so a proof over the limit is refused before it is sent. Optional; the stored file is checked again either way. */
+        Long sizeBytes) {
 }

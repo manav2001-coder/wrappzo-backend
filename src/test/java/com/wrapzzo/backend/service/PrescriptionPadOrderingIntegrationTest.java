@@ -75,6 +75,7 @@ import org.springframework.transaction.annotation.Transactional;
 class PrescriptionPadOrderingIntegrationTest {
 
     @Autowired private QuickGiftService quickGiftService;
+    @org.springframework.test.context.bean.override.mockito.MockitoSpyBean private FileStorageService fileStorage;
     @Autowired private OrderService orderService;
     @Autowired private RecipientService recipientService;
     @Autowired private CompanyFeatureFlagService companyFeatureFlagService;
@@ -367,25 +368,26 @@ class PrescriptionPadOrderingIntegrationTest {
 
         actAsVendor(printer);
         // Any other name is refused before anything is uploaded -- with the name it should have had.
-        assertThatThrownBy(() -> orderDesignService.presignForVendor(orderId, printer.getId(), "application/pdf", "final-proof.pdf"))
+        assertThatThrownBy(() -> orderDesignService.presignForVendor(orderId, printer.getId(), "application/pdf", "final-proof.pdf", null))
                 .isInstanceOf(InvalidArtworkFileException.class)
                 .hasMessageContaining("\"final-proof.pdf\" is not named the way this order needs")
                 .hasMessageContaining("PC-ASHA_Asha-Shah_MR-North.pdf");
-        assertThatThrownBy(() -> orderDesignService.presignForVendor(orderId, printer.getId(), "application/pdf", "PC-ASHA_Asha-Shah.pdf"))
+        assertThatThrownBy(() -> orderDesignService.presignForVendor(orderId, printer.getId(), "application/pdf", "PC-ASHA_Asha-Shah.pdf", null))
                 .isInstanceOf(InvalidArtworkFileException.class);
 
         // The AM's name or SAP code, written however the vendor likes; the stored name is always the tidy one.
-        PresignOrderDesignResponse first = orderDesignService.presignForVendor(orderId, printer.getId(), "application/pdf", "pc-asha_dr asha shah_mr north.PDF");
+        PresignOrderDesignResponse first = orderDesignService.presignForVendor(orderId, printer.getId(), "application/pdf", "pc-asha_dr asha shah_mr north.PDF", null);
         assertThat(first.fileName()).isEqualTo("PC-ASHA_Asha-Shah_MR-North_v1.pdf");
         // The name is the key's own last part, so a download carries it too.
         assertThat(first.key()).startsWith("order-designs/" + orderId + "/").endsWith("/PC-ASHA_Asha-Shah_MR-North_v1.pdf");
+        org.mockito.Mockito.doReturn(new FileStorageService.StoredObject(120_000, "%PDF-1.7".substring(0, 5).getBytes())).when(fileStorage).inspect(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyInt());
         assertThat(orderDesignService.uploadForVendor(orderId, printer.getId(), first.key()).fileName()).isEqualTo("PC-ASHA_Asha-Shah_MR-North_v1.pdf");
 
         // A later version uses the same name -- the vendor does not add a number.
-        assertThat(orderDesignService.presignForVendor(orderId, printer.getId(), "application/pdf", "PC-ASHA_Asha-Shah_AM-PATNA-SM.pdf").fileName())
+        assertThat(orderDesignService.presignForVendor(orderId, printer.getId(), "application/pdf", "PC-ASHA_Asha-Shah_AM-PATNA-SM.pdf", null).fileName())
                 .isEqualTo("PC-ASHA_Asha-Shah_MR-North_v2.pdf");
 
-        assertThatThrownBy(() -> orderDesignService.presignForVendor(orderId, printer.getId(), "image/png", "PC-ASHA_Asha-Shah_MR-North.png"))
+        assertThatThrownBy(() -> orderDesignService.presignForVendor(orderId, printer.getId(), "image/png", "PC-ASHA_Asha-Shah_MR-North.png", null))
                 .isInstanceOf(InvalidArtworkFileException.class);
         assertThatThrownBy(() -> orderDesignService.uploadForVendor(orderId, printer.getId(), "order-designs/someone-else/x/proof.pdf"))
                 .isInstanceOf(InvalidArtworkFileException.class);
@@ -394,6 +396,43 @@ class PrescriptionPadOrderingIntegrationTest {
         // A presign that is no longer the next version is refused rather than saved under the wrong number.
         assertThatThrownBy(() -> orderDesignService.uploadForVendor(orderId, printer.getId(), first.key()))
                 .isInstanceOf(ConflictException.class);
+    }
+
+    /** A proof is a real PDF of at most 5 MB -- judged on what was stored, not on what the browser claimed. */
+    @Test
+    void aProofMustBeARealPdfOfAtMostFiveMegabytes() {
+        enableDirectOrdering();
+        mrNorth.setEmployeeCode("AM-PATNA-SM");
+        userRepository.save(mrNorth);
+        actAs(mrNorth);
+        UUID orderId = quickGiftService.create(padOrder(pad, 5)).orderId();
+        actAsVendor(printer);
+        String name = "PC-ASHA_Asha-Shah_MR-North.pdf";
+
+        // Told up front that it is too big, nothing is presigned.
+        assertThatThrownBy(() -> orderDesignService.presignForVendor(orderId, printer.getId(), "application/pdf", name, OrderDesignService.MAX_ARTWORK_BYTES + 1))
+                .isInstanceOf(InvalidArtworkFileException.class).hasMessageContaining("at most 5 MB");
+        assertThatThrownBy(() -> orderDesignService.presignForVendor(orderId, printer.getId(), "application/pdf", name, 0L))
+                .isInstanceOf(InvalidArtworkFileException.class).hasMessageContaining("is empty");
+        assertThat(orderDesignService.presignForVendor(orderId, printer.getId(), "application/pdf", name, OrderDesignService.MAX_ARTWORK_BYTES).key()).isNotBlank();
+
+        // A browser can claim any size, so the stored file is checked too -- and removed when it fails.
+        String key = orderDesignService.presignForVendor(orderId, printer.getId(), "application/pdf", name, 1000L).key();
+        org.mockito.Mockito.doNothing().when(fileStorage).delete(org.mockito.ArgumentMatchers.anyString());
+        org.mockito.Mockito.doReturn(new FileStorageService.StoredObject(OrderDesignService.MAX_ARTWORK_BYTES + 1, "%PDF-".getBytes())).when(fileStorage).inspect(key, 5);
+        assertThatThrownBy(() -> orderDesignService.uploadForVendor(orderId, printer.getId(), key))
+                .isInstanceOf(InvalidArtworkFileException.class).hasMessageContaining("at most 5 MB");
+        org.mockito.Mockito.doReturn(new FileStorageService.StoredObject(2000, "\u0089PNG\r".getBytes())).when(fileStorage).inspect(key, 5);
+        assertThatThrownBy(() -> orderDesignService.uploadForVendor(orderId, printer.getId(), key))
+                .isInstanceOf(InvalidArtworkFileException.class).hasMessageContaining("not a real PDF");
+        org.mockito.Mockito.doReturn(null).when(fileStorage).inspect(key, 5);
+        assertThatThrownBy(() -> orderDesignService.uploadForVendor(orderId, printer.getId(), key))
+                .isInstanceOf(InvalidArtworkFileException.class).hasMessageContaining("did not reach file storage");
+        org.mockito.Mockito.verify(fileStorage, org.mockito.Mockito.times(2)).delete(key);
+        assertThat(orderDesignService.listForVendor(orderId, printer.getId())).isEmpty();
+
+        org.mockito.Mockito.doReturn(new FileStorageService.StoredObject(2_000_000, "%PDF-".getBytes())).when(fileStorage).inspect(key, 5);
+        assertThat(orderDesignService.uploadForVendor(orderId, printer.getId(), key).fileName()).endsWith("_v1.pdf");
     }
 
     /** Senior artwork approval on, the MR reporting to the North zonal manager, and one proof uploaded. */
