@@ -87,6 +87,7 @@ public class DashboardService {
     private final DashboardQueries queries;
     private final DashboardInsightsService insightsService;
     private final DashboardInsightsQueries insightsQueries;
+    private final DashboardCache cache;
 
     /** Who the dashboard is for and which campaigns they see. The records themselves are never loaded: the figures come from {@link DashboardQueries}. */
     private record Scope(Company company, boolean companyWide, Reach reach, List<Campaign> campaigns) {
@@ -94,6 +95,10 @@ public class DashboardService {
 
     @Transactional(readOnly = true)
     public DashboardResponse summary() {
+        return cache.get("summary:" + CurrentUser.id(), this::computeSummary);
+    }
+
+    private DashboardResponse computeSummary() {
         Scope data = resolveScope();
         Reach reach = data.reach();
         List<Campaign> campaigns = data.campaigns();

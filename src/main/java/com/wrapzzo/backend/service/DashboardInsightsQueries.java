@@ -2,13 +2,17 @@ package com.wrapzzo.backend.service;
 
 import com.wrapzzo.backend.dto.DashboardInsightsResponse.Coverage;
 import com.wrapzzo.backend.dto.DashboardInsightsResponse.Period;
+import com.wrapzzo.backend.dto.DashboardInsightsResponse.Spend;
+import com.wrapzzo.backend.dto.DashboardInsightsResponse.SpendLine;
 import com.wrapzzo.backend.dto.DashboardInsightsResponse.StageAging;
+import com.wrapzzo.backend.dto.DashboardInsightsResponse.VendorScore;
 import com.wrapzzo.backend.dto.DashboardInsightsResponse.TeamMember;
 import com.wrapzzo.backend.dto.DashboardInsightsResponse.WeekPoint;
 import com.wrapzzo.backend.service.DashboardQueries.Reach;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.Query;
+import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -183,6 +187,60 @@ class DashboardInsightsQueries {
                         + " where a.mr_user_id = :userId and not " + COVERED + " order by a.assigned_at asc")
                 .setParameter("userId", userId).setParameter("from", from).setParameter("to", to).setMaxResults(limit).getResultList();
         return rows;
+    }
+
+    /** What the PELs ordered in the period cost: the total, by PEL and by the unit the order came from. Only call for someone who may see prices. */
+    Spend spend(Reach reach, Instant from, Instant to, Instant previousFrom) {
+        BigDecimal total = money(bind(em.createNativeQuery("select coalesce(sum(o.total_price), 0)" + ORDERS + LIVE_IN_PERIOD), reach, from, to).getSingleResult());
+        BigDecimal previous = previousFrom == null ? null
+                : money(bind(em.createNativeQuery("select coalesce(sum(o.total_price), 0)" + ORDERS + LIVE_IN_PERIOD), reach, previousFrom, from).getSingleResult());
+        long pels = num(bind(em.createNativeQuery("select coalesce(sum(o.quantity), 0)" + ORDERS + LIVE_IN_PERIOD), reach, from, to).getSingleResult());
+        BigDecimal perPel = pels == 0 ? null : total.divide(BigDecimal.valueOf(pels), 2, java.math.RoundingMode.HALF_UP);
+        return new Spend(total, previous, perPel,
+                lines("select g.name, sum(o.total_price)" + ORDERS.replace("from orders o", "from orders o join gifts g on g.id = o.gift_id") + LIVE_IN_PERIOD
+                        + " group by g.name having sum(o.total_price) > 0 order by sum(o.total_price) desc, 1", reach, from, to),
+                lines("select coalesce(ou.name, 'Unassigned'), sum(o.total_price)" + ORDERS.replace("from orders o", "from orders o left join org_units ou on ou.id = o.org_unit_id") + LIVE_IN_PERIOD
+                        + " group by 1 having sum(o.total_price) > 0 order by sum(o.total_price) desc, 1", reach, from, to));
+    }
+
+    private static final String LIVE_IN_PERIOD = " and o.status <> 'CANCELLED' and o.created_at >= :from and o.created_at < :to";
+
+    private List<SpendLine> lines(String sql, Reach reach, Instant from, Instant to) {
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = bind(em.createNativeQuery(sql), reach, from, to).setMaxResults(5).getResultList();
+        return rows.stream().map(r -> new SpendLine((String) r[0], money(r[1]))).toList();
+    }
+
+    private static BigDecimal money(Object value) {
+        return value == null ? BigDecimal.ZERO : new BigDecimal(value.toString()).setScale(2, java.math.RoundingMode.HALF_UP);
+    }
+
+    /** Per vendor, for the orders placed in the period -- fewest problems last. Only call for someone who may see vendor identity. */
+    List<VendorScore> vendors(Reach reach, Instant from, Instant to) {
+        String open = "(o.status not in ('DELIVERED', 'CANCELLED') and o.approval_status <> 'REJECTED')";
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = bind(em.createNativeQuery("select v.id, v.name, count(*),"
+                + " count(*) filter (where o.status = 'DELIVERED'),"
+                + " count(*) filter (where " + open + "),"
+                + " count(*) filter (where " + open + " and o.created_at < now() - interval '10 days'),"
+                + " avg(extract(epoch from (disp.at - o.created_at)) / 86400.0) filter (where disp.at is not null),"
+                + " avg(extract(epoch from (" + DELIVERED_AT + " - o.created_at)) / 86400.0) filter (where o.status = 'DELIVERED'),"
+                + " coalesce(sum(dz.total), 0), coalesce(sum(dz.rejected), 0)"
+                + " from orders o join vendors v on v.id = o.assigned_vendor_id"
+                + " left join lateral (select min(h.changed_at) as at from order_status_history h where h.order_id = o.id and h.status = 'DISPATCHED') disp on true"
+                + " left join lateral (select count(*) as total, count(*) filter (where d.status = 'REJECTED') as rejected from order_designs d where d.order_id = o.id) dz on true"
+                + " where o.company_id = :companyId and (:companyWide = true or o.owner_id in (:people) or o.org_unit_id in (:orgUnits))"
+                + " and o.status <> 'CANCELLED' and o.created_at >= :from and o.created_at < :to"
+                + " group by v.id, v.name order by count(*) desc"), reach, from, to).setMaxResults(20).getResultList();
+        List<VendorScore> scores = new ArrayList<>();
+        for (Object[] r : rows) {
+            scores.add(new VendorScore((UUID) r[0], (String) r[1], num(r[2]), num(r[3]), num(r[4]), num(r[5]), oneDecimal(r[6]), oneDecimal(r[7]), num(r[8]), num(r[9])));
+        }
+        return scores;
+    }
+
+    private static Double oneDecimal(Object value) {
+        return value == null ? null : Math.round(((Number) value).doubleValue() * 10.0) / 10.0;
     }
 
     private Query people(String wrapper, Reach reach, UUID viewerId, boolean viewerOnly, Instant from, Instant to, int limit) {

@@ -5,9 +5,14 @@ import com.wrapzzo.backend.dto.DashboardInsightsResponse;
 import com.wrapzzo.backend.dto.DashboardResponse;
 import com.wrapzzo.backend.security.Permission.Keys;
 import com.wrapzzo.backend.security.RequiresPermission;
+import com.wrapzzo.backend.service.DashboardExportService;
 import com.wrapzzo.backend.service.DashboardInsightsService;
 import com.wrapzzo.backend.service.DashboardService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -22,6 +27,7 @@ public class DashboardController {
 
     private final DashboardService dashboardService;
     private final DashboardInsightsService dashboardInsightsService;
+    private final DashboardExportService dashboardExportService;
 
     @GetMapping
     public DashboardResponse get() {
@@ -32,6 +38,16 @@ public class DashboardController {
     @GetMapping("/insights")
     public DashboardInsightsResponse insights(@RequestParam(defaultValue = "30d") String range) {
         return dashboardInsightsService.insights(range);
+    }
+
+    /** The orders behind the dashboard for the chosen period, as a CSV download. */
+    @GetMapping("/export")
+    public ResponseEntity<byte[]> export(@RequestParam(defaultValue = "30d") String range) {
+        DashboardExportService.Csv csv = dashboardExportService.orders(range);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(csv.fileName()).build().toString())
+                .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
+                .body(csv.bytes());
     }
 
     /** The records behind one clicked chart datapoint, e.g. dimension=quickGiftStatus&value=SUBMITTED. */

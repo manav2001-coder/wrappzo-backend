@@ -51,6 +51,9 @@ class DashboardIntegrationTest {
 
     @Autowired private DashboardService dashboardService;
     @Autowired private DashboardInsightsService insightsService;
+    @Autowired private DashboardExportService exportService;
+    @org.springframework.test.context.bean.override.mockito.MockitoBean private PricePolicy pricePolicy;
+    @org.springframework.test.context.bean.override.mockito.MockitoBean private VendorIdentityPolicy vendorIdentityPolicy;
     @Autowired private QuickGiftService quickGiftService;
     @Autowired private FeatureService featureService;
     @Autowired private CompanyRepository companyRepository;
@@ -299,5 +302,61 @@ class DashboardIntegrationTest {
         assertThat(dashboardService.drilldown("orderStage", "TRANSIT").rows()).hasSize(1);
         assertThat(dashboardService.drilldown("orderStage", "APPROVAL").rows()).isEmpty();
         assertThat(insightsService.insights("nonsense").range()).isEqualTo("30d");
+    }
+
+    @Test
+    void spendAndVendorFiguresAreLeftOutForAnyoneWhoMayNotSeeThem() {
+        actAs(admin);
+        var insights = insightsService.insights("all");
+
+        assertThat(insights.spend()).isNull();
+        assertThat(insights.vendors()).isNull();
+    }
+
+    @Test
+    void theCompanyAdminSeesWhatThePELsCostAndHowEachVendorDid() {
+        org.mockito.Mockito.when(pricePolicy.canSee()).thenReturn(true);
+        org.mockito.Mockito.when(vendorIdentityPolicy.canSee()).thenReturn(true);
+        actAs(admin);
+        var insights = insightsService.insights("all");
+
+        assertThat(insights.spend().total()).isEqualByComparingTo("1080"); // 27 PELs at 40 each, the cancelled one left out
+        assertThat(insights.spend().costPerPel()).isEqualByComparingTo("40");
+        assertThat(insights.spend().previousTotal()).isNull();
+        assertThat(insights.spend().byGift()).extracting(l -> l.amount().intValue()).containsExactly(1000, 80);
+        assertThat(insights.spend().byUnit()).extracting(l -> l.name() + ":" + l.amount().intValue()).containsExactly("North 1:400", "North 2:400", "South 1:280");
+        assertThat(insights.vendors()).hasSize(1);
+        var printers = insights.vendors().get(0);
+        assertThat(printers.name()).isEqualTo("Printers");
+        assertThat(printers.orders()).isEqualTo(5);
+        assertThat(printers.delivered()).isEqualTo(2);
+        assertThat(printers.open()).isEqualTo(3);
+    }
+
+    @Test
+    void theExportListsEveryOrderInView_andOmitsPriceAndVendorColumnsForOthers() {
+        actAs(mrNorth1);
+        String csv = new String(exportService.orders("30d").bytes(), java.nio.charset.StandardCharsets.UTF_8);
+        String[] lines = csv.split("\r\n");
+
+        assertThat(lines).hasSize(1 + 3); // the header, and mrNorth1's three orders
+        assertThat(lines[0]).contains("\"Order\"", "\"Days to deliver\"").doesNotContain("Vendor").doesNotContain("Total price");
+    }
+
+    @Test
+    void theExportIncludesPriceAndVendorForTheCompanyAdmin() {
+        org.mockito.Mockito.when(pricePolicy.canSee()).thenReturn(true);
+        org.mockito.Mockito.when(vendorIdentityPolicy.canSee()).thenReturn(true);
+        actAs(admin);
+        String csv = new String(exportService.orders("all").bytes(), java.nio.charset.StandardCharsets.UTF_8);
+
+        assertThat(csv.split("\r\n")).hasSize(1 + 6);
+        assertThat(csv).contains("\"Vendor\"", "\"Total price\"", "\"Printers\"");
+    }
+
+    @Test
+    void aSpreadsheetFormulaTypedIntoANameIsNotExecuted() {
+        assertThat(DashboardExportService.escape("=HYPERLINK(\"x\")")).isEqualTo("\"'=HYPERLINK(\"\"x\"\")\"");
+        assertThat(DashboardExportService.escape("Dr. A, B")).isEqualTo("\"Dr. A, B\"");
     }
 }

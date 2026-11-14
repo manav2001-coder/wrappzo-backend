@@ -32,11 +32,14 @@ public class DashboardInsightsService {
     private final UserRepository userRepository;
     private final VisibilityService visibilityService;
     private final DashboardInsightsQueries queries;
+    private final PricePolicy pricePolicy;
+    private final VendorIdentityPolicy vendorIdentityPolicy;
+    private final DashboardCache cache;
 
-    private record Window(String range, Instant from, Instant to) {
+    record Window(String range, Instant from, Instant to) {
     }
 
-    private static Window window(String requestedRange) {
+    static Window window(String requestedRange) {
         String range = RANGES.contains(requestedRange) ? requestedRange : "30d";
         Instant to = Instant.now().plusSeconds(60);
         Instant from = switch (range) {
@@ -70,6 +73,10 @@ public class DashboardInsightsService {
     @Transactional(readOnly = true)
     public DashboardInsightsResponse insights(String requestedRange) {
         Window w = window(requestedRange);
+        return cache.get("insights:" + CurrentUser.id() + ":" + w.range(), () -> compute(w));
+    }
+
+    private DashboardInsightsResponse compute(Window w) {
         String range = w.range();
         User user = userRepository.findById(CurrentUser.id()).orElseThrow(() -> new IllegalStateException("Authenticated user not found: " + CurrentUser.id()));
         Visibility visibility = visibilityService.resolve(user);
@@ -94,6 +101,8 @@ public class DashboardInsightsService {
                 queries.rejectedRequests(reach, from, to),
                 queries.weekly(reach, firstMonday, TREND_WEEKS),
                 personal ? 0 : queries.teamSize(reach, user.getId(), false, from, to),
-                personal ? java.util.List.of() : queries.team(reach, user.getId(), false, from, to, TEAM_LIMIT));
+                personal ? java.util.List.of() : queries.team(reach, user.getId(), false, from, to, TEAM_LIMIT),
+                pricePolicy.canSee() ? queries.spend(reach, from, to, all ? null : previousFrom) : null,
+                vendorIdentityPolicy.canSee() ? queries.vendors(reach, from, to) : null);
     }
 }
