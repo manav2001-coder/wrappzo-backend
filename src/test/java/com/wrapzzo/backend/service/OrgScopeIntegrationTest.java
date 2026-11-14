@@ -18,6 +18,7 @@ import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.CompanyFeature;
 import com.wrapzzo.backend.model.CompanyVendor;
 import com.wrapzzo.backend.exception.PcodeRequiredException;
+import com.wrapzzo.backend.exception.InvalidOrderQuantityException;
 import com.wrapzzo.backend.exception.QuantityBelowMinimumException;
 import com.wrapzzo.backend.model.Gift;
 import com.wrapzzo.backend.model.GiftModule;
@@ -164,7 +165,7 @@ class OrgScopeIntegrationTest {
         actAs(mr);
         return quickGiftService.create(new CreateQuickGiftRequest(
                 pad.getId(), null, "Dr. " + mr.getName(), "98000" + (int) (Math.random() * 100000), "PC" + (int) (Math.random() * 1000000), null, "Somewhere", null, null, null,
-                null, 1)).orderId();
+                null, 5)).orderId();
     }
 
     @Test
@@ -218,7 +219,7 @@ class OrgScopeIntegrationTest {
     void aNewDoctorNeedsAPcode_whenAddedThroughAQuickGift() {
         actAs(mrNorth);
         assertThatThrownBy(() -> quickGiftService.create(new CreateQuickGiftRequest(
-                pad.getId(), null, "Dr. No Code", "9800000012", null, null, "Somewhere", null, null, null, null, 50)))
+                pad.getId(), null, "Dr. No Code", "9800000012", null, null, "Somewhere", null, null, null, null, 5)))
                 .isInstanceOf(PcodeRequiredException.class);
     }
 
@@ -274,14 +275,14 @@ class OrgScopeIntegrationTest {
 
         actAs(manager);
         DashboardResponse dashboard = dashboardService.summary();
-        // The manager sees North only: two orders of one PEL each, for two doctors; one of them delivered.
-        assertThat(dashboard.pelsRequested()).isEqualTo(2);
+        // The manager sees North only: two orders of 5 PELs each, for two doctors; one of them delivered.
+        assertThat(dashboard.pelsRequested()).isEqualTo(10);
         assertThat(dashboard.doctorsRequested()).isEqualTo(2);
-        assertThat(dashboard.pelsServed()).isEqualTo(1);
+        assertThat(dashboard.pelsServed()).isEqualTo(5);
         assertThat(dashboard.doctorsServed()).isEqualTo(1);
 
         DashboardDrilldownResponse perDoctor = dashboardService.drilldown("pelsRequested", "");
-        assertThat(perDoctor.rows()).hasSize(2).allSatisfy(row -> assertThat(row.quantity()).isEqualTo(1L));
+        assertThat(perDoctor.rows()).hasSize(2).allSatisfy(row -> assertThat(row.quantity()).isEqualTo(5L));
         assertThat(dashboardService.drilldown("pelsServed", "").rows()).hasSize(1);
     }
 
@@ -314,8 +315,24 @@ class OrgScopeIntegrationTest {
     }
 
     @Test
+    void onlyTheFixedPadCountsCanBeOrdered() {
+        actAs(mrNorth);
+        for (Integer bad : new Integer[] {0, 1, 7, 31, 100000, null}) {
+            assertThatThrownBy(() -> quickGiftService.create(new CreateQuickGiftRequest(
+                    pad.getId(), null, "Dr. Odd", "9800000077", "PC-77", null, "Somewhere", null, null, null, null, bad)))
+                    .isInstanceOf(InvalidOrderQuantityException.class)
+                    .hasMessageContaining("5, 10, 15, 20, 25 or 30");
+        }
+        for (int ok : new int[] {5, 10, 15, 20, 25, 30}) {
+            assertThat(quickGiftService.create(new CreateQuickGiftRequest(
+                    pad.getId(), null, "Dr. Even " + ok, "98000001" + ok, "PC-E" + ok, null, "Somewhere", null, null, null, null, ok)).orderId())
+                    .isNotNull();
+        }
+    }
+
+    @Test
     void anOrderBelowTheGiftsMinimumIsRefused() {
-        pad.setMoq(50);
+        pad.setMoq(10);
         pad = giftRepository.save(pad);
 
         actAs(mrNorth);
@@ -323,7 +340,7 @@ class OrgScopeIntegrationTest {
                 pad.getId(), null, "Dr. Few", "9800000055", "PC-55", null, "Somewhere", null, null, null, null, 5)))
                 .isInstanceOf(QuantityBelowMinimumException.class);
         assertThat(quickGiftService.create(new CreateQuickGiftRequest(
-                pad.getId(), null, "Dr. Enough", "9800000056", "PC-56", null, "Somewhere", null, null, null, null, 50)).orderId())
+                pad.getId(), null, "Dr. Enough", "9800000056", "PC-56", null, "Somewhere", null, null, null, null, 10)).orderId())
                 .isNotNull();
     }
 

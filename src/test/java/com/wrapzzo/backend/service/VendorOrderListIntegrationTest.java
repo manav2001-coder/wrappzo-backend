@@ -112,7 +112,7 @@ class VendorOrderListIntegrationTest {
     private Order order(User by, Gift gift) {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(by.getId(), null, List.of()));
         UUID id = quickGiftService.create(new CreateQuickGiftRequest(gift.getId(), null, "Dr " + UUID.randomUUID(), "98000", "PC-" + UUID.randomUUID(), null, "Road",
-                null, null, null, new DoctorDetails("MBBS", "Cardiology", "Clinic"), 1)).orderId();
+                null, null, null, new DoctorDetails("MBBS", "Cardiology", "Clinic"), 5)).orderId();
         return orderRepository.findById(id).orElseThrow();
     }
 

@@ -55,6 +55,8 @@ class DashboardIntegrationTest {
     @org.springframework.test.context.bean.override.mockito.MockitoBean private PricePolicy pricePolicy;
     @org.springframework.test.context.bean.override.mockito.MockitoBean private VendorIdentityPolicy vendorIdentityPolicy;
     @Autowired private QuickGiftService quickGiftService;
+    @Autowired private org.springframework.jdbc.core.JdbcTemplate jdbc;
+    @jakarta.persistence.PersistenceContext private jakarta.persistence.EntityManager entityManager;
     @Autowired private FeatureService featureService;
     @Autowired private CompanyRepository companyRepository;
     @Autowired private RoleRepository roleRepository;
@@ -137,7 +139,12 @@ class DashboardIntegrationTest {
     private Order order(User by, Gift gift, String doctor, String phone, int quantity) {
         actAs(by);
         UUID id = quickGiftService.create(new CreateQuickGiftRequest(gift.getId(), null, doctor, phone, "PC-" + UUID.randomUUID(), null, "Road", null, null,
-                null, new DoctorDetails("MBBS", "Cardiology", "Clinic"), quantity)).orderId();
+                null, new DoctorDetails("MBBS", "Cardiology", "Clinic"), 5)).orderId();
+        // The form only offers fixed pad counts; these tests want odd totals to tell figures apart, so set the stored quantity after.
+        entityManager.flush(); // the order must be in the database before it can be updated there
+        jdbc.update("update orders set total_price = total_price / quantity * ?, quantity = ? where id = ?", quantity, quantity, id);
+        jdbc.update("update quick_gift_requests set quantity = ? where order_id = ?", quantity, id);
+        entityManager.clear(); // so nothing reads, or saves back, the stale 5 from memory
         return orderRepository.findById(id).orElseThrow();
     }
 

@@ -30,7 +30,7 @@ public record CreateQuickGiftRequest(
         @Size(max = 10, message = "An order can carry at most 10 photos.") List<@Valid QuickGiftPhotoInput> photos,
         /** Print details for a new doctor; ignored (the directory's own are used) when recipientId is set. */
         @Valid DoctorDetails doctor,
-        /** Units to order -- pads, say. Null means 1. */
+        /** Pads to order: 5, 10, 15, 20, 25 or 30 (checked in the service so the message can say so). */
         @Min(1) @Max(100000) Integer quantity) {
 
     /** References an already-presigned-and-uploaded photo (see presignPhoto) -- optional; a missing photo triggers a self-upload link to the recipient once approved. */

@@ -50,6 +50,8 @@ import org.springframework.transaction.annotation.Transactional;
 class OrderListIntegrationTest {
 
     @Autowired private QuickGiftService quickGiftService;
+    @Autowired private org.springframework.jdbc.core.JdbcTemplate jdbc;
+    @jakarta.persistence.PersistenceContext private jakarta.persistence.EntityManager entityManager;
     @Autowired private OrderService orderService;
     @Autowired private FeatureService featureService;
     @Autowired private CompanyRepository companyRepository;
@@ -116,8 +118,13 @@ class OrderListIntegrationTest {
 
     private void order(User by, String doctor, int quantity) {
         actAs(by);
-        quickGiftService.create(new CreateQuickGiftRequest(pad.getId(), null, doctor, "98000" + doctor.hashCode(), "PC-" + doctor.replace(" ", ""), null, "Road 1", null, null,
-                null, new DoctorDetails("MBBS", "Cardiology", "Clinic"), quantity));
+        // The form only offers fixed pad counts; these tests need spread-out numbers to sort and filter on, so set the stored quantity after.
+        UUID id = quickGiftService.create(new CreateQuickGiftRequest(pad.getId(), null, doctor, "98000" + doctor.hashCode(), "PC-" + doctor.replace(" ", ""), null, "Road 1", null, null,
+                null, new DoctorDetails("MBBS", "Cardiology", "Clinic"), 5)).orderId();
+        entityManager.flush(); // the order must be in the database before it can be updated there
+        jdbc.update("update orders set quantity = ? where id = ?", quantity, id);
+        jdbc.update("update quick_gift_requests set quantity = ? where order_id = ?", quantity, id);
+        entityManager.clear(); // so nothing reads the stale 5 from memory
     }
 
     private PageResponse<OrderResponse> page(User as, Integer page, Integer size, String search, String sort, String dir, String filters) {

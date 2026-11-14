@@ -207,7 +207,7 @@ class PrescriptionPadOrderingIntegrationTest {
     @Test
     void thereIsNoApprovalStep_aRequestGoesStraightToTheVendorWhateverTheCompanyFlagSays() {
         actAs(mrNorth);
-        QuickGiftRequestResponse placed = quickGiftService.create(padOrder(pad, 1));
+        QuickGiftRequestResponse placed = quickGiftService.create(padOrder(pad, 5));
         assertThat(placed.status()).isEqualTo(QuickGiftStatus.APPROVED);
         assertThat(placed.orderId()).isNotNull();
     }
@@ -226,10 +226,10 @@ class PrescriptionPadOrderingIntegrationTest {
     @Test
     void anOrderCanBePlacedWithoutADeliveryAddress() {
         actAs(mrNorth);
-        var request = padOrder(pad, 1);
+        var request = padOrder(pad, 5);
         var placed = quickGiftService.create(new CreateQuickGiftRequest(
                 request.giftId(), null, request.recipientName(), request.recipientPhone(), request.recipientPcode(), null, null, null, null,
-                List.of(), request.doctor(), 1));
+                List.of(), request.doctor(), 5));
 
         assertThat(placed.deliveryAddress()).isNull();
     }
@@ -239,12 +239,12 @@ class PrescriptionPadOrderingIntegrationTest {
         actAs(mrNorth);
         var first = quickGiftService.presignPhoto("image/png", "PC-ASHA", 1);
         var second = quickGiftService.presignPhoto("image/jpeg", "PC-ASHA", 2);
-        var request = padOrder(pad, 1);
+        var request = padOrder(pad, 5);
         var placed = quickGiftService.create(new CreateQuickGiftRequest(
                 request.giftId(), null, request.recipientName(), request.recipientPhone(), request.recipientPcode(), null, request.deliveryAddress(), null, null,
                 List.of(new CreateQuickGiftRequest.QuickGiftPhotoInput(first.key(), "a.png", "image/png"),
                         new CreateQuickGiftRequest.QuickGiftPhotoInput(second.key(), "b.jpg", "image/jpeg")),
-                request.doctor(), 1));
+                request.doctor(), 5));
 
         assertThat(placed.photos()).extracting(p -> p.fileName()).containsExactly("PC-ASHA_MR-North_photo.png", "PC-ASHA_MR-North_photo_2.jpg");
         assertThat(placed.photoFileName()).isEqualTo("PC-ASHA_MR-North_photo.png");
@@ -261,7 +261,7 @@ class PrescriptionPadOrderingIntegrationTest {
         Gift foreignPad = savePad(stranger, false);
         actAs(mrNorth);
 
-        assertThatThrownBy(() -> quickGiftService.create(padOrder(foreignPad, 1)))
+        assertThatThrownBy(() -> quickGiftService.create(padOrder(foreignPad, 5)))
                 .isInstanceOf(GiftNotAvailableForQuickGiftException.class);
     }
 
@@ -269,7 +269,7 @@ class PrescriptionPadOrderingIntegrationTest {
     void anArtworkRequiredOrderCannotBeDispatchedUntilAProofIsApproved() {
         enableDirectOrdering();
         actAs(mrNorth);
-        UUID orderId = quickGiftService.create(padOrder(pad, 1)).orderId();
+        UUID orderId = quickGiftService.create(padOrder(pad, 5)).orderId();
         Order order = orderRepository.findById(orderId).orElseThrow();
 
         actAsVendor(printer);
@@ -293,7 +293,7 @@ class PrescriptionPadOrderingIntegrationTest {
     void theVendorQueueCarriesEachOrdersLatestProofAndItsReviewComment() {
         enableDirectOrdering();
         actAs(mrNorth);
-        UUID orderId = quickGiftService.create(padOrder(pad, 2)).orderId();
+        UUID orderId = quickGiftService.create(padOrder(pad, 5)).orderId();
         Order order = orderRepository.findById(orderId).orElseThrow();
 
         actAsVendor(printer);
@@ -322,7 +322,7 @@ class PrescriptionPadOrderingIntegrationTest {
     void ordersAreVisibleUpTheOrgTreeButNotAcrossIt() {
         enableDirectOrdering();
         actAs(mrNorth);
-        UUID northOrder = quickGiftService.create(padOrder(pad, 1)).orderId();
+        UUID northOrder = quickGiftService.create(padOrder(pad, 5)).orderId();
 
         actAs(zonalManagerNorth);
         assertThat(orderService.page(ListQuery.firstPage(100)).data()).extracting(OrderResponse::id).contains(northOrder);
@@ -337,7 +337,7 @@ class PrescriptionPadOrderingIntegrationTest {
     void aCompanyWideUserSeesEveryUnit() {
         enableDirectOrdering();
         actAs(mrNorth);
-        UUID northOrder = quickGiftService.create(padOrder(pad, 1)).orderId();
+        UUID northOrder = quickGiftService.create(padOrder(pad, 5)).orderId();
 
         Role adminRole = roleRepository.save(new Role(company, "Company Admin"));
         User headOffice = new User(company, adminRole, "Head Office", "ho-" + UUID.randomUUID() + "@test.com", "n/a");
@@ -442,7 +442,7 @@ class PrescriptionPadOrderingIntegrationTest {
         mrNorth.setReportsTo(zonalManagerNorth);
         userRepository.save(mrNorth);
         actAs(mrNorth);
-        Order order = orderRepository.findById(quickGiftService.create(padOrder(pad, 1)).orderId()).orElseThrow();
+        Order order = orderRepository.findById(quickGiftService.create(padOrder(pad, 5)).orderId()).orElseThrow();
         return orderDesignRepository.save(new OrderDesign(order, 1, "designs/v1.pdf", "v1.pdf", printer));
     }
 
@@ -492,7 +492,7 @@ class PrescriptionPadOrderingIntegrationTest {
     void withoutSeniorApprovalTheMrsApprovalStillUnlocksPrintStraightAway() {
         enableDirectOrdering();
         actAs(mrNorth);
-        Order order = orderRepository.findById(quickGiftService.create(padOrder(pad, 1)).orderId()).orElseThrow();
+        Order order = orderRepository.findById(quickGiftService.create(padOrder(pad, 5)).orderId()).orElseThrow();
         OrderDesign proof = orderDesignRepository.save(new OrderDesign(order, 1, "designs/v1.pdf", "v1.pdf", printer));
         assertThat(orderDesignService.approve(order.getId(), proof.getId()).status()).isEqualTo(OrderDesignStatus.APPROVED);
     }
@@ -534,7 +534,7 @@ class PrescriptionPadOrderingIntegrationTest {
         assertThat(companyRepository.findById(company.getId()).orElseThrow().getArtworkApprovalLevels()).isEqualTo(2);
 
         actAs(mrNorth);
-        Order order = orderRepository.findById(quickGiftService.create(padOrder(pad, 1)).orderId()).orElseThrow();
+        Order order = orderRepository.findById(quickGiftService.create(padOrder(pad, 5)).orderId()).orElseThrow();
         OrderDesign proof = orderDesignRepository.save(new OrderDesign(order, 1, "designs/v1.pdf", "v1.pdf", printer));
         UUID orderId = order.getId();
 

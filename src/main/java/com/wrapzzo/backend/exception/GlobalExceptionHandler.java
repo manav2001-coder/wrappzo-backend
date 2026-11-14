@@ -172,6 +172,11 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
     }
 
+    @ExceptionHandler(InvalidOrderQuantityException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidOrderQuantity(InvalidOrderQuantityException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+    }
+
     @ExceptionHandler(QuantityBelowMinimumException.class)
     public ResponseEntity<Map<String, String>> handleQuantityBelowMinimum(QuantityBelowMinimumException e) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));

@@ -14,6 +14,7 @@ import com.wrapzzo.backend.exception.GiftNotAvailableForQuickGiftException;
 import com.wrapzzo.backend.exception.GiftNotFoundException;
 import com.wrapzzo.backend.exception.PcodeRequiredException;
 import com.wrapzzo.backend.exception.PhotoOrEmailRequiredException;
+import com.wrapzzo.backend.exception.InvalidOrderQuantityException;
 import com.wrapzzo.backend.exception.QuantityBelowMinimumException;
 import com.wrapzzo.backend.exception.QuickGiftAlreadyReviewedException;
 import com.wrapzzo.backend.exception.QuickGiftNotApprovedException;
@@ -52,6 +53,9 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class QuickGiftService {
 
+    /** The pad counts an order can ask for; the order form offers exactly these. */
+    static final java.util.Set<Integer> ALLOWED_QUANTITIES = java.util.Set.of(5, 10, 15, 20, 25, 30);
+
     private static final Duration PHOTO_UPLOAD_URL_EXPIRY = Duration.ofMinutes(5);
 
     private final QuickGiftRequestRepository quickGiftRequestRepository;
@@ -89,7 +93,12 @@ public class QuickGiftService {
         User requester = currentUser();
         Company company = requester.getCompany();
         Gift gift = resolveQuickGiftEligibleGift(request.giftId(), requester);
-        int quantity = request.quantity() != null ? request.quantity() : 1;
+        Integer asked = request.quantity();
+        if (asked == null || !ALLOWED_QUANTITIES.contains(asked)) {
+            throw new InvalidOrderQuantityException("Quantity must be one of 5, 10, 15, 20, 25 or 30 (asked for "
+                    + (asked == null ? "none" : asked) + ").");
+        }
+        int quantity = asked;
         // The vendor's minimum order -- a monthly plan's runs come through here too, so they're held to it as well.
         if (gift.getMoq() != null && quantity < gift.getMoq()) {
             throw new QuantityBelowMinimumException(gift.getName(), gift.getMoq(), quantity);
