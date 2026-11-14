@@ -52,7 +52,9 @@ public class DashboardController {
 
     /** The records behind one clicked chart datapoint, e.g. dimension=quickGiftStatus&value=SUBMITTED. */
     @GetMapping("/drilldown")
-    public DashboardDrilldownResponse drilldown(@RequestParam String dimension, @RequestParam String value) {
-        return dashboardService.drilldown(dimension, value);
+    public DashboardDrilldownResponse drilldown(
+            @RequestParam String dimension, @RequestParam String value,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return dashboardService.drilldown(dimension, value, page, size);
     }
 }

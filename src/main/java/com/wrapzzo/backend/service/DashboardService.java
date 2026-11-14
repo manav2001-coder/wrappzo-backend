@@ -67,7 +67,9 @@ public class DashboardService {
     private static final int RECENT_ACTIVITY_LIMIT = 12;
     private static final int RECENT_ORDER_LIMIT = 8;
     private static final int TREND_WEEKS = 12;
-    private static final int DRILLDOWN_LIMIT = 50;
+    /** The most records read behind one datapoint; they are then served a page at a time. */
+    private static final int DRILLDOWN_LIMIT = 500;
+    private static final int MAX_PAGE_SIZE = 100;
     private static final Set<OrderStatus> IN_PROGRESS_STATUSES = Set.of(OrderStatus.PROCESSING, OrderStatus.PRODUCTION_QUEUE);
     /** The vendor has dispatched it -- where an order's life on the platform ends. */
     private static final Set<OrderStatus> DISPATCHED_STATUSES = Set.of(OrderStatus.DISPATCHED);
@@ -151,10 +153,21 @@ public class DashboardService {
     /**
      * The records behind one clicked chart datapoint -- same scoping as summary(), so a
      * Member drilling into a slice only ever sees rows that were already counted in their
-     * own numbers. Only the newest {@value #DRILLDOWN_LIMIT} are read.
+     * own numbers. At most {@value #DRILLDOWN_LIMIT} are read, and the answer is one page of them.
      */
     @Transactional(readOnly = true)
     public DashboardDrilldownResponse drilldown(String dimension, String value) {
+        return drilldown(dimension, value, 0, 20);
+    }
+
+    @Transactional(readOnly = true)
+    public DashboardDrilldownResponse drilldown(String dimension, String value, int page, int size) {
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+        return allRecords(dimension, value).pageOf(safePage, safeSize, DRILLDOWN_LIMIT);
+    }
+
+    private DashboardDrilldownResponse allRecords(String dimension, String value) {
         Reach reach = resolveScope().reach();
         return switch (dimension) {
             case "orderStage" -> ordersDrilldown(orderRepository.findAllById(insightsQueries.orderIdsInStage(reach, value, DRILLDOWN_LIMIT)), "Orders — " + stageTitle(value));

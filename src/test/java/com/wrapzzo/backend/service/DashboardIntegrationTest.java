@@ -205,6 +205,29 @@ class DashboardIntegrationTest {
     }
 
     @Test
+    void aDrilldownIsServedAPageAtATimeWithTheTotal() {
+        actAs(admin);
+
+        var first = dashboardService.drilldown("orderSource", "QUICK_GIFT", 0, 4);
+        assertThat(first.total()).isEqualTo(6);
+        assertThat(first.rows()).hasSize(4);
+        assertThat(first.page()).isZero();
+        assertThat(first.pageSize()).isEqualTo(4);
+        assertThat(first.capped()).isFalse();
+
+        var second = dashboardService.drilldown("orderSource", "QUICK_GIFT", 1, 4);
+        assertThat(second.rows()).hasSize(2);
+        assertThat(second.total()).isEqualTo(6);
+        // The pages are one list cut up: no record on both, none lost.
+        assertThat(java.util.stream.Stream.concat(first.rows().stream(), second.rows().stream()).map(r -> r.displayId()).distinct()).hasSize(6);
+
+        assertThat(dashboardService.drilldown("orderSource", "QUICK_GIFT", 9, 4).rows()).isEmpty();
+        // A silly page or size is put right, not an error: negative pages start at the first, and a page never runs past 100.
+        assertThat(dashboardService.drilldown("orderSource", "QUICK_GIFT", -3, 0).rows()).hasSize(1);
+        assertThat(dashboardService.drilldown("orderSource", "QUICK_GIFT", 0, 5000).pageSize()).isEqualTo(100);
+    }
+
+    @Test
     void drilldownsListTheRecordsBehindEachFigure() {
         actAs(admin);
 
