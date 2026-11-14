@@ -58,7 +58,7 @@ public class GiftService {
 
     @Transactional
     public GiftResponse create(CreateGiftRequest request) {
-        if (giftRepository.findByName(request.name()).isPresent()) {
+        if (giftRepository.findByNameIgnoreCaseAndVendorIdIsNull(request.name()).isPresent()) {
             throw new GiftNameAlreadyExistsException(request.name());
         }
 
@@ -150,7 +150,7 @@ public class GiftService {
     public GiftResponse update(UUID id, UpdateGiftRequest request) {
         Gift gift = getEntity(id);
         requireNotVendorOwned(gift);
-        giftRepository.findByName(request.name()).filter(existing -> !existing.getId().equals(id)).ifPresent(existing -> {
+        giftRepository.findByNameIgnoreCaseAndVendorIdIsNull(request.name()).filter(existing -> !existing.getId().equals(id)).ifPresent(existing -> {
             throw new GiftNameAlreadyExistsException(request.name());
         });
         gift.setName(request.name());
@@ -207,7 +207,7 @@ public class GiftService {
 
     @Transactional
     public GiftResponse createForVendor(CreateGiftRequest request, UUID vendorId) {
-        if (giftRepository.findByName(request.name()).isPresent()) {
+        if (giftRepository.findByNameIgnoreCaseAndVendorId(request.name(), vendorId).isPresent()) {
             throw new GiftNameAlreadyExistsException(request.name());
         }
 
@@ -239,7 +239,7 @@ public class GiftService {
     @Transactional
     public GiftResponse updateForVendor(UUID giftId, UpdateGiftRequest request, UUID vendorId) {
         Gift gift = getOwnedByVendor(giftId, vendorId);
-        giftRepository.findByName(request.name()).filter(existing -> !existing.getId().equals(giftId)).ifPresent(existing -> {
+        giftRepository.findByNameIgnoreCaseAndVendorId(request.name(), vendorId).filter(existing -> !existing.getId().equals(giftId)).ifPresent(existing -> {
             throw new GiftNameAlreadyExistsException(request.name());
         });
         gift.setName(request.name());

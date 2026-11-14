@@ -7,6 +7,7 @@ import com.wrapzzo.backend.dto.CreateGiftRequest;
 import com.wrapzzo.backend.dto.GiftResponse;
 import com.wrapzzo.backend.dto.PresignGiftImageUploadResponse;
 import com.wrapzzo.backend.dto.UpdateGiftRequest;
+import com.wrapzzo.backend.exception.GiftNameAlreadyExistsException;
 import com.wrapzzo.backend.exception.GiftNotFoundException;
 import com.wrapzzo.backend.exception.VendorGiftEditNotAllowedException;
 import com.wrapzzo.backend.model.Company;
@@ -71,6 +72,37 @@ class GiftServiceIntegrationTest {
     @AfterEach
     void clearSecurityContext() {
         SecurityContextHolder.clearContext();
+    }
+
+    @Test
+    void twoVendorsCanEachSellAProductWithTheSameName() {
+        Vendor first = saveVendor("Print One");
+        Vendor second = saveVendor("Print Two");
+        CreateGiftRequest request = new CreateGiftRequest("Prescription Pad", "Stationery", null, null, null, BigDecimal.valueOf(100), null, null, false);
+
+        GiftResponse a = giftService.createForVendor(request, first.getId());
+        GiftResponse b = giftService.createForVendor(request, second.getId());
+
+        assertThat(a.id()).isNotEqualTo(b.id());
+    }
+
+    @Test
+    void aVendorStillCannotUseTheSameProductNameTwice() {
+        Vendor vendor = saveVendor("Print Three");
+        giftService.createForVendor(new CreateGiftRequest("Prescription Pad", "Stationery", null, null, null, BigDecimal.valueOf(100), null, null, false), vendor.getId());
+
+        assertThatThrownBy(() -> giftService.createForVendor(new CreateGiftRequest("prescription pad", "Stationery", null, null, null, BigDecimal.valueOf(100), null, null, false), vendor.getId()))
+                .isInstanceOf(GiftNameAlreadyExistsException.class);
+    }
+
+    @Test
+    void aVendorCanReuseTheNameOfAPlatformCatalogueGift() {
+        giftService.create(new CreateGiftRequest("Shared Name Mug", "Drinkware", null, null, null, BigDecimal.valueOf(100), null, null, false));
+        Vendor vendor = saveVendor("Print Four");
+
+        GiftResponse created = giftService.createForVendor(new CreateGiftRequest("Shared Name Mug", "Drinkware", null, null, null, BigDecimal.valueOf(100), null, null, false), vendor.getId());
+
+        assertThat(created.name()).isEqualTo("Shared Name Mug");
     }
 
     @Test
