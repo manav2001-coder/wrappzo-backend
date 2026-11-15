@@ -4,6 +4,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.wrapzzo.backend.model.Company;
@@ -77,6 +78,24 @@ class AccessControlHttpTest {
         };
     }
 
+    /** A real token for platform staff (no company) whose role holds exactly these keys: the platform keys are never a company's to hold. */
+    private RequestPostProcessor platformStaffHolding(String... keys) {
+        Role only = roleRepository.save(new Role(null, "Platform role " + UUID.randomUUID()));
+        User person = userRepository.save(new User(null, only, "Person", "s-" + UUID.randomUUID() + "@test.com", "n/a"));
+        Template template = templateRepository.save(new Template(null, "Platform access " + UUID.randomUUID(), null));
+        for (String key : keys) {
+            template.getAccessControls().add(accessControlRepository.findByKey(key).orElseThrow());
+        }
+        templateRepository.save(template);
+        only.getTemplates().add(template);
+        roleRepository.save(only);
+        String token = jwtService.generateAccessToken(person);
+        return request -> {
+            request.addHeader("Authorization", "Bearer " + token);
+            return request;
+        };
+    }
+
     private RequestPostProcessor asVendor() {
         Vendor vendor = vendorRepository.save(new Vendor("Vendor " + UUID.randomUUID(), "v-" + UUID.randomUUID() + "@test.com", null, "n/a", null));
         String token = jwtService.generateVendorAccessToken(vendor);
@@ -87,6 +106,39 @@ class AccessControlHttpTest {
     }
 
     private static final String NAME_BODY = "{\"name\":\"X\"}";
+
+    private static final String EMAILS_OFF = "{\"workflowEmailsEnabled\":false}";
+    private static final String EMAILS_ON = "{\"workflowEmailsEnabled\":true}";
+
+    @Test
+    void theEmailSwitchIsForPlatformStaffWithTheRightKeyOnly() throws Exception {
+        mvc.perform(get("/api/platform/email-settings")).andExpect(status().isForbidden());
+        mvc.perform(get("/api/platform/email-settings").with(holding())).andExpect(status().isForbidden());
+        mvc.perform(put("/api/platform/email-settings").with(holding()).contentType(MediaType.APPLICATION_JSON).content(EMAILS_OFF))
+                .andExpect(status().isForbidden());
+        // Seeing it is not changing it.
+        mvc.perform(put("/api/platform/email-settings").with(platformStaffHolding("platform_email_settings.view")).contentType(MediaType.APPLICATION_JSON).content(EMAILS_OFF))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/platform/email-settings").with(platformStaffHolding("platform_email_settings.edit"))).andExpect(status().isForbidden());
+    }
+
+    @Test
+    void aSuperAdminCanReadAndSwitchTheWorkflowEmailsAndItIsRememberedWithWho() throws Exception {
+        mvc.perform(get("/api/platform/email-settings").with(platformStaffHolding("platform_email_settings.view")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.workflowEmailsEnabled").value(true));
+
+        RequestPostProcessor editor = platformStaffHolding("platform_email_settings.edit");
+        try {
+            mvc.perform(put("/api/platform/email-settings").with(editor).contentType(MediaType.APPLICATION_JSON).content(EMAILS_OFF))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.workflowEmailsEnabled").value(false)).andExpect(jsonPath("$.updatedByName").value("Person"));
+            mvc.perform(get("/api/platform/email-settings").with(platformStaffHolding("platform_email_settings.view")))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.workflowEmailsEnabled").value(false));
+            // A body without the flag is refused, not read as "off".
+            mvc.perform(put("/api/platform/email-settings").with(editor).contentType(MediaType.APPLICATION_JSON).content("{}")).andExpect(status().isBadRequest());
+        } finally {
+            mvc.perform(put("/api/platform/email-settings").with(editor).contentType(MediaType.APPLICATION_JSON).content(EMAILS_ON)).andExpect(status().isOk());
+        }
+    }
 
     @Test
     void nobodyNotSignedInGetsAnythingButTheOpenPages() throws Exception {

@@ -24,7 +24,7 @@ class VendorNotificationServiceTest {
     private final OrderDesignRepository designs = mock(OrderDesignRepository.class);
     private final VendorRepository vendors = mock(VendorRepository.class);
     private final TestEmailSenderConfig.RecordingEmailSender email = new TestEmailSenderConfig.RecordingEmailSender();
-    private final VendorNotificationService service = new VendorNotificationService(orders, designs, vendors, email, "https://app.example");
+    private final VendorNotificationService service = new VendorNotificationService(orders, designs, vendors, WorkflowEmailSender.unconditional(email), "https://app.example");
 
     private final UUID orderId = UUID.randomUUID();
     private final Order order = mock(Order.class);

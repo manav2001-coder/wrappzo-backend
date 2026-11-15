@@ -27,10 +27,10 @@ public class OrderApprovalNotificationService {
 
     private final OrderRepository orders;
     private final OrderApprovalService approvals;
-    private final EmailSender emailSender;
+    private final WorkflowEmailSender emailSender;
     private final String frontendBaseUrl;
 
-    public OrderApprovalNotificationService(OrderRepository orders, OrderApprovalService approvals, EmailSender emailSender,
+    public OrderApprovalNotificationService(OrderRepository orders, OrderApprovalService approvals, WorkflowEmailSender emailSender,
             @Value("${app.frontend-base-url}") String frontendBaseUrl) {
         this.orders = orders;
         this.approvals = approvals;
@@ -66,6 +66,10 @@ public class OrderApprovalNotificationService {
     /** The daily job: each approver gets one email listing the orders that have waited a day (or another day) since the last one. */
     @Transactional
     public String sendDueReminders() {
+        if (!emailSender.enabled()) {
+            // Nothing is marked as reminded, so what is due now is sent once the emails are switched back on.
+            return "paused: workflow emails are switched off";
+        }
         Instant now = Instant.now();
         Map<UUID, List<Order>> byApprover = new LinkedHashMap<>();
         Map<UUID, User> approvers = new LinkedHashMap<>();

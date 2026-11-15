@@ -105,7 +105,10 @@ public enum Permission {
     PLATFORM_JOBS_MANAGE(Keys.PLATFORM_JOBS_MANAGE, false),
 
     PLATFORM_MENU_CONFIG_VIEW(Keys.PLATFORM_MENU_CONFIG_VIEW, false),
-    PLATFORM_MENU_CONFIG_EDIT(Keys.PLATFORM_MENU_CONFIG_EDIT, false);
+    PLATFORM_MENU_CONFIG_EDIT(Keys.PLATFORM_MENU_CONFIG_EDIT, false),
+
+    PLATFORM_EMAIL_SETTINGS_VIEW(Keys.PLATFORM_EMAIL_SETTINGS_VIEW, false),
+    PLATFORM_EMAIL_SETTINGS_EDIT(Keys.PLATFORM_EMAIL_SETTINGS_EDIT, false);
 
     private static final Map<String, Permission> BY_KEY =
             Arrays.stream(values()).collect(Collectors.toUnmodifiableMap(Permission::key, Function.identity()));
@@ -243,6 +246,9 @@ public enum Permission {
 
         public static final String PLATFORM_MENU_CONFIG_VIEW = "platform_menu_config.view";
         public static final String PLATFORM_MENU_CONFIG_EDIT = "platform_menu_config.edit";
+
+        public static final String PLATFORM_EMAIL_SETTINGS_VIEW = "platform_email_settings.view";
+        public static final String PLATFORM_EMAIL_SETTINGS_EDIT = "platform_email_settings.edit";
 
         private Keys() {
         }

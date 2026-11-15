@@ -25,7 +25,7 @@ class OrderApprovalReminderTest {
     private final OrderRepository orders = mock(OrderRepository.class);
     private final OrderApprovalService approvals = mock(OrderApprovalService.class);
     private final TestEmailSenderConfig.RecordingEmailSender email = new TestEmailSenderConfig.RecordingEmailSender();
-    private final OrderApprovalNotificationService service = new OrderApprovalNotificationService(orders, approvals, email, "https://app.example");
+    private final OrderApprovalNotificationService service = new OrderApprovalNotificationService(orders, approvals, WorkflowEmailSender.unconditional(email), "https://app.example");
 
     private final User rm = user("Ravi RM", "ravi@example.com");
     private final User mr = user("Mira MR", "mira@example.com");

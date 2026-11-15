@@ -27,7 +27,7 @@ class ArtworkApprovalReminderServiceTest {
     private final OrderDesignService orderDesignService = mock(OrderDesignService.class);
     private final TestEmailSenderConfig.RecordingEmailSender email = new TestEmailSenderConfig.RecordingEmailSender();
     private final ArtworkApprovalReminderService service =
-            new ArtworkApprovalReminderService(designs, orderDesignService, email, "https://app.example");
+            new ArtworkApprovalReminderService(designs, orderDesignService, WorkflowEmailSender.unconditional(email), "https://app.example");
 
     private final User asha = user("Asha", "asha@example.com");
 

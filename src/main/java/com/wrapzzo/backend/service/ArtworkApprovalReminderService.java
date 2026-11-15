@@ -32,10 +32,10 @@ public class ArtworkApprovalReminderService {
 
     private final OrderDesignRepository designs;
     private final OrderDesignService orderDesignService;
-    private final EmailSender emailSender;
+    private final WorkflowEmailSender emailSender;
     private final String frontendBaseUrl;
 
-    public ArtworkApprovalReminderService(OrderDesignRepository designs, OrderDesignService orderDesignService, EmailSender emailSender,
+    public ArtworkApprovalReminderService(OrderDesignRepository designs, OrderDesignService orderDesignService, WorkflowEmailSender emailSender,
             @Value("${app.frontend-base-url}") String frontendBaseUrl) {
         this.designs = designs;
         this.orderDesignService = orderDesignService;
@@ -59,6 +59,10 @@ public class ArtworkApprovalReminderService {
     /** The daily job: remind each approver of the proofs that have waited a day (or another day) since the last email. */
     @Transactional
     public String sendDueReminders() {
+        if (!emailSender.enabled()) {
+            // Nothing is marked as reminded, so what is due now is sent once the emails are switched back on.
+            return "paused: workflow emails are switched off";
+        }
         Instant now = Instant.now();
         List<OrderDesign> waiting = designs.findByStatusInAndRemindersSentLessThanOrderByAwaitingSinceAsc(
                 List.of(OrderDesignStatus.PENDING_REVIEW, OrderDesignStatus.PENDING_FINAL_APPROVAL), MAX_REMINDERS);

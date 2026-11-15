@@ -25,10 +25,10 @@ public class VendorNotificationService {
     private final OrderRepository orders;
     private final OrderDesignRepository designs;
     private final VendorRepository vendors;
-    private final EmailSender emailSender;
+    private final WorkflowEmailSender emailSender;
     private final String frontendBaseUrl;
 
-    public VendorNotificationService(OrderRepository orders, OrderDesignRepository designs, VendorRepository vendors, EmailSender emailSender,
+    public VendorNotificationService(OrderRepository orders, OrderDesignRepository designs, VendorRepository vendors, WorkflowEmailSender emailSender,
             @Value("${app.frontend-base-url}") String frontendBaseUrl) {
         this.orders = orders;
         this.designs = designs;
