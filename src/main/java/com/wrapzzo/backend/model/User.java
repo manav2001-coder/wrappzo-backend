@@ -93,6 +93,10 @@ public class User extends AuditNames {
     @Column(name = "employee_code")
     private String employeeCode;
 
+    /** Storage key of the profile picture (a logo, for a vendor); null when none has been set. */
+    @Column(name = "photo_key")
+    private String photoKey;
+
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 

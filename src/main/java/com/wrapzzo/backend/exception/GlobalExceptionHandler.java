@@ -202,6 +202,11 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
     }
 
+    @ExceptionHandler({WeakPasswordException.class, WrongCurrentPasswordException.class, InvalidProfilePhotoException.class})
+    public ResponseEntity<Map<String, String>> handleProfileRejected(RuntimeException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+    }
+
     @ExceptionHandler(VendorEmailAlreadyExistsException.class)
     public ResponseEntity<Map<String, String>> handleVendorEmailAlreadyExists(VendorEmailAlreadyExistsException e) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));

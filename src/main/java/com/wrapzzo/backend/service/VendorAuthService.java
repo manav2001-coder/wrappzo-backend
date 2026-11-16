@@ -2,6 +2,7 @@ package com.wrapzzo.backend.service;
 
 import com.wrapzzo.backend.exception.AccountLockedException;
 import com.wrapzzo.backend.exception.InvalidCredentialsException;
+import com.wrapzzo.backend.exception.WrongCurrentPasswordException;
 import com.wrapzzo.backend.exception.InvalidInviteTokenException;
 import com.wrapzzo.backend.exception.InvalidRefreshTokenException;
 import com.wrapzzo.backend.exception.PasswordMismatchException;
@@ -121,6 +122,25 @@ public class VendorAuthService {
         vendorRefreshTokenRepository
                 .findByTokenHash(TokenHasher.sha256Hex(rawRefreshToken))
                 .ifPresent(token -> token.setRevokedAt(Instant.now()));
+    }
+
+    @Transactional
+    public TokenPair startSession(Vendor vendor) {
+        return issueTokenPair(vendor);
+    }
+
+    /** See {@link AuthService#requireCurrentPassword}: a wrong password here counts like a failed sign-in. */
+    @Transactional
+    public void requireCurrentPassword(Vendor vendor, String rawPassword) {
+        if (vendor.getLockedUntil() != null && vendor.getLockedUntil().isAfter(Instant.now())) {
+            throw new AccountLockedException(vendor.getLockedUntil());
+        }
+        if (!passwordEncoder.matches(rawPassword, vendor.getPasswordHash())) {
+            registerFailedAttempt(vendor);
+            throw new WrongCurrentPasswordException();
+        }
+        vendor.setFailedLoginAttempts((short) 0);
+        vendor.setLockedUntil(null);
     }
 
     private TokenPair issueTokenPair(Vendor vendor) {

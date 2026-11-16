@@ -6,6 +6,7 @@ import com.wrapzzo.backend.exception.CompanyDeactivatedException;
 import com.wrapzzo.backend.exception.InvalidCredentialsException;
 import com.wrapzzo.backend.exception.InvalidInviteTokenException;
 import com.wrapzzo.backend.exception.InvalidRefreshTokenException;
+import com.wrapzzo.backend.exception.WrongCurrentPasswordException;
 import com.wrapzzo.backend.exception.PasswordMismatchException;
 import com.wrapzzo.backend.model.RefreshToken;
 import com.wrapzzo.backend.model.User;
@@ -37,6 +38,7 @@ public class AuthService {
     private final JwtService jwtService;
     private final AccessControlCacheService accessControlCacheService;
     private final CompanyMenuLabelService companyMenuLabelService;
+    private final ProfilePhotoStore profilePhotoStore;
     private final long refreshTokenExpiryDays;
     private final int maxFailedLoginAttempts;
     private final long lockoutDurationMinutes;
@@ -49,6 +51,7 @@ public class AuthService {
             JwtService jwtService,
             AccessControlCacheService accessControlCacheService,
             CompanyMenuLabelService companyMenuLabelService,
+            ProfilePhotoStore profilePhotoStore,
             @Value("${auth.refresh-token-expiry-days}") long refreshTokenExpiryDays,
             @Value("${auth.max-failed-login-attempts}") int maxFailedLoginAttempts,
             @Value("${auth.lockout-duration-minutes}") long lockoutDurationMinutes) {
@@ -59,6 +62,7 @@ public class AuthService {
         this.jwtService = jwtService;
         this.accessControlCacheService = accessControlCacheService;
         this.companyMenuLabelService = companyMenuLabelService;
+        this.profilePhotoStore = profilePhotoStore;
         this.refreshTokenExpiryDays = refreshTokenExpiryDays;
         this.maxFailedLoginAttempts = maxFailedLoginAttempts;
         this.lockoutDurationMinutes = lockoutDurationMinutes;
@@ -76,7 +80,8 @@ public class AuthService {
                 userRepository.existsByReportsToId(userId),
                 companyMenuLabelService.labelsFor(user.getCompany() != null ? user.getCompany().getId() : null),
                 user.getCompany() == null || user.isCompanyWide(),
-                user.getName());
+                user.getName(),
+                profilePhotoUrl(user));
     }
 
     @Transactional
@@ -148,6 +153,33 @@ public class AuthService {
         user.setFailedLoginAttempts((short) 0);
         user.setLockedUntil(null);
         return issueTokenPair(user);
+    }
+
+    private String profilePhotoUrl(User user) {
+        return profilePhotoStore.urlFor(user.getPhotoKey());
+    }
+
+    /** A fresh session for someone who has just proved who they are another way (a password change): the device they are on stays signed in. */
+    @Transactional
+    public TokenPair startSession(User user) {
+        return issueTokenPair(user);
+    }
+
+    /**
+     * Checks a password the person typed to confirm it is really them, counting a wrong one like a failed sign-in: a stolen
+     * session must not be a way to guess the password without limit.
+     */
+    @Transactional
+    public void requireCurrentPassword(User user, String rawPassword) {
+        if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(Instant.now())) {
+            throw new AccountLockedException(user.getLockedUntil());
+        }
+        if (!passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
+            registerFailedAttempt(user);
+            throw new WrongCurrentPasswordException();
+        }
+        user.setFailedLoginAttempts((short) 0);
+        user.setLockedUntil(null);
     }
 
     private TokenPair issueTokenPair(User user) {

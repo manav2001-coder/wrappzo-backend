@@ -97,7 +97,9 @@ class AccessControlHttpTest {
     }
 
     private RequestPostProcessor asVendor() {
-        Vendor vendor = vendorRepository.save(new Vendor("Vendor " + UUID.randomUUID(), "v-" + UUID.randomUUID() + "@test.com", null, "n/a", null));
+        Role role = roleRepository.save(new Role(company, "Role " + UUID.randomUUID()));
+        User creator = userRepository.save(new User(company, role, "Creator", "c-" + UUID.randomUUID() + "@test.com", "n/a"));
+        Vendor vendor = vendorRepository.save(new Vendor("Vendor " + UUID.randomUUID(), "v-" + UUID.randomUUID() + "@test.com", null, "n/a", creator));
         String token = jwtService.generateVendorAccessToken(vendor);
         return request -> {
             request.addHeader("Authorization", "Bearer " + token);
@@ -150,6 +152,20 @@ class AccessControlHttpTest {
         mvc.perform(post("/api/tbac/templates").contentType(MediaType.APPLICATION_JSON).content(NAME_BODY)).andExpect(status().isForbidden());
         mvc.perform(get("/api/vendor/orders/page")).andExpect(status().isForbidden());
         mvc.perform(get("/api/public/health")).andExpect(status().isOk());
+        mvc.perform(get("/api/profile")).andExpect(status().isForbidden());
+        mvc.perform(get("/api/vendor/profile")).andExpect(status().isForbidden());
+    }
+
+    @Test
+    void aProfileIsOnlyEverTheCallersOwnAndEachLoginReachesOnlyItsOwnKind() throws Exception {
+        // Anyone signed in has a profile, with no permission key: it can only ever be their own.
+        mvc.perform(get("/api/profile").with(holding())).andExpect(status().isOk());
+        // A person is not a vendor, and a vendor is not a person.
+        mvc.perform(get("/api/vendor/profile").with(holding())).andExpect(status().isForbidden());
+        mvc.perform(get("/api/vendor/profile").with(asVendor())).andExpect(status().isOk());
+        mvc.perform(get("/api/profile").with(asVendor())).andExpect(status().isForbidden());
+        // A bad phone number is refused with a reason, not saved.
+        mvc.perform(put("/api/profile/phone").with(holding()).contentType(MediaType.APPLICATION_JSON).content("{\"phone\":\"abc\"}")).andExpect(status().isBadRequest());
     }
 
     @Test

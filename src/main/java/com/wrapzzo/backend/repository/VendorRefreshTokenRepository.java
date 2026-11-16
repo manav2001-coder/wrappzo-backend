@@ -13,6 +13,11 @@ public interface VendorRefreshTokenRepository extends JpaRepository<VendorRefres
 
     Optional<VendorRefreshToken> findByTokenHash(String tokenHash);
 
+    /** Signs the vendor out everywhere: every refresh token they hold stops working. */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update VendorRefreshToken t set t.revokedAt = :now where t.vendor.id = :vendorId and t.revokedAt is null")
+    int revokeAllFor(@Param("vendorId") UUID vendorId, @Param("now") Instant now);
+
     @Modifying
     @Query("delete from VendorRefreshToken t where t.expiresAt < :cutoff or t.revokedAt is not null")
     int deleteExpiredOrRevoked(@Param("cutoff") Instant cutoff);

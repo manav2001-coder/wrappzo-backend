@@ -13,7 +13,7 @@ import java.util.UUID;
  * requests, which no access-control key expresses. menuLabels: the company's own names for its
  * navigation menus (menu id -> name), empty when it renamed none. companyWide: the caller sees the
  * whole company (platform staff always do) -- the only people who may change anyone's placement.
- * name: the caller's own name, for greeting them.
+ * name: the caller's own name, for greeting them. photoUrl: their profile picture, null when none.
  */
 public record CurrentUserResponse(
         Set<String> permissions,
@@ -22,5 +22,6 @@ public record CurrentUserResponse(
         boolean managesTeam,
         Map<String, String> menuLabels,
         boolean companyWide,
-        String name) {
+        String name,
+        String photoUrl) {
 }

@@ -67,6 +67,10 @@ public class Vendor extends AuditNames {
     @JoinColumn(name = "company_id")
     private Company company;
 
+    /** Storage key of the profile picture (a logo, for a vendor); null when none has been set. */
+    @Column(name = "photo_key")
+    private String photoKey;
+
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 

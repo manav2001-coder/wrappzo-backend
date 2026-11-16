@@ -13,6 +13,11 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, UUID
 
     Optional<RefreshToken> findByTokenHash(String tokenHash);
 
+    /** Signs the person out everywhere: every refresh token they hold stops working. */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update RefreshToken t set t.revokedAt = :now where t.user.id = :userId and t.revokedAt is null")
+    int revokeAllFor(@Param("userId") UUID userId, @Param("now") Instant now);
+
     @Modifying
     @Query("delete from RefreshToken t where t.expiresAt < :cutoff or t.revokedAt is not null")
     int deleteExpiredOrRevoked(@Param("cutoff") Instant cutoff);
