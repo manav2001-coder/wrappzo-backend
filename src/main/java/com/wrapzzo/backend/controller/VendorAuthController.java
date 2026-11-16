@@ -1,6 +1,9 @@
 package com.wrapzzo.backend.controller;
 
 import com.wrapzzo.backend.dto.LoginRequest;
+import com.wrapzzo.backend.dto.ResetPasswordRequest;
+import org.springframework.http.ResponseEntity;
+import com.wrapzzo.backend.service.VendorPasswordResetService;
 import com.wrapzzo.backend.dto.LogoutRequest;
 import com.wrapzzo.backend.dto.RefreshRequest;
 import com.wrapzzo.backend.dto.SetupVendorPasswordRequest;
@@ -22,6 +25,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class VendorAuthController {
 
     private final VendorAuthService vendorAuthService;
+    private final VendorPasswordResetService vendorPasswordResetService;
+
 
     @PostMapping("/login")
     public TokenResponse login(@Valid @RequestBody LoginRequest request) {
@@ -36,6 +41,12 @@ public class VendorAuthController {
     @PostMapping("/logout")
     public void logout(@Valid @RequestBody LogoutRequest request) {
         vendorAuthService.logout(request.refreshToken());
+    }
+
+    @PostMapping("/resetPassword")
+    public ResponseEntity<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        vendorPasswordResetService.resetPassword(request.token(), request.newPassword(), request.confirmPassword());
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/setupPassword")

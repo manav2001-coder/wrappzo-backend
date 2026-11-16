@@ -612,6 +612,15 @@ public class UserService {
     }
 
     /**
+     * A fresh setup email for someone who has not set up yet and asked for it themselves ("Forgot password" on an account that was never
+     * set up). No admin is involved, so there is no caller to check: the caller is the person, and they only ever get their own.
+     */
+    @Transactional
+    public void sendSetupInviteTo(User user) {
+        issueInvitesAndSendEmails(List.of(user));
+    }
+
+    /**
      * A fresh setup link, handed to the admin instead of emailed -- for when the email does not arrive or is held back by the
      * person's network, and the admin passes it on another way. Anyone holding the link can set that person's password, so
      * only someone who sees the whole company (a Company Admin, or Wrappzo staff) may ask for one.

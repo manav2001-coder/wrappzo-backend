@@ -1,7 +1,12 @@
 package com.wrapzzo.backend.controller;
 
 import com.wrapzzo.backend.dto.CurrentUserResponse;
+import com.wrapzzo.backend.dto.ForgotPasswordRequest;
 import com.wrapzzo.backend.dto.LoginRequest;
+import com.wrapzzo.backend.dto.ResetPasswordRequest;
+import org.springframework.http.ResponseEntity;
+import com.wrapzzo.backend.service.PasswordResetDispatcher;
+import com.wrapzzo.backend.service.PasswordResetService;
 import com.wrapzzo.backend.dto.LogoutRequest;
 import com.wrapzzo.backend.dto.RefreshRequest;
 import com.wrapzzo.backend.dto.SetupPasswordRequest;
@@ -24,6 +29,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
+    private final PasswordResetDispatcher passwordResetDispatcher;
+    private final PasswordResetService passwordResetService;
+
+    /** Always the same answer and the same speed, whether or not the account exists; the real work happens afterwards, off this thread. */
+    private static final java.util.Map<String, String> ASKED = java.util.Map.of("message", "If that account exists, we have sent a link to reset the password");
 
     @PostMapping("/login")
     @PublicEndpoint
@@ -47,6 +57,21 @@ public class AuthController {
     @PublicEndpoint
     public TokenResponse setupPassword(@Valid @RequestBody SetupPasswordRequest request) {
         return toResponse(authService.setupPassword(request.token(), request.password(), request.confirmPassword()));
+    }
+
+    @PostMapping("/forgotPassword")
+    @PublicEndpoint
+    public ResponseEntity<java.util.Map<String, String>> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        passwordResetDispatcher.forEmail(request.email());
+        return ResponseEntity.accepted().body(ASKED);
+    }
+
+    /** Sets a new password from an emailed link. It does not sign the person in: they sign in themselves afterwards. */
+    @PostMapping("/resetPassword")
+    @PublicEndpoint
+    public ResponseEntity<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        passwordResetService.resetPassword(request.token(), request.newPassword(), request.confirmPassword());
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/me")

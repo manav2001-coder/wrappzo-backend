@@ -26,6 +26,8 @@ class EveryEndpointIsGuardedTest {
     /** Public on purpose: Controller#method. The link-based ones are authorised by their own single-use token. */
     private static final Set<String> PUBLIC_ON_PURPOSE = Set.of(
             "AuthController#login", "AuthController#refresh", "AuthController#logout", "AuthController#setupPassword",
+            // "Forgot password": asking for a link answers the same for any email, and using one is authorised by the link's own single-use token.
+            "AuthController#forgotPassword", "AuthController#resetPassword", "VendorAuthController#resetPassword",
             "VendorAuthController#login", "VendorAuthController#refresh", "VendorAuthController#logout", "VendorAuthController#setupPassword",
             "HealthController#health",
             "QuickGiftUploadController#details", "QuickGiftUploadController#presign", "QuickGiftUploadController#submit",
