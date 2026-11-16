@@ -32,9 +32,18 @@ public class UserInviteEmailListener {
                     <p>Hi %s,</p>
                     <p>You've been added on Wrappzo. Set up your password to get started:</p>
                     <p><a href="%s">Set up your password</a></p>
-                    <p>This link expires in %d hours.</p>
+                    <p>This link expires in %s.</p>
                     """
-                            .formatted(invite.name(), invite.setupUrl(), invite.expiryHours()));
+                            .formatted(invite.name(), invite.setupUrl(), howLong(invite.expiryHours())));
         }
+    }
+
+    /** "7 days" for a whole number of days, otherwise "36 hours". */
+    static String howLong(long hours) {
+        if (hours >= 24 && hours % 24 == 0) {
+            long days = hours / 24;
+            return days + (days == 1 ? " day" : " days");
+        }
+        return hours + (hours == 1 ? " hour" : " hours");
     }
 }
