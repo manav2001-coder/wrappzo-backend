@@ -5,6 +5,7 @@ import com.wrapzzo.backend.dto.ImportJobResponse;
 import com.wrapzzo.backend.dto.ChangeUserRoleRequest;
 import com.wrapzzo.backend.dto.SetExtraOrgUnitsRequest;
 import com.wrapzzo.backend.dto.SetCompanyWideRequest;
+import com.wrapzzo.backend.dto.SetupLinkResponse;
 import com.wrapzzo.backend.dto.UserResponse;
 import com.wrapzzo.backend.list.ListQueryParams;
 import com.wrapzzo.backend.list.PageResponse;
@@ -77,6 +78,21 @@ public class UserController {
     @RequiresPermission(Keys.USER_EDIT)
     public UserResponse setExtraOrgUnits(@PathVariable UUID companyId, @PathVariable UUID userId, @Valid @RequestBody SetExtraOrgUnitsRequest request) {
         return userService.setExtraOrgUnits(companyId, userId, request.orgUnitIds());
+    }
+
+    /** A fresh setup email to someone who has not set up yet. */
+    @PostMapping("/{userId}/resendInvite")
+    @RequiresPermission(Keys.USER_EDIT)
+    public ResponseEntity<Void> resendInvite(@PathVariable UUID companyId, @PathVariable UUID userId) {
+        userService.resendInvite(companyId, userId);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** A fresh setup link, returned rather than emailed; only for someone who sees the whole company. */
+    @PostMapping("/{userId}/setupLink")
+    @RequiresPermission(Keys.USER_EDIT)
+    public SetupLinkResponse setupLink(@PathVariable UUID companyId, @PathVariable UUID userId) {
+        return userService.issueSetupLink(companyId, userId);
     }
 
     @DeleteMapping("/{userId}")

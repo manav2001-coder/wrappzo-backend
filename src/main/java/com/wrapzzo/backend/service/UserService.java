@@ -8,6 +8,7 @@ import com.wrapzzo.backend.list.ListSpecs;
 import com.wrapzzo.backend.list.PageResponse;
 import com.wrapzzo.backend.exception.CannotDeleteSelfException;
 import com.wrapzzo.backend.exception.CompanyNotFoundException;
+import com.wrapzzo.backend.dto.SetupLinkResponse;
 import com.wrapzzo.backend.exception.ConflictException;
 import com.wrapzzo.backend.exception.LastCompanyAdminException;
 import com.wrapzzo.backend.exception.OrgUnitNotFoundException;
@@ -592,6 +593,57 @@ public class UserService {
 
     private String orgUnitCacheKey(UUID parentId, String name) {
         return (parentId == null ? "ROOT" : parentId.toString()) + "::" + name.trim().toLowerCase();
+    }
+
+    /** How long "Resend invite" is held off after a link was issued, so an admin tapping twice does not mail the person twice. */
+    private static final Duration RESEND_COOLDOWN = Duration.ofMinutes(2);
+
+    /**
+     * Sends a person who never set up their account a fresh setup email. The link they were sent before stops working (one
+     * live link at a time), and the new one lasts the usual time. Only for someone who has not set up yet.
+     */
+    @Transactional
+    public void resendInvite(UUID companyId, UUID userId) {
+        User user = pendingUser(companyId, userId);
+        if (userInviteTokenRepository.existsByUser_IdAndCreatedAtAfter(userId, Instant.now().minus(RESEND_COOLDOWN))) {
+            throw new ConflictException("An invite was sent to " + user.getName() + " a moment ago. Wait a couple of minutes before sending another");
+        }
+        issueInvitesAndSendEmails(List.of(user));
+    }
+
+    /**
+     * A fresh setup link, handed to the admin instead of emailed -- for when the email does not arrive or is held back by the
+     * person's network, and the admin passes it on another way. Anyone holding the link can set that person's password, so
+     * only someone who sees the whole company (a Company Admin, or Wrappzo staff) may ask for one.
+     */
+    @Transactional
+    public SetupLinkResponse issueSetupLink(UUID companyId, UUID userId) {
+        requireWholeCompanyView();
+        User user = pendingUser(companyId, userId);
+        userInviteTokenRepository.deleteUnusedByUserId(userId);
+        Instant expiresAt = Instant.now().plus(Duration.ofHours(inviteTokenExpiryHours));
+        String rawToken = TokenHasher.generateOpaqueToken();
+        userInviteTokenRepository.save(new UserInviteToken(user, TokenHasher.sha256Hex(rawToken), expiresAt));
+        return new SetupLinkResponse(frontendBaseUrl + "/setup-password?token=" + rawToken, expiresAt);
+    }
+
+    /** The person must be someone this caller can see, and not yet set up: an account already in use has nothing to resend. */
+    private User pendingUser(UUID companyId, UUID userId) {
+        companyAccessGuard.requireOwnCompanyOrPlatformStaff(companyId);
+        User user = getVisibleCompanyUser(companyId, userId);
+        if (user.getStatus() == UserStatus.ACTIVE) {
+            throw new ConflictException(user.getName() + " has already set up their account");
+        }
+        if (user.getStatus() != UserStatus.INVITED) {
+            throw new ConflictException(user.getName() + " is suspended, so cannot be sent an invite");
+        }
+        return user;
+    }
+
+    private void requireWholeCompanyView() {
+        if (!hasPlacementAuthority()) {
+            throw new AccessDeniedException("Only someone who sees the whole company can get a setup link for another person");
+        }
     }
 
     /**

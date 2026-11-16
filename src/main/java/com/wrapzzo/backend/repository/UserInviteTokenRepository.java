@@ -1,6 +1,7 @@
 package com.wrapzzo.backend.repository;
 
 import com.wrapzzo.backend.model.UserInviteToken;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.Optional;
 import java.util.UUID;
@@ -12,6 +13,9 @@ import org.springframework.data.repository.query.Param;
 public interface UserInviteTokenRepository extends JpaRepository<UserInviteToken, UUID> {
 
     Optional<UserInviteToken> findByTokenHash(String tokenHash);
+
+    /** Whether a setup link was issued to this person after the given moment -- what keeps "Resend invite" from being tapped over and over. */
+    boolean existsByUser_IdAndCreatedAtAfter(UUID userId, Instant after);
 
     /** Called before issuing a fresh invite, so a user never has two simultaneously valid setup links. */
     @Modifying

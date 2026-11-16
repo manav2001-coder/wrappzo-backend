@@ -42,4 +42,11 @@ class UserInviteEmailListenerTest {
 
         assertThat(emailSender.sent).isEmpty();
     }
+
+    @org.junit.jupiter.api.Test
+    void sayswhenALinkExpiresInDaysWhenItIsWholeDays() {
+        org.assertj.core.api.Assertions.assertThat(UserInviteEmailListener.howLong(168)).isEqualTo("7 days");
+        org.assertj.core.api.Assertions.assertThat(UserInviteEmailListener.howLong(24)).isEqualTo("1 day");
+        org.assertj.core.api.Assertions.assertThat(UserInviteEmailListener.howLong(36)).isEqualTo("36 hours");
+    }
 }
