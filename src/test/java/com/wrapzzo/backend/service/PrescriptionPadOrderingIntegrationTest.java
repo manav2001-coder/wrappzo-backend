@@ -359,7 +359,7 @@ class PrescriptionPadOrderingIntegrationTest {
     }
 
     @Test
-    void aProofIsAPdfTheVendorMustNameAfterThePcodeTheDoctorAndTheAm() {
+    void aProofIsAPdfTheVendorMustNameAfterThePcodeAndTheDoctor() {
         enableDirectOrdering();
         mrNorth.setEmployeeCode("AM-PATNA-SM");
         userRepository.save(mrNorth);
@@ -371,23 +371,24 @@ class PrescriptionPadOrderingIntegrationTest {
         assertThatThrownBy(() -> orderDesignService.presignForVendor(orderId, printer.getId(), "application/pdf", "final-proof.pdf", null))
                 .isInstanceOf(InvalidArtworkFileException.class)
                 .hasMessageContaining("\"final-proof.pdf\" is not named the way this order needs")
-                .hasMessageContaining("PC-ASHA_Asha-Shah_MR-North.pdf");
-        assertThatThrownBy(() -> orderDesignService.presignForVendor(orderId, printer.getId(), "application/pdf", "PC-ASHA_Asha-Shah.pdf", null))
+                .hasMessageContaining("PC-ASHA_Asha-Shah.pdf")
+                .hasMessageNotContaining("MR-North");
+        assertThatThrownBy(() -> orderDesignService.presignForVendor(orderId, printer.getId(), "application/pdf", "PC-ASHA.pdf", null))
                 .isInstanceOf(InvalidArtworkFileException.class);
 
-        // The AM's name or SAP code, written however the vendor likes; the stored name is always the tidy one.
-        PresignOrderDesignResponse first = orderDesignService.presignForVendor(orderId, printer.getId(), "application/pdf", "pc-asha_dr asha shah_mr north.PDF", null);
-        assertThat(first.fileName()).isEqualTo("PC-ASHA_Asha-Shah_MR-North_v1.pdf");
+        // The pcode and the doctor, written however the vendor likes; the stored name is always the tidy one.
+        PresignOrderDesignResponse first = orderDesignService.presignForVendor(orderId, printer.getId(), "application/pdf", "pc-asha_dr asha shah.PDF", null);
+        assertThat(first.fileName()).isEqualTo("PC-ASHA_Asha-Shah_v1.pdf");
         // The name is the key's own last part, so a download carries it too.
-        assertThat(first.key()).startsWith("order-designs/" + orderId + "/").endsWith("/PC-ASHA_Asha-Shah_MR-North_v1.pdf");
+        assertThat(first.key()).startsWith("order-designs/" + orderId + "/").endsWith("/PC-ASHA_Asha-Shah_v1.pdf");
         org.mockito.Mockito.doReturn(new FileStorageService.StoredObject(120_000, "%PDF-1.7".substring(0, 5).getBytes())).when(fileStorage).inspect(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyInt());
-        assertThat(orderDesignService.uploadForVendor(orderId, printer.getId(), first.key()).fileName()).isEqualTo("PC-ASHA_Asha-Shah_MR-North_v1.pdf");
+        assertThat(orderDesignService.uploadForVendor(orderId, printer.getId(), first.key()).fileName()).isEqualTo("PC-ASHA_Asha-Shah_v1.pdf");
 
-        // A later version uses the same name -- the vendor does not add a number.
+        // A later version uses the same name -- the vendor does not add a number. The older name, with the AM on the end, is still accepted.
         assertThat(orderDesignService.presignForVendor(orderId, printer.getId(), "application/pdf", "PC-ASHA_Asha-Shah_AM-PATNA-SM.pdf", null).fileName())
-                .isEqualTo("PC-ASHA_Asha-Shah_MR-North_v2.pdf");
+                .isEqualTo("PC-ASHA_Asha-Shah_v2.pdf");
 
-        assertThatThrownBy(() -> orderDesignService.presignForVendor(orderId, printer.getId(), "image/png", "PC-ASHA_Asha-Shah_MR-North.png", null))
+        assertThatThrownBy(() -> orderDesignService.presignForVendor(orderId, printer.getId(), "image/png", "PC-ASHA_Asha-Shah.png", null))
                 .isInstanceOf(InvalidArtworkFileException.class);
         assertThatThrownBy(() -> orderDesignService.uploadForVendor(orderId, printer.getId(), "order-designs/someone-else/x/proof.pdf"))
                 .isInstanceOf(InvalidArtworkFileException.class);

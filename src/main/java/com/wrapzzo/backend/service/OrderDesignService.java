@@ -92,9 +92,9 @@ public class OrderDesignService {
     // --- Vendor side: only orders assigned to them. ---
 
     /**
-     * Proofs are PDFs, and the vendor must name them PCode_DoctorName_AMName.pdf (the AM's SAP code may stand in for their name): a file
+     * Proofs are PDFs, and the vendor must name them PCode_DoctorName.pdf (the older name that also ends with the AM is still accepted): a file
      * named otherwise is refused here, before anything is uploaded, with the name it should have had. A good one is stored under the
-     * same name plus its version -- PCODE_Doctor_AM_vN.pdf. Transactional because the name reads the order's lazily-loaded owner (open-in-view is off).
+     * same name plus its version -- PCODE_Doctor_vN.pdf. Transactional because the name reads the order's lazily-loaded owner (open-in-view is off).
      */
     @Transactional(readOnly = true)
     public PresignOrderDesignResponse presignForVendor(UUID orderId, UUID vendorId, String contentType, String uploadedFileName, Long sizeBytes) {
@@ -111,9 +111,9 @@ public class OrderDesignService {
         Order order = getEntityForVendor(orderId, vendorId);
         NameParts name = nameParts(order);
         if (!ArtworkFileName.matches(uploadedFileName, name.pcode(), name.doctor(), name.amName(), name.amCode())) {
-            throw new InvalidArtworkFileException(("\"%s\" is not named the way this order needs. Name the proof PCode_DoctorName_AMName.pdf "
-                    + "(the AM's SAP code can be used instead of their name) -- for this order: %s.pdf -- then upload it again.")
-                    .formatted(uploadedFileName, ArtworkFileName.example(name.pcode(), name.doctor(), name.amName())));
+            throw new InvalidArtworkFileException(("\"%s\" is not named the way this order needs. Name the proof PCode_DoctorName.pdf "
+                    + "-- for this order: %s.pdf -- then upload it again.")
+                    .formatted(uploadedFileName, ArtworkFileName.example(name.pcode(), name.doctor())));
         }
         String fileName = artworkFileName(order, orderDesignRepository.countByOrder_Id(order.getId()) + 1);
         String key = "%s%s/%s".formatted(keyPrefix(order), UUID.randomUUID(), fileName);
@@ -179,10 +179,10 @@ public class OrderDesignService {
         return new NameParts(pcode != null && !pcode.isBlank() ? pcode : "ORD-" + order.getOrderNo(), order.getRecipientName(), owner.getName(), owner.getEmployeeCode());
     }
 
-    /** PCODE_Doctor_AM_vN.pdf -- the stored name, the same for every version of the order's proof apart from the number. */
+    /** PCODE_Doctor_vN.pdf -- the stored name, the same for every version of the order's proof apart from the number. */
     private String artworkFileName(Order order, int version) {
         NameParts name = nameParts(order);
-        return ArtworkFileName.canonical(name.pcode(), name.doctor(), name.amName(), version);
+        return ArtworkFileName.canonical(name.pcode(), name.doctor(), version);
     }
 
     @Transactional(readOnly = true)

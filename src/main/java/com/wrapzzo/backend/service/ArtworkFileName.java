@@ -6,9 +6,10 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * The name a vendor must give an artwork proof: {@code PCode_DoctorName_AMName.pdf}, where the AM's SAP code (employee code) may stand
- * in for their name. The match is lenient about how the name is written -- capitals, accents, and spaces, hyphens or underscores
- * (or none) between the parts do not matter, a doctor's "Dr." is optional, and a trailing "_v2" is ignored -- but every part must be there and right.
+ * The name a vendor must give an artwork proof: {@code PCode_DoctorName.pdf}. A name that also ends with the AM's name (or SAP code), the way
+ * proofs were named before, is still accepted, so files already prepared that way do not suddenly fail. The match is lenient about how the
+ * name is written -- capitals, accents, and spaces, hyphens or underscores (or none) between the parts do not matter, a doctor's "Dr." is
+ * optional, and a trailing "_v2" is ignored -- but every part must be there and right.
  * The proof is then stored under {@link #canonical}, so every proof carries the same tidy name whatever the vendor typed.
  */
 public final class ArtworkFileName {
@@ -18,7 +19,7 @@ public final class ArtworkFileName {
     private ArtworkFileName() {
     }
 
-    /** True when {@code uploadedName} names this order's proof: the pcode, the doctor and the AM (by name or code), in that order. */
+    /** True when {@code uploadedName} names this order's proof: the pcode and the doctor, in that order, and optionally the AM (by name or code) after them. */
     public static boolean matches(String uploadedName, String pcode, String doctorName, String amName, String amCode) {
         if (uploadedName == null) {
             return false;
@@ -33,20 +34,19 @@ public final class ArtworkFileName {
         return false;
     }
 
-    /** PCODE_Doctor_AM_vN.pdf -- the name the proof is stored and downloaded under. The doctor's title is dropped; a missing doctor is left out. */
-    public static String canonical(String pcode, String doctorName, String amName, int version) {
-        return "%s_v%d.pdf".formatted(example(pcode, doctorName, amName), version);
+    /** PCODE_Doctor_vN.pdf -- the name the proof is stored and downloaded under. The doctor's title is dropped; a missing doctor is left out. */
+    public static String canonical(String pcode, String doctorName, int version) {
+        return "%s_v%d.pdf".formatted(example(pcode, doctorName), version);
     }
 
-    /** What to show a vendor as the right way to name it: PCODE_Doctor_AM.pdf. */
-    public static String example(String pcode, String doctorName, String amName) {
+    /** What to show a vendor as the right way to name it: PCODE_Doctor.pdf. */
+    public static String example(String pcode, String doctorName) {
         List<String> parts = new ArrayList<>();
         parts.add(FileNaming.part(pcode));
         String doctor = withoutTitle(doctorName);
         if (!doctor.isBlank()) {
             parts.add(FileNaming.part(doctor));
         }
-        parts.add(FileNaming.part(amName));
         return String.join("_", parts);
     }
 
@@ -59,7 +59,9 @@ public final class ArtworkFileName {
             doctors.add(core);
             doctors.add("dr" + core);
         }
+        // The AM at the end is optional: the name is right without it, and still right with it.
         List<String> ams = new ArrayList<>();
+        ams.add("");
         ams.add(compact(amName));
         if (amCode != null && !amCode.isBlank()) {
             ams.add(compact(amCode));
