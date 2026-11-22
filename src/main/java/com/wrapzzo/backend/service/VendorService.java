@@ -95,7 +95,8 @@ public class VendorService {
                 ? vendorRepository.findAll()
                 : vendorRepository.findAllById(companyVendorRepository.findVendorIdsByCompany(companyId));
         Map<UUID, List<String>> serves = servesOf(vendors.stream().map(Vendor::getId).toList());
-        return vendors.stream().map(vendor -> VendorResponse.from(vendor, serves.getOrDefault(vendor.getId(), List.of()))).toList();
+        boolean withActivity = com.wrapzzo.backend.security.CurrentUser.can(com.wrapzzo.backend.security.Permission.Keys.PLATFORM_USER_ACTIVITY_VIEW);
+        return vendors.stream().map(vendor -> VendorResponse.from(vendor, serves.getOrDefault(vendor.getId(), List.of()), withActivity)).toList();
     }
 
     @Transactional(readOnly = true)
@@ -126,7 +127,8 @@ public class VendorService {
     }
 
     public VendorResponse toResponse(Vendor vendor) {
-        return VendorResponse.from(vendor, servesOf(List.of(vendor.getId())).getOrDefault(vendor.getId(), List.of()));
+        return VendorResponse.from(vendor, servesOf(List.of(vendor.getId())).getOrDefault(vendor.getId(), List.of()),
+                com.wrapzzo.backend.security.CurrentUser.can(com.wrapzzo.backend.security.Permission.Keys.PLATFORM_USER_ACTIVITY_VIEW));
     }
 
     private Map<UUID, List<String>> servesOf(List<UUID> vendorIds) {

@@ -76,7 +76,12 @@ public final class ListFields<E> {
 
     /** A rule with named values (an order's stage): filtered with equals or in; not sortable. */
     public ListFields<E> choice(String name, Choice<E> choice) {
-        return add(new Field<>(name, Type.CHOICE, null, null, null, choice, null, false));
+        return choice(name, choice, null);
+    }
+
+    /** A named-values filter that also sorts, by the column named in sortPath (the column the values are about). */
+    public ListFields<E> choice(String name, Choice<E> choice, String sortPath) {
+        return add(new Field<>(name, Type.CHOICE, null, null, null, choice, sortPath, false));
     }
 
     /** A derived yes/no filter (not sortable, not searched). */

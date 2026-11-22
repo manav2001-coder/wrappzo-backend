@@ -28,12 +28,18 @@ public record UserResponse(
         Instant addedOn,
         String addedByName,
         Instant updatedOn,
-        String updatedByName) {
+        String updatedByName,
+        /** When they last used the app; only set for someone who may see it (platform_user_activity.view), otherwise null. */
+        Instant lastActiveAt) {
 
     public record OrgUnitRef(UUID id, String name) {
     }
 
     public static UserResponse from(User user) {
+        return from(user, false);
+    }
+
+    public static UserResponse from(User user, boolean withActivity) {
         return new UserResponse(
                 user.getId(),
                 user.getName(),
@@ -56,6 +62,7 @@ public record UserResponse(
                 user.getCreatedAt(),
                 user.getCreatedByName(),
                 user.getUpdatedAt(),
-                user.getUpdatedByName());
+                user.getUpdatedByName(),
+                withActivity ? user.getLastActiveAt() : null);
     }
 }

@@ -148,6 +148,7 @@ public class VendorAuthService {
         String rawRefreshToken = TokenHasher.generateOpaqueToken();
         Instant expiresAt = Instant.now().plus(Duration.ofDays(refreshTokenExpiryDays));
         vendorRefreshTokenRepository.save(new VendorRefreshToken(vendor, TokenHasher.sha256Hex(rawRefreshToken), expiresAt));
+        vendor.setLastActiveAt(Instant.now());
         return new TokenPair(accessToken, rawRefreshToken, jwtService.getAccessTokenExpiry().toSeconds());
     }
 

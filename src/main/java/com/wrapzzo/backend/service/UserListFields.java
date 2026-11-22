@@ -13,7 +13,34 @@ final class UserListFields {
     private UserListFields() {
     }
 
-    static ListFields<User> fields() {
+    /** The columns people may search, filter and sort by. The activity ones exist only for someone who may see when people were last active. */
+    static ListFields<User> fields(boolean withActivity) {
+        ListFields<User> fields = baseFields();
+        if (withActivity) {
+            // Filtered by presets ("not active for a week") and sorted by the time itself.
+            fields.choice("activity", UserListFields::activity, "lastActiveAt");
+        }
+        return fields;
+    }
+
+    /**
+     * Activity presets for the filter: "today" (the last 24 hours), "week" (the last 7 days), "inactive7" and "inactive30"
+     * (signed in before, but not in that long) and "never" (never signed in). Null for anything else.
+     */
+    static Predicate activity(String value, jakarta.persistence.criteria.Root<User> root, jakarta.persistence.criteria.CriteriaQuery<?> query, jakarta.persistence.criteria.CriteriaBuilder cb) {
+        var at = root.<java.time.Instant>get("lastActiveAt");
+        var now = java.time.Instant.now();
+        return switch (value) {
+            case "today" -> cb.greaterThanOrEqualTo(at, now.minus(java.time.Duration.ofHours(24)));
+            case "week" -> cb.greaterThanOrEqualTo(at, now.minus(java.time.Duration.ofDays(7)));
+            case "inactive7" -> cb.lessThan(at, now.minus(java.time.Duration.ofDays(7)));
+            case "inactive30" -> cb.lessThan(at, now.minus(java.time.Duration.ofDays(30)));
+            case "never" -> cb.isNull(at);
+            default -> null;
+        };
+    }
+
+    private static ListFields<User> baseFields() {
         return new ListFields<User>()
                 .text("name", (root, cb) -> root.get("name"), "name", true)
                 .text("email", (root, cb) -> root.get("email"), "email", true)

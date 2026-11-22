@@ -84,6 +84,10 @@ public class Vendor extends AuditNames {
     @Column(name = "locked_until")
     private Instant lockedUntil;
 
+    /** When they last signed in or renewed their sign-in; null if never. See V95. */
+    @Column(name = "last_active_at")
+    private Instant lastActiveAt;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "created_by", nullable = false)
     private User createdBy;

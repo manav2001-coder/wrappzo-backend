@@ -110,6 +110,10 @@ public class User extends AuditNames {
     @Column(name = "locked_until")
     private Instant lockedUntil;
 
+    /** When they last signed in or renewed their sign-in; null if never. See V95. */
+    @Column(name = "last_active_at")
+    private Instant lastActiveAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

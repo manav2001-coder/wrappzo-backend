@@ -24,9 +24,15 @@ public record VendorResponse(
         Instant addedOn,
         String addedByName,
         Instant updatedOn,
-        String updatedByName) {
+        String updatedByName,
+        /** When it last used the app; only set for someone who may see it (platform_user_activity.view), otherwise null. */
+        Instant lastActiveAt) {
 
     public static VendorResponse from(Vendor vendor, List<String> serves) {
+        return from(vendor, serves, false);
+    }
+
+    public static VendorResponse from(Vendor vendor, List<String> serves, boolean withActivity) {
         return new VendorResponse(
                 vendor.getId(),
                 "VID-" + vendor.getVendorNo(),
@@ -42,6 +48,7 @@ public record VendorResponse(
                 vendor.getCreatedAt(),
                 vendor.getCreatedByName(),
                 vendor.getUpdatedAt(),
-                vendor.getUpdatedByName());
+                vendor.getUpdatedByName(),
+                withActivity ? vendor.getLastActiveAt() : null);
     }
 }

@@ -259,8 +259,10 @@ public class UserService {
     public PageResponse<UserResponse> pageByCompany(UUID companyId, ListQuery query) {
         companyAccessGuard.requireOwnCompanyOrPlatformStaff(companyId);
         User caller = currentUser();
+        // When people were last active is for the Super Admin only: the column, its sort and its filters all go with the permission.
+        boolean withActivity = com.wrapzzo.backend.security.CurrentUser.can(com.wrapzzo.backend.security.Permission.Keys.PLATFORM_USER_ACTIVITY_VIEW);
         return ListSpecs.page(userRepository, UserListFields.lookedAfterBy(companyId, visibilityService.resolve(caller), caller.getId()), query,
-                UserListFields.fields(), org.springframework.data.domain.Sort.by("name"), users -> users.stream().map(UserResponse::from).toList());
+                UserListFields.fields(withActivity), org.springframework.data.domain.Sort.by("name"), users -> users.stream().map(user -> UserResponse.from(user, withActivity)).toList());
     }
 
     /**

@@ -187,6 +187,8 @@ public class AuthService {
         String rawRefreshToken = TokenHasher.generateOpaqueToken();
         Instant expiresAt = Instant.now().plus(Duration.ofDays(refreshTokenExpiryDays));
         refreshTokenRepository.save(new RefreshToken(user, TokenHasher.sha256Hex(rawRefreshToken), expiresAt));
+        // Every sign-in and every 15-minute renewal passes through here, so this is when they were last using the app.
+        user.setLastActiveAt(Instant.now());
         return new TokenPair(accessToken, rawRefreshToken, jwtService.getAccessTokenExpiry().toSeconds());
     }
 
