@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.TemporalAdjusters;
+import java.util.List;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -89,6 +90,8 @@ public class DashboardInsightsService {
         Instant previousFrom = from.minus(Duration.between(from, to));
 
         LocalDate firstMonday = LocalDate.now(ZoneOffset.UTC).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).minusWeeks(TREND_WEEKS - 1L);
+        // One query for the people in view (a personal view is just the viewer); the coverage total, the size and the table all come from it.
+        List<DashboardInsightsResponse.TeamMember> people = queries.people(reach, user.getId(), personal, from, to);
         return new DashboardInsightsResponse(
                 personal ? "PERSONAL" : "TEAM",
                 range,
@@ -96,12 +99,12 @@ public class DashboardInsightsService {
                 to,
                 queries.period(reach, from, to),
                 all ? null : queries.period(reach, previousFrom, from),
-                queries.coverage(reach, user.getId(), personal, from, to),
+                DashboardInsightsQueries.coverageOf(people),
                 queries.stages(reach),
                 queries.rejectedRequests(reach, from, to),
                 queries.weekly(reach, firstMonday, TREND_WEEKS),
-                personal ? 0 : queries.teamSize(reach, user.getId(), false, from, to),
-                personal ? java.util.List.of() : queries.team(reach, user.getId(), false, from, to, TEAM_LIMIT),
+                personal ? 0 : people.size(),
+                personal ? List.of() : people.stream().limit(TEAM_LIMIT).toList(),
                 pricePolicy.canSee() ? queries.spend(reach, from, to, all ? null : previousFrom) : null,
                 vendorIdentityPolicy.canSee() ? queries.vendors(reach, from, to) : null);
     }

@@ -53,17 +53,33 @@ class DashboardInsightsQueries {
             + " and regexp_replace(coalesce(o.recipient_phone, ''), '\\D', '', 'g') = regexp_replace(r.phone, '\\D', '', 'g'))"
             + " or lower(trim(coalesce(o.recipient_name, ''))) = lower(trim(r.name))))";
 
-    /** One row per field person in view: anyone with doctors assigned or orders of their own. */
-    private static final String PEOPLE = "select u.id as id, u.name as name, coalesce(ou.name, '') as unit,"
-            + " (select coalesce(sum(o.quantity), 0) from orders o where o.owner_id = u.id and o.status <> 'CANCELLED' and o.created_at >= :from and o.created_at < :to) as requested,"
-            + " (select coalesce(sum(o.quantity), 0) from orders o where o.owner_id = u.id and o.status = 'DISPATCHED' and " + DISPATCHED_AT + " >= :from and " + DISPATCHED_AT + " < :to) as dispatched,"
-            + " (select count(*) from recipient_assignments a where a.mr_user_id = u.id) as assigned,"
-            + " (select count(*) from recipient_assignments a join recipients r on r.id = a.recipient_id where a.mr_user_id = u.id and " + COVERED + ") as covered,"
-            + " (select count(*) from orders o where o.owner_id = u.id and o.status not in ('DISPATCHED', 'CANCELLED') and o.approval_status <> 'REJECTED') as in_pipeline,"
-            + " (select max(o.created_at) from orders o where o.owner_id = u.id) as last_activity"
+    /**
+     * One row per field person in view: anyone with doctors assigned or orders of their own. Set-based on purpose: each person's orders are
+     * read once (grouped), and an assigned doctor counts as covered through a hash join on the person's order keys (phone digits, or name).
+     * The first version compared every assigned doctor with every order of that person, one pair at a time -- 45 s for a division head.
+     */
+    private static final String PEOPLE = "with ppl as (select u.id as id, u.name as name, coalesce(ou.name, '') as unit"
             + " from users u left join org_units ou on ou.id = u.org_unit_id"
             + " where u.company_id = :companyId and u.status = 'ACTIVE' and %s"
-            + " and (exists (select 1 from recipient_assignments a where a.mr_user_id = u.id) or exists (select 1 from orders o where o.owner_id = u.id))";
+            + " and (exists (select 1 from recipient_assignments a where a.mr_user_id = u.id) or exists (select 1 from orders o where o.owner_id = u.id))),"
+            + " ord as (select o.owner_id as uid,"
+            + " coalesce(sum(o.quantity) filter (where o.status <> 'CANCELLED' and o.created_at >= :from and o.created_at < :to), 0) as requested,"
+            + " coalesce(sum(o.quantity) filter (where o.status = 'DISPATCHED' and " + DISPATCHED_AT + " >= :from and " + DISPATCHED_AT + " < :to), 0) as dispatched,"
+            + " count(*) filter (where o.status not in ('DISPATCHED', 'CANCELLED') and o.approval_status <> 'REJECTED') as in_pipeline,"
+            + " max(o.created_at) as last_activity"
+            + " from orders o where o.owner_id in (select id from ppl) group by o.owner_id),"
+            + " asg as (select a.mr_user_id as uid, count(*) as assigned from recipient_assignments a where a.mr_user_id in (select id from ppl) group by a.mr_user_id),"
+            + " keys as (select distinct o.owner_id as uid, nullif(regexp_replace(coalesce(o.recipient_phone, ''), '\\D', '', 'g'), '') as pk, lower(trim(coalesce(o.recipient_name, ''))) as nk"
+            + " from orders o where o.owner_id in (select id from ppl) and o.status <> 'CANCELLED' and o.created_at >= :from and o.created_at < :to),"
+            + " docs as materialized (select a.mr_user_id as uid, a.recipient_id as rid, nullif(regexp_replace(coalesce(r.phone, ''), '\\D', '', 'g'), '') as pk, lower(trim(r.name)) as nk"
+            + " from recipient_assignments a join recipients r on r.id = a.recipient_id where a.mr_user_id in (select id from ppl)),"
+            + " hits as (select d.uid, d.rid from docs d join keys k on k.uid = d.uid and k.pk = d.pk"
+            + " union select d.uid, d.rid from docs d join keys k on k.uid = d.uid and k.nk = d.nk),"
+            + " cov as (select uid, count(*) as covered from hits group by uid)"
+            + " select ppl.id, ppl.name, ppl.unit, coalesce(ord.requested, 0) as requested, coalesce(ord.dispatched, 0) as dispatched,"
+            + " coalesce(asg.assigned, 0) as assigned, coalesce(cov.covered, 0) as covered, coalesce(ord.in_pipeline, 0) as in_pipeline, ord.last_activity as last_activity"
+            + " from ppl left join ord on ord.uid = ppl.id left join asg on asg.uid = ppl.id left join cov on cov.uid = ppl.id"
+            + " order by requested asc, ppl.name asc";
 
     private static final String STAGE_CASE = "case when o.approval_status = 'PENDING' then 'APPROVAL'"
                 + " when o.status in ('PROCESSING', 'PRODUCTION_QUEUE') and not exists (select 1 from order_designs d where d.order_id = o.id and d.status = 'APPROVED') then 'ARTWORK'"
@@ -157,25 +173,27 @@ class DashboardInsightsQueries {
         return weeks;
     }
 
-    /** viewerOnly = just the viewer (a personal dashboard); otherwise the people in view other than the viewer. */
-    Coverage coverage(Reach reach, UUID viewerId, boolean viewerOnly, Instant from, Instant to) {
-        Object[] row = (Object[]) people("select coalesce(sum(assigned), 0), coalesce(sum(covered), 0) from (%s) t", reach, viewerId, viewerOnly, from, to, 0).getSingleResult();
-        return new Coverage(num(row[0]), num(row[1]));
-    }
-
-    long teamSize(Reach reach, UUID viewerId, boolean viewerOnly, Instant from, Instant to) {
-        return num(people("select count(*) from (%s) t", reach, viewerId, viewerOnly, from, to, 0).getSingleResult());
-    }
-
-    /** The people in view, fewest PELs first -- the ones who need a nudge sit at the top. */
-    List<TeamMember> team(Reach reach, UUID viewerId, boolean viewerOnly, Instant from, Instant to, int limit) {
+    /** The people in view, fewest PELs first -- the ones who need a nudge sit at the top. One query for all of them; coverage, size and the table are read from it. */
+    List<TeamMember> people(Reach reach, UUID viewerId, boolean viewerOnly, Instant from, Instant to) {
+        String who = viewerOnly ? "u.id = :viewerId" : "u.id <> :viewerId and (:companyWide = true or u.id in (:people) or u.org_unit_id in (:orgUnits))";
         @SuppressWarnings("unchecked")
-        List<Object[]> rows = people("select * from (%s) t order by requested asc, name asc", reach, viewerId, viewerOnly, from, to, limit).getResultList();
-        List<TeamMember> members = new ArrayList<>();
+        List<Object[]> rows = bind(em.createNativeQuery(PEOPLE.formatted(who)), reach, from, to).setParameter("viewerId", viewerId).getResultList();
+        List<TeamMember> members = new ArrayList<>(rows.size());
         for (Object[] r : rows) {
             members.add(new TeamMember((UUID) r[0], (String) r[1], (String) r[2], num(r[3]), num(r[4]), num(r[5]), num(r[6]), num(r[7]), instant(r[8])));
         }
         return members;
+    }
+
+    /** Doctors assigned across the given people, and how many of them have a live order in the period. */
+    static Coverage coverageOf(List<TeamMember> people) {
+        long assigned = 0;
+        long covered = 0;
+        for (TeamMember m : people) {
+            assigned += m.doctorsAssigned();
+            covered += m.doctorsCovered();
+        }
+        return new Coverage(assigned, covered);
     }
 
     /** Doctors assigned to one person with no live PEL order in the period: (name, speciality / clinic, assigned at), longest-waiting first. */
@@ -239,15 +257,6 @@ class DashboardInsightsQueries {
 
     private static Double oneDecimal(Object value) {
         return value == null ? null : Math.round(((Number) value).doubleValue() * 10.0) / 10.0;
-    }
-
-    private Query people(String wrapper, Reach reach, UUID viewerId, boolean viewerOnly, Instant from, Instant to, int limit) {
-        String who = viewerOnly ? "u.id = :viewerId" : "u.id <> :viewerId and (:companyWide = true or u.id in (:people) or u.org_unit_id in (:orgUnits))";
-        Query query = bind(em.createNativeQuery(wrapper.formatted(PEOPLE.formatted(who))), reach, from, to).setParameter("viewerId", viewerId);
-        if (limit > 0) {
-            query.setMaxResults(limit);
-        }
-        return query;
     }
 
     private static Instant instant(Object value) {
