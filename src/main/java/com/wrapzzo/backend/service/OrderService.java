@@ -184,15 +184,17 @@ public class OrderService {
     /** How many of the vendor's orders are at each stage (narrowed to a division when given), counted in the database. */
     @Transactional(readOnly = true)
     public VendorOrderSummaryResponse summaryForVendor(UUID vendorId, UUID divisionId) {
-        Specification<Order> scope = VendorOrderListFields.ofVendor(vendorId);
-        if (divisionId != null) {
-            scope = scope.and(VendorOrderListFields.inDivision(divisionId));
-        }
         Map<String, Long> byStage = new java.util.LinkedHashMap<>();
-        for (String stage : VendorOrderListFields.STAGES) {
-            byStage.put(stage, orderRepository.count(scope.and(VendorOrderListFields.atStage(stage))));
+        VendorOrderListFields.STAGES.forEach(stage -> byStage.put(stage, 0L));
+        long total = 0;
+        for (Object[] row : orderRepository.countByStageForVendor(vendorId, divisionId)) {
+            long count = ((Number) row[1]).longValue();
+            total += count;
+            if (row[0] != null) {
+                byStage.put((String) row[0], count);
+            }
         }
-        return new VendorOrderSummaryResponse(orderRepository.count(scope), byStage);
+        return new VendorOrderSummaryResponse(total, byStage);
     }
 
     /** The divisions the vendor's orders were raised in, with how many from each -- what the portal's division filter is built from. */

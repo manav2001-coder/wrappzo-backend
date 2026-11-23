@@ -82,4 +82,32 @@ public interface OrderRepository extends JpaRepository<Order, UUID>, org.springf
     /** One batched query for every campaign's order count -- not a per-campaign query (PRD 4.7). */
     @Query("select o.campaign.id as campaignId, count(o) as cnt from Order o where o.campaign.id in :campaignIds group by o.campaign.id")
     List<CampaignOrderCount> countByCampaignIdIn(@Param("campaignIds") Collection<UUID> campaignIds);
+
+    /**
+     * How many of a vendor's orders are at each stage, in ONE pass over their orders (a stage per order, then counted) -- the portal asks
+     * for this every minute from every open tab, and counting each stage separately read the same orders seven times. The rules are those
+     * of VendorOrderListFields.stage(): status first; for an order still with the vendor, the artwork loop (needs an approved proof and has
+     * none -> by the newest proof: in review, sent back, or not yet uploaded). Rows are (stage, count); an order in no stage (a status the
+     * portal does not show) has a null stage. A null division counts every division.
+     */
+    @Query(value = """
+            select s.stage, count(*) from (
+              select case
+                when o.status = 'CANCELLED' then 'cancelled'
+                when o.status = 'DISPATCHED' then 'dispatched'
+                when o.status in ('PROCESSING', 'PRODUCTION_QUEUE') then
+                  case when not (coalesce(g.artwork_required, false)
+                                 and not exists (select 1 from order_designs a where a.order_id = o.id and a.status = 'APPROVED')) then 'ready'
+                       else case (select d.status from order_designs d where d.order_id = o.id order by d.version_no desc limit 1)
+                              when 'PENDING_REVIEW' then 'review'
+                              when 'PENDING_FINAL_APPROVAL' then 'review'
+                              when 'REJECTED' then 'rework'
+                              else 'artwork' end
+                  end
+              end as stage
+              from orders o left join gifts g on g.id = o.gift_id
+              where o.assigned_vendor_id = :vendorId and (cast(:divisionId as uuid) is null or o.division_id = :divisionId)
+            ) s group by s.stage
+            """, nativeQuery = true)
+    List<Object[]> countByStageForVendor(@Param("vendorId") UUID vendorId, @Param("divisionId") UUID divisionId);
 }
