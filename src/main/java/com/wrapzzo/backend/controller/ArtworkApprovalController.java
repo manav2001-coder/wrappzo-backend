@@ -1,6 +1,7 @@
 package com.wrapzzo.backend.controller;
 
 import com.wrapzzo.backend.dto.PendingArtworkApprovalResponse;
+import com.wrapzzo.backend.dto.PendingCountResponse;
 import com.wrapzzo.backend.list.ListQueryParams;
 import com.wrapzzo.backend.list.PageResponse;
 import com.wrapzzo.backend.security.Permission.Keys;
@@ -25,6 +26,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class ArtworkApprovalController {
 
     private final OrderDesignService orderDesignService;
+
+    /** Just the number waiting on the caller: what the tab badge polls, so it does not pay for building the rows. */
+    @GetMapping("/pending/count")
+    @PreAuthorize("hasAuthority('" + Keys.APPROVAL_VIEW + "')")
+    public PendingCountResponse pendingCount() {
+        return new PendingCountResponse(orderDesignService.countPendingFinalApproval());
+    }
 
     @GetMapping("/pending/page")
     @PreAuthorize("hasAuthority('" + Keys.APPROVAL_VIEW + "')")

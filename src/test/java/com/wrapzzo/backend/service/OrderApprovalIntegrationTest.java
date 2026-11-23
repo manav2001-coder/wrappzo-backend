@@ -196,13 +196,17 @@ class OrderApprovalIntegrationTest {
         // Only the RM above the requester sees it waiting -- not the requester, not another RM.
         actAs(mr);
         assertThat(orderApprovalService.pagePending(ListQuery.firstPage(100)).data()).isEmpty();
+        assertThat(orderApprovalService.countPending()).isZero();
         actAs(otherRm);
         assertThat(orderApprovalService.pagePending(ListQuery.firstPage(100)).data()).isEmpty();
+        assertThat(orderApprovalService.countPending()).isZero();
         actAs(rm);
         assertThat(orderApprovalService.pagePending(ListQuery.firstPage(100)).data()).extracting(p -> p.orderId()).containsExactly(order.getId());
+        assertThat(orderApprovalService.countPending()).isEqualTo(1); // the badge number is the queue's own length
         // An HO holding Final Artwork Approval is not in this cycle: the order has its RM, so it is not theirs to see or decide.
         actAs(ho);
         assertThat(orderApprovalService.pagePending(ListQuery.firstPage(100)).data()).isEmpty();
+        assertThat(orderApprovalService.countPending()).isZero();
         assertThatThrownBy(() -> orderApprovalService.approve(order.getId(), null)).isInstanceOf(ConflictException.class).hasMessageContaining("not waiting on you");
         actAs(rm);
 

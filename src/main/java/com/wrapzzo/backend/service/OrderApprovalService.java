@@ -83,15 +83,10 @@ public class OrderApprovalService {
     public PageResponse<PendingOrderApprovalResponse> pagePending(ListQuery query) {
         User user = currentUser();
         Set<String> keys = accessControlCacheService.resolveEffectiveKeys(user);
-        if (!keys.contains(Permission.APPROVAL_DECIDE.key()) && !keys.contains(Permission.ARTWORK_FINAL_APPROVE.key())) {
+        if (!canDecideAny(keys)) {
             return new PageResponse<>(List.of(), 0, query.page(), query.size(), false);
         }
-        Visibility visibility = visibilityService.resolve(user);
-        List<Order> mine = orderRepository
-                .findPendingApprovalVisible(user.getCompany().getId(), visibility.companyWide(), visibility.peopleForQuery(), visibility.orgUnitsForQuery())
-                .stream()
-                .filter(order -> mayDecide(order, user, keys))
-                .toList();
+        List<Order> mine = pendingFor(user, keys);
         Map<UUID, QuickGiftRequest> requests = quickGiftRequestRepository.findByOrder_IdIn(mine.stream().map(Order::getId).toList()).stream()
                 .collect(Collectors.toMap(r -> r.getOrder().getId(), r -> r));
         ListInMemory<Order> list = new ListInMemory<Order>()
@@ -105,6 +100,31 @@ public class OrderApprovalService {
         boolean showPrice = pricePolicy.canSee();
         return list.page(mine, query, Comparator.comparing(Order::getCreatedAt))
                 .map(page -> page.stream().map(order -> PendingOrderApprovalResponse.from(order, requests.get(order.getId()), showPrice, photosOf(requests.get(order.getId())))).toList());
+    }
+
+    /**
+     * How many orders wait on the caller -- the tab badge and the dashboard tile, asked every minute by every approver. The same queue as
+     * the page, without loading the Quick Gift requests and photos that only the rows on screen need.
+     */
+    @Transactional(readOnly = true)
+    public long countPending() {
+        User user = currentUser();
+        Set<String> keys = accessControlCacheService.resolveEffectiveKeys(user);
+        return canDecideAny(keys) ? pendingFor(user, keys).size() : 0;
+    }
+
+    private static boolean canDecideAny(Set<String> keys) {
+        return keys.contains(Permission.APPROVAL_DECIDE.key()) || keys.contains(Permission.ARTWORK_FINAL_APPROVE.key());
+    }
+
+    /** Narrowed in the database to orders within the caller's reach (an approver sees their team's), then to the ones that are theirs to decide. */
+    private List<Order> pendingFor(User user, Set<String> keys) {
+        Visibility visibility = visibilityService.resolve(user);
+        return orderRepository
+                .findPendingApprovalVisible(user.getCompany().getId(), visibility.companyWide(), visibility.peopleForQuery(), visibility.orgUnitsForQuery())
+                .stream()
+                .filter(order -> mayDecide(order, user, keys))
+                .toList();
     }
 
     @Transactional

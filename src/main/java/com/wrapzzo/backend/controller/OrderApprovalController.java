@@ -1,6 +1,7 @@
 package com.wrapzzo.backend.controller;
 
 import com.wrapzzo.backend.dto.OrderApprovalDecisionRequest;
+import com.wrapzzo.backend.dto.PendingCountResponse;
 import com.wrapzzo.backend.dto.OrderApprovalSettingsRequest;
 import com.wrapzzo.backend.dto.OrderApprovalSettingsResponse;
 import com.wrapzzo.backend.dto.PendingOrderApprovalResponse;
@@ -36,6 +37,13 @@ public class OrderApprovalController {
     @RequiresPermission(Keys.APPROVAL_VIEW)
     public PageResponse<PendingOrderApprovalResponse> pendingPage(ListQueryParams params) {
         return orderApprovalService.pagePending(params.toQuery());
+    }
+
+    /** Just the number waiting on the caller: what the tab badge polls, so it does not pay for building the rows. */
+    @GetMapping("/pending/count")
+    @RequiresPermission(Keys.APPROVAL_VIEW)
+    public PendingCountResponse pendingCount() {
+        return new PendingCountResponse(orderApprovalService.countPending());
     }
 
     @PostMapping("/{orderId}/approve")

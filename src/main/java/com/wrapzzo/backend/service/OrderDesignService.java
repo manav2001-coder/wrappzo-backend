@@ -266,28 +266,47 @@ public class OrderDesignService {
      * order.design.final holder, every one they haven't already signed (covering for an absent
      * manager, or for an MR with no one above them).
      */
-    @Transactional(readOnly = true)
     private List<PendingArtworkApprovalResponse> listPendingFinalApproval() {
         User reviewer = currentUser();
         if (reviewer.getCompany() == null) {
             return List.of();
         }
+        PendingQueue queue = pendingQueueOf(reviewer);
+        List<OrderDesign> mine = queue.mine();
+        QueueContext context = queue.context();
+        Map<UUID, List<ArtworkApprovalStep>> trails = trailsOf(mine);
+        List<PendingArtworkApprovalResponse> result = new ArrayList<>();
+        for (OrderDesign design : mine) {
+            Stage stage = expectedApprover(context.chain(design), currentLevel(design));
+            boolean covering = stage == null || !stage.includes(reviewer);
+            result.add(PendingArtworkApprovalResponse.from(design, fileStorageService.publicUrl(design.getFileKey()),
+                    requesterOf(design.getOrder()), stage != null ? stage.label() : null, covering,
+                    trails.getOrDefault(design.getId(), List.of())));
+        }
+        return result;
+    }
+
+    /** The proofs waiting on the reviewer, and the context they were judged in. */
+    private record PendingQueue(List<OrderDesign> mine, QueueContext context) {
+    }
+
+    private PendingQueue pendingQueueOf(User reviewer) {
         // Only proofs of orders in the reviewer's reach can be theirs (the manager a level waits on sees their team's orders; cover is gated on seeing the order).
         Visibility visibility = visibilityService.resolve(reviewer);
         List<OrderDesign> pending = orderDesignRepository.findByStatusVisible(OrderDesignStatus.PENDING_FINAL_APPROVAL, reviewer.getCompany().getId(),
                 visibility.companyWide(), visibility.peopleForQuery(), visibility.orgUnitsForQuery());
         QueueContext context = new QueueContext(reviewer, pending);
-        List<OrderDesign> mine = pending.stream().filter(design -> canApproveCurrentLevel(design, reviewer, context)).toList();
-        Map<UUID, List<ArtworkApprovalStep>> trails = trailsOf(mine);
-        List<PendingArtworkApprovalResponse> queue = new ArrayList<>();
-        for (OrderDesign design : mine) {
-            Stage stage = expectedApprover(context.chain(design), currentLevel(design));
-            boolean covering = stage == null || !stage.includes(reviewer);
-            queue.add(PendingArtworkApprovalResponse.from(design, fileStorageService.publicUrl(design.getFileKey()),
-                    requesterOf(design.getOrder()), stage != null ? stage.label() : null, covering,
-                    trails.getOrDefault(design.getId(), List.of())));
-        }
-        return queue;
+        return new PendingQueue(pending.stream().filter(design -> canApproveCurrentLevel(design, reviewer, context)).toList(), context);
+    }
+
+    /**
+     * How many proofs wait on the caller -- the tab badge, asked every minute by every approver. The same queue as the page, but nothing is
+     * built for display (no approval trails, no file links), because only the number is wanted.
+     */
+    @Transactional(readOnly = true)
+    public long countPendingFinalApproval() {
+        User reviewer = currentUser();
+        return reviewer.getCompany() == null ? 0 : pendingQueueOf(reviewer).mine().size();
     }
 
     /** One page of the proofs waiting on the caller, searched, filtered and sorted. Bounded by what is waiting on them, not by all there ever was. */

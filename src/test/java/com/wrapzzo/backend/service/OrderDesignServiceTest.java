@@ -190,11 +190,14 @@ class OrderDesignServiceTest {
         approveAs(aditi);
         as(sanjay);
         assertThat(service.pagePendingFinalApproval(ListQuery.firstPage(100)).data()).singleElement().satisfies(item -> assertThat(item.covering()).isFalse());
+        assertThat(service.countPendingFinalApproval()).isEqualTo(1);
         as(ravi);
         assertThat(service.pagePendingFinalApproval(ListQuery.firstPage(100)).data()).isEmpty();
+        assertThat(service.countPendingFinalApproval()).isZero();
         assertThatThrownBy(() -> approveAs(ravi)).isInstanceOf(AccessDeniedException.class).hasMessageContaining("Sanjay");
         as(aditi);
         assertThat(service.pagePendingFinalApproval(ListQuery.firstPage(100)).data()).isEmpty();
+        assertThat(service.countPendingFinalApproval()).isZero();
     }
 
     @Test
@@ -212,6 +215,7 @@ class OrderDesignServiceTest {
         assertThatThrownBy(() -> approveAs(sanjay)).isInstanceOf(AccessDeniedException.class).hasMessageContaining("Approve artwork");
         as(sanjay);
         assertThat(service.pagePendingFinalApproval(ListQuery.firstPage(100)).data()).isEmpty();
+        assertThat(service.countPendingFinalApproval()).isZero();
 
         // With the cycle permission he can.
         when(keys.resolveEffectiveKeys(sanjay)).thenReturn(Set.of("approval.decide"));
@@ -303,8 +307,10 @@ class OrderDesignServiceTest {
         // The ZM watches: not his to sign, and not in his queue.
         assertThatThrownBy(() -> approveAs(zm)).isInstanceOf(AccessDeniedException.class).hasMessageContaining("Ravi RM");
         assertThat(service.pagePendingFinalApproval(ListQuery.firstPage(100)).data()).isEmpty();
+        assertThat(service.countPendingFinalApproval()).isZero();
         as(hoOne);
         assertThat(service.pagePendingFinalApproval(ListQuery.firstPage(100)).data()).isEmpty();
+        assertThat(service.countPendingFinalApproval()).isZero();
 
         OrderDesignResponse afterRm = approveAs(rm);
         assertThat(afterRm.approvalLevel()).isEqualTo(2);
@@ -320,6 +326,7 @@ class OrderDesignServiceTest {
         }
         as(hoElsewhere);
         assertThat(service.pagePendingFinalApproval(ListQuery.firstPage(100)).data()).isEmpty();
+        assertThat(service.countPendingFinalApproval()).isZero();
         assertThatThrownBy(() -> approveAs(hoElsewhere)).isInstanceOf(AccessDeniedException.class).hasMessageContaining("HO of Summit");
 
         // The first HO to act decides.
