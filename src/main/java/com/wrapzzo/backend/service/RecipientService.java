@@ -18,7 +18,11 @@ import com.wrapzzo.backend.repository.RecipientAssignmentRepository;
 import com.wrapzzo.backend.repository.RecipientRepository;
 import com.wrapzzo.backend.repository.UserRepository;
 import com.wrapzzo.backend.security.CurrentUser;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -137,14 +141,27 @@ public class RecipientService {
     public BulkDoctorsResponse bulkCreateMine(List<BulkDoctorRow> rows) {
         User user = currentUser();
         UUID companyId = user.getCompany().getId();
+        // Look the whole sheet up at once instead of asking the database about each row: the doctors who already exist by pcode, and
+        // which of them are already on this list. A 2,000-row sheet then costs a handful of queries, not several thousand.
+        Map<String, Recipient> byPcode = new HashMap<>();
+        for (List<String> chunk : chunksOf(rows.stream().map(r -> r.pcode().trim().toLowerCase(java.util.Locale.ROOT)).distinct().toList(), LOOKUP_CHUNK)) {
+            recipientRepository.findByCompanyAndPcodesLower(companyId, chunk)
+                    .forEach(r -> byPcode.putIfAbsent(r.getPcode().trim().toLowerCase(java.util.Locale.ROOT), r));
+        }
+        Set<UUID> onMyList = new HashSet<>();
+        for (List<UUID> chunk : chunksOf(byPcode.values().stream().map(Recipient::getId).toList(), LOOKUP_CHUNK)) {
+            onMyList.addAll(recipientAssignmentRepository.findRecipientIdsOnList(user.getId(), chunk));
+        }
         int created = 0;
         int joined = 0;
         int unchanged = 0;
+        List<UUID> toAdd = new ArrayList<>();
         for (BulkDoctorRow row : rows) {
             String email = blankToNull(row.email());
             DoctorDetails doctor = DoctorDetails.orEmpty(row.doctor());
             String pcode = row.pcode().trim();
-            Recipient recipient = recipientRepository.findFirstByCompany_IdAndPcodeIgnoreCase(companyId, pcode).orElse(null);
+            String pcodeKey = pcode.toLowerCase(java.util.Locale.ROOT);
+            Recipient recipient = byPcode.get(pcodeKey);
             if (recipient == null) {
                 recipient = recipientRepository
                         .findMatch(companyId, normalizedName(row.name()), row.phone().trim(), normalizedEmail(email))
@@ -158,17 +175,40 @@ public class RecipientService {
                 applyDoctorDetails(recipient, doctor);
                 recipient = recipientRepository.save(recipient);
             }
-            if (recipientAssignmentRepository.addIfAbsent(recipient.getId(), user.getId()) == 0) {
-                unchanged++;
+            byPcode.putIfAbsent(pcodeKey, recipient);
+            if (!onMyList.add(recipient.getId())) {
+                unchanged++; // on the list already, or earlier in this same sheet
                 continue;
             }
+            toAdd.add(recipient.getId());
             if (isNew) {
                 created++;
             } else {
                 joined++;
             }
         }
+        int added = 0;
+        for (List<UUID> chunk : chunksOf(toAdd, LOOKUP_CHUNK)) {
+            added += recipientAssignmentRepository.addAllIfAbsent(user.getId(), chunk);
+        }
+        // Someone else put a doctor on this list while the sheet was being read: that one is unchanged, not added.
+        int raced = toAdd.size() - added;
+        if (raced > 0) {
+            unchanged += raced;
+            joined = Math.max(0, joined - raced);
+        }
         return new BulkDoctorsResponse(created, joined, unchanged);
+    }
+
+    /** Statements take a limited number of bound values, so a long list is looked up or written in pieces this size. */
+    private static final int LOOKUP_CHUNK = 500;
+
+    private static <T> List<List<T>> chunksOf(List<T> items, int size) {
+        List<List<T>> chunks = new ArrayList<>();
+        for (int i = 0; i < items.size(); i += size) {
+            chunks.add(items.subList(i, Math.min(items.size(), i + size)));
+        }
+        return chunks;
     }
 
     /** Takes a doctor off the caller's list; the doctor stays in the directory, so past orders keep pointing at them. */

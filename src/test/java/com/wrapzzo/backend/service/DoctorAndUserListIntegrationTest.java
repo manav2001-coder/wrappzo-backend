@@ -173,4 +173,35 @@ class DoctorAndUserListIntegrationTest {
         assertThat(users(companyHead, null, null, null, "[{\"field\":\"status\",\"operator\":\"in\",\"value\":[\"ACTIVE\",\"INVITED\"]}]", 50).total()).isEqualTo(3);
         assertThat(users(companyHead, null, "reportsToName", "asc", null, 2).data()).hasSize(2);
     }
+
+    @Test
+    void aDoctorSheetCountsNewJoinedAndUnchangedRowsAndNeverDuplicates() {
+        addDoctor(amSouth, "Dr Shared", "SH-1"); // already in the company, on South's list
+        addDoctor(amNorth, "Dr Mine", "MINE-1"); // already on North's own list
+        actAs(amNorth);
+
+        var result = recipientService.bulkCreateMine(List.of(
+                row("Dr Brand New", "9100000001", "NEW-1"),
+                row("Dr Brand New again", "9100000002", "new-1"), // same pcode, other case: the same doctor, so nothing more to add
+                row("Dr Shared", "9100000003", "sh-1"), // an existing company doctor: joins North's list
+                row("Dr Mine", "9100000004", "MINE-1"))); // already on the list
+
+        assertThat(result.created()).isEqualTo(1);
+        assertThat(result.joined()).isEqualTo(1);
+        assertThat(result.unchanged()).isEqualTo(2);
+        assertThat(doctors(amNorth, 0, 50, null, null, null, null).data()).extracting(RecipientResponse::pcode)
+                .containsExactlyInAnyOrder("NEW-1", "SH-1", "MINE-1");
+        assertThat(doctors(companyHead, 0, 100, null, null, null, "[{\"field\":\"pcode\",\"operator\":\"contains\",\"value\":\"new-1\"}]").total()).isEqualTo(1);
+
+        // Uploading the same sheet again changes nothing.
+        actAs(amNorth);
+        var again = recipientService.bulkCreateMine(List.of(row("Dr Brand New", "9100000001", "NEW-1"), row("Dr Shared", "9100000003", "SH-1")));
+        assertThat(again.created()).isZero();
+        assertThat(again.joined()).isZero();
+        assertThat(again.unchanged()).isEqualTo(2);
+    }
+
+    private static com.wrapzzo.backend.dto.BulkDoctorRow row(String name, String phone, String pcode) {
+        return new com.wrapzzo.backend.dto.BulkDoctorRow(name, phone, pcode, null, null, null);
+    }
 }

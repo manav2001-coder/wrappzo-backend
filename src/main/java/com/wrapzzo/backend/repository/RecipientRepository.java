@@ -78,4 +78,8 @@ public interface RecipientRepository extends JpaRepository<Recipient, UUID>, org
             """)
     boolean isVisible(@Param("recipientId") UUID recipientId, @Param("companyWide") boolean companyWide,
             @Param("people") Collection<UUID> people, @Param("orgUnits") Collection<UUID> orgUnits);
+
+    /** The company's doctors with any of these pcodes (already trimmed and lower-cased), in one query -- a sheet's worth, not one lookup per row. */
+    @Query("select r from Recipient r where r.company.id = :companyId and lower(r.pcode) in :pcodes")
+    List<Recipient> findByCompanyAndPcodesLower(@Param("companyId") UUID companyId, @Param("pcodes") Collection<String> pcodes);
 }

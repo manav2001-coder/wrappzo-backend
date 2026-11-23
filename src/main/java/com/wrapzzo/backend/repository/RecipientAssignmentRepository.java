@@ -29,4 +29,15 @@ public interface RecipientAssignmentRepository extends JpaRepository<RecipientAs
             + "values (gen_random_uuid(), :recipientId, :userId, now()) on conflict (recipient_id, mr_user_id) do nothing", nativeQuery = true)
     int addIfAbsent(@org.springframework.data.repository.query.Param("recipientId") UUID recipientId,
             @org.springframework.data.repository.query.Param("userId") UUID userId);
+
+    /**
+     * Puts many doctors on one list in a single statement, skipping any already there (same safety as {@link #addIfAbsent}).
+     * Returns how many were really added.
+     */
+    @org.springframework.data.jpa.repository.Modifying(flushAutomatically = true)
+    @org.springframework.data.jpa.repository.Query(value = "insert into recipient_assignments (id, recipient_id, mr_user_id, assigned_at) "
+            + "select gen_random_uuid(), r.id, :userId, now() from recipients r where r.id in (:recipientIds) "
+            + "on conflict (recipient_id, mr_user_id) do nothing", nativeQuery = true)
+    int addAllIfAbsent(@org.springframework.data.repository.query.Param("userId") UUID userId,
+            @org.springframework.data.repository.query.Param("recipientIds") java.util.Collection<UUID> recipientIds);
 }
