@@ -108,7 +108,17 @@ class DashboardQueries {
      * current unit.
      */
     List<Object[]> topDepartments(Reach reach, int limit) {
-        return limited(rows("select " + DEPARTMENT + ", count(o)" + DEPARTMENT_FROM + ORDERS_WHERE + " group by " + DEPARTMENT + " order by count(o) desc", reach), limit);
+        // Narrow to the viewer's orders first, then look up the departments: joining every order to every Quick Gift and then
+        // filtering read ~280k rows of each per dashboard load for a viewer who sees a few hundred orders.
+        String sql = "with scoped as materialized (select o.id, o.org_unit_id, o.submission_id" + ORDERS_SQL + ")"
+                + " select coalesce(ou.name, su.name, ru.name, 'Unassigned') as dept, count(*) as n from scoped o"
+                + " left join org_units ou on ou.id = o.org_unit_id"
+                + " left join submissions sub on sub.id = o.submission_id left join users sb on sb.id = sub.submitted_by left join org_units su on su.id = sb.org_unit_id"
+                + " left join quick_gift_requests qr on qr.order_id = o.id left join users rb on rb.id = qr.requested_by left join org_units ru on ru.id = rb.org_unit_id"
+                + " group by 1 order by 2 desc, 1";
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = bind(em.createNativeQuery(sql), reach).getResultList();
+        return limited(rows.stream().map(r -> new Object[] {r[0], ((Number) r[1]).longValue()}).toList(), limit);
     }
 
     private static final String DEPARTMENT = "coalesce(ou.name, su.name, ru.name, 'Unassigned')";
