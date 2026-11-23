@@ -13,7 +13,6 @@ import com.wrapzzo.backend.exception.RecipientAlreadyExistsException;
 import com.wrapzzo.backend.exception.RecipientNotFoundException;
 import com.wrapzzo.backend.model.Company;
 import com.wrapzzo.backend.model.Recipient;
-import com.wrapzzo.backend.model.RecipientAssignment;
 import com.wrapzzo.backend.model.User;
 import com.wrapzzo.backend.repository.RecipientAssignmentRepository;
 import com.wrapzzo.backend.repository.RecipientRepository;
@@ -125,9 +124,7 @@ public class RecipientService {
         if (recipient == null) {
             recipient = createEntity(user, request);
         }
-        if (!recipientAssignmentRepository.existsByRecipient_IdAndMrUser_Id(recipient.getId(), user.getId())) {
-            recipientAssignmentRepository.save(new RecipientAssignment(recipient, user));
-        }
+        recipientAssignmentRepository.addIfAbsent(recipient.getId(), user.getId());
         return RecipientResponse.from(recipient, true);
     }
 
@@ -161,11 +158,10 @@ public class RecipientService {
                 applyDoctorDetails(recipient, doctor);
                 recipient = recipientRepository.save(recipient);
             }
-            if (recipientAssignmentRepository.existsByRecipient_IdAndMrUser_Id(recipient.getId(), user.getId())) {
+            if (recipientAssignmentRepository.addIfAbsent(recipient.getId(), user.getId()) == 0) {
                 unchanged++;
                 continue;
             }
-            recipientAssignmentRepository.save(new RecipientAssignment(recipient, user));
             if (isNew) {
                 created++;
             } else {
@@ -280,7 +276,7 @@ public class RecipientService {
         recipientRepository.save(recipient);
         // A doctor you add -- here, through a Quick Gift or a campaign entry -- is on your list, like one added on the Doctors screen.
         if (createdBy != null) {
-            recipientAssignmentRepository.save(new RecipientAssignment(recipient, createdBy));
+            recipientAssignmentRepository.addIfAbsent(recipient.getId(), createdBy.getId());
         }
     }
 
