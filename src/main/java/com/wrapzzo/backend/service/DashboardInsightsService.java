@@ -71,7 +71,6 @@ public class DashboardInsightsService {
         return value instanceof java.time.OffsetDateTime o ? o.toInstant() : (Instant) value;
     }
 
-    @Transactional(readOnly = true)
     public DashboardInsightsResponse insights(String requestedRange) {
         Window w = window(requestedRange);
         return cache.get("insights:" + CurrentUser.id() + ":" + w.range(), () -> compute(w));

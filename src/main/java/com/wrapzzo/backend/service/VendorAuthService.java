@@ -17,11 +17,14 @@ import com.wrapzzo.backend.security.JwtService;
 import com.wrapzzo.backend.security.TokenHasher;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.UUID;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Mirrors AuthService's shape (Argon2, lockout, rotatable refresh tokens),
@@ -35,6 +38,9 @@ public class VendorAuthService {
     private final VendorRefreshTokenRepository vendorRefreshTokenRepository;
     private final VendorInviteTokenRepository vendorInviteTokenRepository;
     private final PasswordEncoder passwordEncoder;
+    private final PasswordChecker passwordChecker;
+    private final TransactionTemplate readTx;
+    private final TransactionTemplate writeTx;
     private final JwtService jwtService;
     private final long refreshTokenExpiryDays;
     private final int maxFailedLoginAttempts;
@@ -45,6 +51,8 @@ public class VendorAuthService {
             VendorRefreshTokenRepository vendorRefreshTokenRepository,
             VendorInviteTokenRepository vendorInviteTokenRepository,
             PasswordEncoder passwordEncoder,
+            PasswordChecker passwordChecker,
+            PlatformTransactionManager transactionManager,
             JwtService jwtService,
             @Value("${auth.refresh-token-expiry-days}") long refreshTokenExpiryDays,
             @Value("${auth.max-failed-login-attempts}") int maxFailedLoginAttempts,
@@ -53,32 +61,43 @@ public class VendorAuthService {
         this.vendorRefreshTokenRepository = vendorRefreshTokenRepository;
         this.vendorInviteTokenRepository = vendorInviteTokenRepository;
         this.passwordEncoder = passwordEncoder;
+        this.passwordChecker = passwordChecker;
+        this.writeTx = new TransactionTemplate(transactionManager);
+        this.readTx = new TransactionTemplate(transactionManager);
+        this.readTx.setReadOnly(true);
         this.jwtService = jwtService;
         this.refreshTokenExpiryDays = refreshTokenExpiryDays;
         this.maxFailedLoginAttempts = maxFailedLoginAttempts;
         this.lockoutDurationMinutes = lockoutDurationMinutes;
     }
 
-    @Transactional
+    private record Candidate(UUID id, String passwordHash) {
+    }
+
+    /** Same three short steps as {@link AuthService#login}: look up, check the password holding no connection, record the outcome (a wrong one committed on its own). */
     public TokenPair login(String contactEmail, String rawPassword) {
-        Vendor vendor = vendorRepository.findByContactEmailIgnoreCase(contactEmail.trim()).orElseThrow(InvalidCredentialsException::new);
+        Candidate candidate = readTx.execute(status -> {
+            Vendor vendor = vendorRepository.findByContactEmailIgnoreCase(contactEmail.trim()).orElseThrow(InvalidCredentialsException::new);
+            if (vendor.getLockedUntil() != null && vendor.getLockedUntil().isAfter(Instant.now())) {
+                throw new AccountLockedException(vendor.getLockedUntil());
+            }
+            if (vendor.getStatus() != VendorStatus.ACTIVE) {
+                throw new InvalidCredentialsException();
+            }
+            return new Candidate(vendor.getId(), vendor.getPasswordHash());
+        });
 
-        if (vendor.getLockedUntil() != null && vendor.getLockedUntil().isAfter(Instant.now())) {
-            throw new AccountLockedException(vendor.getLockedUntil());
-        }
-
-        if (vendor.getStatus() != VendorStatus.ACTIVE) {
+        if (!passwordChecker.matches(rawPassword, candidate.passwordHash())) {
+            writeTx.executeWithoutResult(status -> vendorRepository.findById(candidate.id()).ifPresent(this::registerFailedAttempt));
             throw new InvalidCredentialsException();
         }
 
-        if (!passwordEncoder.matches(rawPassword, vendor.getPasswordHash())) {
-            registerFailedAttempt(vendor);
-            throw new InvalidCredentialsException();
-        }
-
-        vendor.setFailedLoginAttempts((short) 0);
-        vendor.setLockedUntil(null);
-        return issueTokenPair(vendor);
+        return writeTx.execute(status -> {
+            Vendor vendor = vendorRepository.findById(candidate.id()).orElseThrow(InvalidCredentialsException::new);
+            vendor.setFailedLoginAttempts((short) 0);
+            vendor.setLockedUntil(null);
+            return issueTokenPair(vendor);
+        });
     }
 
     @Transactional
@@ -130,7 +149,7 @@ public class VendorAuthService {
     }
 
     /** See {@link AuthService#requireCurrentPassword}: a wrong password here counts like a failed sign-in. */
-    @Transactional
+    @Transactional(noRollbackFor = WrongCurrentPasswordException.class)
     public void requireCurrentPassword(Vendor vendor, String rawPassword) {
         if (vendor.getLockedUntil() != null && vendor.getLockedUntil().isAfter(Instant.now())) {
             throw new AccountLockedException(vendor.getLockedUntil());

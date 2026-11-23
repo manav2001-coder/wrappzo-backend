@@ -26,7 +26,9 @@ import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class AuthService {
@@ -35,6 +37,9 @@ public class AuthService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final UserInviteTokenRepository userInviteTokenRepository;
     private final PasswordEncoder passwordEncoder;
+    private final PasswordChecker passwordChecker;
+    private final TransactionTemplate readTx;
+    private final TransactionTemplate writeTx;
     private final JwtService jwtService;
     private final AccessControlCacheService accessControlCacheService;
     private final CompanyMenuLabelService companyMenuLabelService;
@@ -48,6 +53,8 @@ public class AuthService {
             RefreshTokenRepository refreshTokenRepository,
             UserInviteTokenRepository userInviteTokenRepository,
             PasswordEncoder passwordEncoder,
+            PasswordChecker passwordChecker,
+            PlatformTransactionManager transactionManager,
             JwtService jwtService,
             AccessControlCacheService accessControlCacheService,
             CompanyMenuLabelService companyMenuLabelService,
@@ -59,6 +66,10 @@ public class AuthService {
         this.refreshTokenRepository = refreshTokenRepository;
         this.userInviteTokenRepository = userInviteTokenRepository;
         this.passwordEncoder = passwordEncoder;
+        this.passwordChecker = passwordChecker;
+        this.writeTx = new TransactionTemplate(transactionManager);
+        this.readTx = new TransactionTemplate(transactionManager);
+        this.readTx.setReadOnly(true);
         this.jwtService = jwtService;
         this.accessControlCacheService = accessControlCacheService;
         this.companyMenuLabelService = companyMenuLabelService;
@@ -84,30 +95,42 @@ public class AuthService {
                 profilePhotoUrl(user));
     }
 
-    @Transactional
+    /** Who is signing in and the hash to check, read in a short transaction so the (slow) password check holds no database connection. */
+    private record Candidate(UUID id, String passwordHash) {
+    }
+
+    /**
+     * Three short steps instead of one long transaction: look the account up, check the password (slow, CPU-heavy, holds NO connection),
+     * then record the outcome. A wrong password is committed on its own before the error is thrown -- inside one transaction the count was
+     * rolled back with the error, so the lockout never engaged.
+     */
     public TokenPair login(String email, String rawPassword) {
-        User user = userRepository.findByEmailIgnoreCase(email.trim()).orElseThrow(InvalidCredentialsException::new);
+        Candidate candidate = readTx.execute(status -> {
+            User user = userRepository.findByEmailIgnoreCase(email.trim()).orElseThrow(InvalidCredentialsException::new);
+            if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(Instant.now())) {
+                throw new AccountLockedException(user.getLockedUntil());
+            }
+            if (user.getStatus() != UserStatus.ACTIVE) {
+                throw new InvalidCredentialsException();
+            }
+            return new Candidate(user.getId(), user.getPasswordHash());
+        });
 
-        if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(Instant.now())) {
-            throw new AccountLockedException(user.getLockedUntil());
-        }
-
-        if (user.getStatus() != UserStatus.ACTIVE) {
+        if (!passwordChecker.matches(rawPassword, candidate.passwordHash())) {
+            writeTx.executeWithoutResult(status -> userRepository.findById(candidate.id()).ifPresent(this::registerFailedAttempt));
             throw new InvalidCredentialsException();
         }
 
-        if (!passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
-            registerFailedAttempt(user);
-            throw new InvalidCredentialsException();
-        }
-
-        // After the password, so the reason is only told to someone who really holds the account.
-        if (user.getCompany() != null && user.getCompany().getStatus() == CompanyStatus.INACTIVE) {
-            throw new CompanyDeactivatedException(user.getCompany().getName());
-        }
-        user.setFailedLoginAttempts((short) 0);
-        user.setLockedUntil(null);
-        return issueTokenPair(user);
+        return writeTx.execute(status -> {
+            User user = userRepository.findById(candidate.id()).orElseThrow(InvalidCredentialsException::new);
+            // After the password, so the reason is only told to someone who really holds the account.
+            if (user.getCompany() != null && user.getCompany().getStatus() == CompanyStatus.INACTIVE) {
+                throw new CompanyDeactivatedException(user.getCompany().getName());
+            }
+            user.setFailedLoginAttempts((short) 0);
+            user.setLockedUntil(null);
+            return issueTokenPair(user);
+        });
     }
 
     @Transactional
@@ -169,7 +192,7 @@ public class AuthService {
      * Checks a password the person typed to confirm it is really them, counting a wrong one like a failed sign-in: a stolen
      * session must not be a way to guess the password without limit.
      */
-    @Transactional
+    @Transactional(noRollbackFor = WrongCurrentPasswordException.class)
     public void requireCurrentPassword(User user, String rawPassword) {
         if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(Instant.now())) {
             throw new AccountLockedException(user.getLockedUntil());

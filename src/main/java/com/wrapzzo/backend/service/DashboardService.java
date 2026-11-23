@@ -94,7 +94,6 @@ public class DashboardService {
     private record Scope(Company company, boolean companyWide, Reach reach, List<Campaign> campaigns) {
     }
 
-    @Transactional(readOnly = true)
     public DashboardResponse summary() {
         return cache.get("summary:" + CurrentUser.id(), this::computeSummary);
     }

@@ -238,6 +238,11 @@ public class GlobalExceptionHandler {
                 .body(Map.of("error", "Could not send the invite email right now -- please try again."));
     }
 
+    @ExceptionHandler(ServerBusyException.class)
+    public ResponseEntity<Map<String, String>> handleServerBusy(ServerBusyException e) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).header("Retry-After", "5").body(Map.of("error", e.getMessage()));
+    }
+
     @ExceptionHandler(GiftNameAlreadyExistsException.class)
     public ResponseEntity<Map<String, String>> handleGiftNameAlreadyExists(GiftNameAlreadyExistsException e) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
